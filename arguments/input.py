@@ -1,0 +1,136 @@
+import os
+import argparse
+import textwrap
+
+# TODO change!
+DANTE_DESCRIPTION = '''
+    DANTE = Da Amazing NucleoTide Exposer (Remastered)
+    --------------------------------------------------
+Sequence annotator based on Hidden Markov Models (HMM). Reads from the input file(s) supplied in the configuration file are 
+pre-filtered, annotated by HMM, and post-filtered. The base quality scores 
+are used to determine the emit probability of each base. DANTE creates a 
+directory for each of the annotated motifs and a summary report in HTML 
+(report.html). For each post-filter options (X), the motif directory contains
+the following files:
+1. annotations_X.txt -- correctly annotated reads, that passed all filters
+2. filtered_primer_X.txt -- correctly annotated reads, that have only one 
+                flanking region
+3. filtered_X.txt -- annotated reads, that didn't pass the post-filtering
+4. repetitions_X.txt -- number of correctly annotated reads with both 
+                flanking regions and their number of STR repetitions
+5. repetitions_grey_X.txt -- number of correctly annotated reads with one 
+                flanking region and their number of STR repetitions
+6. alignment_X.txt -- alignment of number of correctly annotated reads with 
+                both flanking regions
+7. all_call_X.txt -- genotype and its confidence
+8. pcolor_X.{pdf/png} -- plot of all tested genotype options and their 
+                likelihoods
+'''
+
+
+def change_suffix(filename: str, suffix: str) -> str:
+    """
+    Change suffix into a new one.
+    :param filename: str - filename
+    :param suffix: str - string to append
+    :return: str - new filename with new suffix
+    """
+    return filename[:filename.rfind('.')] + suffix
+
+
+def load_arguments() -> argparse.Namespace:
+    """
+    Loads and parses the arguments.
+    :return: args - parsed arguments
+    """
+    try:
+        parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
+                                         description=textwrap.dedent(DANTE_DESCRIPTION))
+
+        postfilter = parser.add_argument_group('Post-filter')
+        postfilter.add_argument('--min-flank-len', '-fl', type=positive_int, help='Minimal flank length in bases. Default=3', default=3)
+        postfilter.add_argument('--min-rep-len', '-rl', type=positive_int, help='Minimal repetition length in bases. Default=3', default=3)
+        postfilter.add_argument('--min-rep-cnt', '-rc', type=positive_int, help='Minimal repetition count. Default=1', default=1)
+        postfilter.add_argument('--max-abs-error', '-ea', type=positive_int, help='Maximal number of errors. Default=All', default=None)
+        postfilter.add_argument('--max-rel-error', '-er', type=probability, help='Maximal ratio of errors to read length. Default=0.1 (10%)', default=0.1)
+
+        options = parser.add_argument_group('Options')
+        options.add_argument('--start-motif', type=positive_int, help='Starting motif index (from 0). Default=0', default=0)
+        options.add_argument('--max-motifs', type=positive_nonzero_int, help='Maximal number of motifs to load. Default: All', default=None)
+        options.add_argument('--nomenclatures', '-n', type=positive_int, help='Number of nomenclature strings to add to reports. Default=5', default=5)
+        options.add_argument('--output-dir', '-o', type=str, help='Output destination (directory). Default=current location', default=None)
+        options.add_argument('--param-file', '-p', type=nonempty_file, help='Parameter file for inference of alleles. Default=MiSeq parameters', default=None)
+        options.add_argument('--deduplicate', '-d', action='store_true', help='Turn on the deduplication of reads.')
+        options.add_argument('--input-gzipped', '-g', action='store_true', help='Is the input gzipped?')
+        options.add_argument('--verbose', '-v', action='store_true', help='Print logs.')
+        options.add_argument('--gzip-outputs', '-z', action='store_true', help='Store outputs as gzipped files.')
+
+        args = parser.parse_args()
+
+        if args.output_dir is None:
+            args.output_dir = os.getcwd()
+
+    except argparse.ArgumentTypeError as e:
+        print('ERROR: Argument parser error. ' + str(e.message))
+        exit(-1)
+
+    return args
+
+
+def positive_int(value: str, max_limit: int =None) -> int:
+    """
+    Represents positive decimal number, 0 included
+    :param value: string value to estimate
+    :param max_limit: maximal allowed value, skip validation if None
+    :return: integer value, if can be converted into positive int else ArgumentTypeError
+    """
+    try:
+        int_value = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f'Value {value} is not integer')
+    if int_value < 0:
+        raise argparse.ArgumentTypeError(f'Value {value} is negative')
+    if max_limit is not None and max_limit < int_value:
+        raise argparse.ArgumentTypeError(f'Value {value} must be lower or equal to {max_limit}')
+    return int_value
+
+
+def positive_nonzero_int(value: str) -> int:
+    """
+    Represents positive decimal number, 0 excluded
+    :param value: string value to estimate
+    :return: integer value, if can be converted into positive int else ArgumentTypeError
+    """
+    int_value = positive_int(value)
+    if int_value == 0:
+        raise argparse.ArgumentTypeError(f'Value {value} cannot be 0')
+    return int_value
+
+
+def probability(value: str) -> float:
+    """
+    Validator for float value in interval <0, 1>
+    :param value: String value to validate
+    :return: float value or ArgumentTypeError
+    """
+    try:
+        float_value = float(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f'Value {value} is not float')
+    if 0 <= float_value <= 1:
+        return float_value
+    else:
+        raise argparse.ArgumentTypeError(f'Value {value} is not in interval <0, 1>')
+
+
+def nonempty_file(file_path: str) -> str:
+    """
+    Checks if the filename in input is non-empty file.
+    :param file_path: str - filename to check
+    :return: str - filename
+    """
+    if not os.path.exists(file_path):
+        raise argparse.ArgumentTypeError(f'File {file_path} does not exist')
+    if os.path.getsize(file_path) == 0:
+        raise argparse.ArgumentTypeError(f'File {file_path} is empty')
+    return file_path
