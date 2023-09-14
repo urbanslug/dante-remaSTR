@@ -255,7 +255,8 @@ class Inference:
         """
         return model[g]
 
-    def likelihood_intersection(self, model_i, model_j, g):
+    @staticmethod
+    def likelihood_intersection(model_i, model_j, g):
         return min(model_i[g], model_j[g])
 
     def likelihood_coverage(self, true_length, rl, closed=True):
@@ -324,9 +325,6 @@ class Inference:
         :param closed: bool - if the read is closed - i.e. both primers are there
         :return: float - likelihood of this read generation
         """
-
-        # print('testing', model_index1, model_index2)
-
         model_i = self.models[model_index1]
         model_j = self.models[model_index2]
 

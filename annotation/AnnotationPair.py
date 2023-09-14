@@ -15,8 +15,6 @@ class AnnotationPair:
         :param ann2: Annotation - second annotation of a pair
         :type ann2: Annotation | None
         """
-        # assert isinstance(ann1, Annotation), "Ann1 is no Annotation, but %s" % type(ann1).__name__ # TODO why this throws?
-
         assert ann1 is not None
         self.ann1 = ann1
         self.ann2 = ann2
@@ -36,8 +34,7 @@ class AnnotationPair:
             return second_pair.ann1 is not None and self.ann1.same_start_fragment(second_pair.ann1)
 
         # return the full comparison
-        return ((second_pair.ann1 is None or self.ann1.same_start_fragment(second_pair.ann1)) and
-                (second_pair.ann2 is None or self.ann2.same_end_fragment(second_pair.ann2)))
+        return self.ann1.same_start_fragment(second_pair.ann1) and self.ann2.same_end_fragment(second_pair.ann2)
 
     def __str__(self):
         return '\n'.join(['1', str(self.ann1), '2', str(self.ann2)])
@@ -126,17 +123,17 @@ class AnnotationPair:
         :return: (bool, int) - closed?, number of str repetitions
         """
 
-        def add_primers(annotation: Annotation, index_str: int) -> list[(bool, int)]:
+        def add_primers(annotation: Annotation, module_num: int) -> list[(bool, int)]:
             """
             Add str repetitions from one annotation into an array of results.
             :param annotation: Annotation - input annotation
-            :param index_str: int - index of a str
+            :param module_num: int - index of a str
             :return: list(bool, int) - closed?, number of str repetitions
             """
-            primer1 = index_str > 0 and annotation.module_repetitions[index_str - 1] > 0
-            primer2 = index_str + 1 < len(annotation.module_repetitions) and annotation.module_repetitions[index_str + 1] > 0
+            primer1 = module_num > 0 and annotation.module_repetitions[module_num - 1] > 0
+            primer2 = module_num + 1 < len(annotation.module_repetitions) and annotation.module_repetitions[module_num + 1] > 0
             if primer1 or primer2:
-                return [(primer1 and primer2, annotation.module_repetitions[index_str])]
+                return [(primer1 and primer2, annotation.module_repetitions[module_num])]
             return []
 
         results = []
@@ -151,15 +148,15 @@ class AnnotationPair:
         return None
 
 
-def annotations_to_pairs(annotations: list[Annotation]) -> list[AnnotationPair]:
+def annotations_to_pairs(annots: list[Annotation]) -> list[AnnotationPair]: # TODO nevieme ktory read je lavy a pravy tak toto je zle teraz
     """
     Convert an array of annotations to annotation pairs array.
-    :param annotations: list(Annotation) - annotations
+    :param annots: list(Annotation) - annotations
     :return: list(AnnotationPair)
     """
 
     # sort:
-    sorted_list = sorted(annotations, key=lambda ann: ann.read_sort_name)
+    sorted_list = sorted(annots, key=lambda annot: annot.read_sort_name)
 
     # remove duplicates:
     seen = set()
@@ -189,14 +186,14 @@ def pairs_to_annotations(annotation_pairs: list[AnnotationPair]) -> list[Annotat
     :param annotation_pairs: list(AnnotationPair) - annotations
     :return: list(Annotation)
     """
-    annotations = []
+    annots = []
     for ap in annotation_pairs:
         if ap.ann1 is not None:
-            annotations.append(ap.ann1)
+            annots.append(ap.ann1)
         if ap.ann2 is not None:
-            annotations.append(ap.ann2)
+            annots.append(ap.ann2)
 
-    return annotations
+    return annots
 
 
 def pairs_to_annotations_pick(annotation_pairs: list[AnnotationPair], index_str: int|None) -> list[Annotation]:

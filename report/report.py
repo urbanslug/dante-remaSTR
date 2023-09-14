@@ -428,13 +428,11 @@ def write_all(quality_annotations: list[annotation.Annotation], filt_primer: lis
 
     write_histogram_image(f'{motif_dir}/repetitions_{module_number}', quality_annotations, filt_primer, module_number)
 
-    if len(quality_annotations) > 0:
-        write_histogram(f'{motif_dir}/repetitions_{module_number}.txt', quality_annotations,
-                        profile_file=f'{motif_dir}/profile_{module_number}.txt', index_rep=module_number)
-        write_histogram_nomenclature(f'{motif_dir}/nomenclatures_{module_number}.txt', quality_annotations, index_rep=module_number)
-    if len(filt_primer) > 0:
-        write_histogram(f'{motif_dir}/repetitions_grey_{module_number}.txt', filt_primer)
-        write_histogram_nomenclature(f'{motif_dir}/nomenclatures_grey_{module_number}.txt', filt_primer, index_rep=module_number)
+    write_histogram(f'{motif_dir}/repetitions_{module_number}.txt', quality_annotations,
+                    profile_file=f'{motif_dir}/profile_{module_number}.txt', index_rep=module_number)
+    write_histogram_nomenclature(f'{motif_dir}/nomenclatures_{module_number}.txt', quality_annotations, index_rep=module_number)
+    write_histogram(f'{motif_dir}/repetitions_grey_{module_number}.txt', filt_primer)
+    write_histogram_nomenclature(f'{motif_dir}/nomenclatures_grey_{module_number}.txt', filt_primer, index_rep=module_number)
 
 
 def read_all_call(allcall_file: str) -> (float, int, int, float, float, float, float, float, float):

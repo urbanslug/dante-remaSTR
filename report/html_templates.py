@@ -449,13 +449,13 @@ def generate_motifb64(motif_name: str, description: str, sequence: str, repetiti
         if (a1 == 'B' and a2 == 'B') or (a1 == 0 and a2 == 0):
             result = f'BG {c * 100: 5.1f}%'
         else:
-            result = f'{a1: 2d} ({c1 * 100: 5.1f}%) {a2: 2d} ({c2 * 100: 5.1f}%) total {c * 100: 5.1f}%'
+            result = f'{str(a1):2s} ({c1 * 100: 5.1f}%) {str(a2):2s} ({c2 * 100: 5.1f}%) total {c * 100: 5.1f}%'
             if alignment is not None:
                 align_html_a1 = generate_alignment(f'{motif_clean}_{str(a1)}', get_alignment_name(alignment, a1), motif_clean.split('_')[0],
-                                                   f'Allele 1 ({a1: 2d}) alignment visualization')
+                                                   f'Allele 1 ({str(a1):2s}) alignment visualization')
                 if a1 != a2:
                     align_html_a2 = generate_alignment(f'{motif_clean}_{str(a2)}', get_alignment_name(alignment, a2), motif_clean.split('_')[0],
-                                                       f'Allele 2 ({a2: 2d}) alignment visualization')
+                                                       f'Allele 2 ({str(a2):2s}) alignment visualization')
 
     # errors:
     errors = f'{postfilter.max_rel_error * 100:.0f}%'

@@ -3,6 +3,8 @@ import gzip
 import io
 import sys
 import typing
+import itertools
+import multiprocessing
 from datetime import datetime
 
 import numpy as np
@@ -54,26 +56,14 @@ def generate_result_header():
                                        conf_ext_all='conf_extended_all')
 
 
-def process_group(args: argparse.Namespace, df: pd.DataFrame, motif: str) -> typing.Optional[Motif]:
+def process_group(args: argparse.Namespace, df: pd.DataFrame, motif: str) -> tuple[Motif, list[str]]:
     """
     Process the group as pandas Dataframe. Return motif name if processed correctly or None otherwise.
     :param args: argparse.Namespace - namespace of program arguments
     :param df: pd.DataFrame - pandas DataFrame with information about annotated reads for a single motif to process
     :param motif: str - motif nomenclature
-    :return: Motif/None - motif if processed correctly, None otherwise
+    :return: Motif, list(str) - motif, result lines
     """
-    # log header if we are at the beginning
-    if process_group.launched == 0:
-        report.log_str(generate_result_header(), stdout_too=sys.stdout)
-
-    # count how many groups we have processed and end if enough/not already on start
-    process_group.launched += 1
-    if args.start_motif is not None and args.start_motif >= process_group.launched:
-        return None
-    if args.max_motifs is not None and args.max_motifs >= process_group.processed:
-        return None
-    process_group.processed += 1
-
     # build motif class
     motif_class = Motif(motif)
 
@@ -94,10 +84,14 @@ def process_group(args: argparse.Namespace, df: pd.DataFrame, motif: str) -> typ
         # deduplicate
         dedup_annot_pairs, duplicates = annotation.remove_pcr_duplicates(annotation_pairs)
 
+        # print(len(annotations), len(annotation_pairs), len([ap for ap in annotation_pairs if ap.ann1 is not None]), len([ap for ap in annotation_pairs if ap.ann2 is not None]))
+        # print(len(dedup_annot_pairs), len(duplicates))
+
     # infer read distribution
     read_distribution = np.bincount([len(ann.read_seq) for ann in annotations], minlength=100)
 
     # create report for each repeating module
+    result_lines = []
     for module_number, seq, _ in motif_class.get_repeating_modules():
 
         if args.deduplicate:
@@ -113,7 +107,7 @@ def process_group(args: argparse.Namespace, df: pd.DataFrame, motif: str) -> typ
         if args.verbose:
             report.write_all(qual_annot, primer_annot, filt_annot, motif_dir, module_number, zip_it=args.gzip_outputs)
 
-        # run inference
+        # run inference - this takes most of the time (for no --verbose)
         inference = all_call.Inference(read_distribution, args.param_file, str_rep=args.min_rep_cnt, minl_primer1=args.min_flank_len,
                                        minl_primer2=args.min_flank_len, minl_str=args.min_rep_len)
         file_pcolor = f'{motif_dir}/pcolor_{module_number}' if args.verbose else None
@@ -131,8 +125,7 @@ def process_group(args: argparse.Namespace, df: pd.DataFrame, motif: str) -> typ
                report.write_alignment(f'{motif_dir}/alignment_{module_number}_a{a2}.fasta', qual_annot, module_number, allele=a2)
 
         # print the output
-        result_line = generate_result_line(motif_class, module_number, predicted, confidence, len(qual_annot), len(primer_annot), len(filt_annot))
-        report.log_str(result_line, stdout_too=sys.stdout)
+        result_lines.append(generate_result_line(motif_class, module_number, predicted, confidence, len(qual_annot), len(primer_annot), len(filt_annot)))
 
     # try to get the overall nomenclature:
     if args.verbose:
@@ -144,10 +137,7 @@ def process_group(args: argparse.Namespace, df: pd.DataFrame, motif: str) -> typ
         report.write_histogram_nomenclature(f'{motif_dir}/nomenclature.txt', annotations)
 
     # return motif name in case it was processed normally
-    return motif_class
-
-process_group.launched = 0
-process_group.processed = 0
+    return motif_class, result_lines
 
 
 def generate_groups_gzipped(input_stream: typing.TextIO, column_name: str = 'motif', chunk_size: int = 1000000) -> typing.Iterator[pd.DataFrame]:
@@ -223,15 +213,27 @@ if __name__ == '__main__':
     report.log_str('DANTE_remaSTR = "Da Amazing NucleoTide Exposer" (remastered)')
     report.log_str(f'DANTE_remaSTR Starting : {start_time:%Y-%m-%d %H:%M:%S}')
 
+    # log header, data will be logged in the process_group
+    report.log_str(generate_result_header(), stdout_too=sys.stdout)
+
     # process the input
     motif_column_name = 'motif'
     processed_motifs = []
-    for motif_table in generate_groups_gzipped(sys.stdin, motif_column_name) if args.input_gzipped else generate_groups(sys.stdin, motif_column_name):
-        assert len(motif_table) > 0
-        motif_name = motif_table[motif_column_name].iloc[0]
-        processed_motif = process_group(args, motif_table, motif_name)
-        if processed_motif is not None:
-            processed_motifs.append(processed_motif)
+    groups_iterator = generate_groups_gzipped(sys.stdin, motif_column_name) if args.input_gzipped else generate_groups(sys.stdin, motif_column_name)
+    groups_iterator = itertools.islice(groups_iterator, args.start_motif, args.start_motif + args.max_motifs if args.max_motifs is not None else None)
+    if args.processes > 1:
+        all_inputs = ((args, motif_table, motif_table[motif_column_name].iloc[0]) for motif_table in groups_iterator)
+        with multiprocessing.Pool(args.processes) as pool:
+            for motif, result_lines in pool.starmap(process_group, all_inputs, chunksize=100):
+                for result_line in result_lines:
+                    report.log_str(result_line, stdout_too=sys.stdout)
+                processed_motifs.append(motif)
+    else:
+        for motif_table in groups_iterator:
+            motif, result_lines = process_group(args, motif_table, motif_table[motif_column_name].iloc[0])
+            for result_line in result_lines:
+                report.log_str(result_line, stdout_too=sys.stdout)
+            processed_motifs.append(motif)
 
     # generate report and output files for the whole run
     if args.verbose:
