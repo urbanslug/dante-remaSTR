@@ -120,12 +120,10 @@ align_string = """
 """
 
 
-def load_arguments():
+def load_arguments() -> argparse.Namespace:
     """
     Loads and parses arguments.
-    :return: input_dir - path to directory with Dante reports
-             output_dir - path to output dir
-             args - parsed arguments
+    :return: args - parsed arguments
     """
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
                                      description=textwrap.dedent("""Python program to collect Dante report files and 
@@ -135,20 +133,15 @@ def load_arguments():
     # add arguments
     parser.add_argument('input_dir', help='Path to directory with Dante reports')
     parser.add_argument('output_dir', help='Path to directory where the output will be stored', nargs='?',
-                          default='example/motif_report')
+                        default='example/motif_report')
     parser.add_argument('--report_every', type=int, help='Specify how often a progress message should be printed (default=5)',
                         default=5)
     parser.add_argument('-q', '--quiet', help="Don't print any progress messages", action='store_true')
 
-    args = parser.parse_args()
-
-    input_dir = args.input_dir
-    output_dir = args.output_dir
-
-    return input_dir, output_dir, args
+    return parser.parse_args()
 
 
-def custom_format(template, **kwargs):
+def custom_format(template: str, **kwargs: str) -> str:
     """
     Custom format of strings for only those that we provide
     :param template: str - string to format
@@ -161,13 +154,13 @@ def custom_format(template, **kwargs):
     return template
 
 
-def generate_row(motif_name, a1, c1, a2, c2, c, reads_blue, reads_grey):
+def generate_row(motif_name: str, a1: str, c1: str, a2: str, c2: str, c: str, reads_blue: str, reads_grey: str) -> str:
     return row_string.format(name=motif_name, allele1=a1, allele1_conf=c1, allele2=a2, allele2_conf=c2,
                              motif_conf=c, reads_blue=reads_blue, reads_grey=reads_grey)
 
 
 # Convert extracted numbers from table to ints and set background and expanded alleles to 0
-def parse_alleles(num):
+def parse_alleles(num: str) -> str | int:
     if num == 'B' or num == 'E':
         return num
     elif num == '---':
@@ -176,14 +169,15 @@ def parse_alleles(num):
         return int(num)
 
 
-def parse_label(num):
+def parse_label(num: int) -> str:
     if num == 0:
         return ''
     else:
         return str(int(num))
 
 
-def generate_motif_report(path, key, samples, plots, alignments, fig_heatmap, fig_hist, bgs):
+def generate_motif_report(path: str, key: str, samples: list[list[str]], plots: list[str],
+                          alignments: list[str], fig_heatmap: go.Figure, fig_hist: go.Figure, bgs: int):
     """
     Generate report file for one motif
     :param path: str - path to output dir
@@ -213,18 +207,16 @@ def generate_motif_report(path, key, samples, plots, alignments, fig_heatmap, fi
                               motifs_content=table, summary_plots=summary_plots, motif_plots='\n'.join(motif_plots)))
 
 
-def create_reports(input_dir, output_dir, arg_list):
+def create_reports(arg_list: argparse.Namespace):
     """
     Traverse input dir, collect all tables and plots from reports and generate motif reports
-    :param input_dir: str - path to input dir
-    :param output_dir: str - path to output dir
     :param arg_list: [any] - list of arguments
     """
-    os.makedirs(output_dir, exist_ok=True)
+    os.makedirs(arg_list.output_dir, exist_ok=True)
     paths = []
 
     # find all report files in root directory
-    for root, dirs, files in os.walk(input_dir):
+    for root, dirs, files in os.walk(arg_list.input_dir):
         for file in files:
             if file == 'report.html':
                 paths.append(os.path.join(root, file))
@@ -268,10 +260,8 @@ def create_reports(input_dir, output_dir, arg_list):
                            columns[4].text.strip(), columns[5].text.strip().replace('%', ''),
                            columns[6].text.strip().replace('%', ''), columns[7].text.strip(), columns[8].text.strip()]
 
-                    if name not in motifs:
-                        motifs[name] = [doc]
-                    else:
-                        motifs[name].append(doc)
+                    # append to list
+                    motifs[name] = motifs.get(name, []) + [doc]
 
         for cl in file.find_all(class_='plots'):
             name = cl.find(class_='hist')['class'][-1]
@@ -342,7 +332,6 @@ def create_reports(input_dir, output_dir, arg_list):
         current_alignment = []
         prev_name = ''
 
-
     print("INFO\tGenerating motif reports")
 
     # create histogram of read counts
@@ -363,7 +352,7 @@ def create_reports(input_dir, output_dir, arg_list):
         except ValueError:
             a2_max = 0
 
-        arr = np.zeros((a1_max + 2, a2_max + 2))
+        arr = np.zeros((a1_max + 2, a2_max + 2), dtype=int)
 
         max_count = max(a1_max, a2_max)
         hist_arr = [0 for _ in range(max_count + 2)]
@@ -390,7 +379,7 @@ def create_reports(input_dir, output_dir, arg_list):
         fig_histogram = go.Figure(data=[
             go.Bar(y=hist_arr, text=[parse_label(num) for num in hist_arr], name='Count histogram', marker_color=hist_color),
         ])
-        #fig_histogram.add_vline(x=len(hist_arr) - 1.5, line_width=5, line_color='black', opacity=1)
+        # fig_histogram.add_vline(x=len(hist_arr) - 1.5, line_width=5, line_color='black', opacity=1)
         fig_histogram.update_xaxes(title_text="Prediction", tickmode='array',
                                    tickvals=np.concatenate([np.array(range(0, max_count + 1, 5)), [max_count + 1]]),
                                    ticktext=list(range(0, max_count + 1, 5)) + ['E(>%d)' % (max_count + 1)])
@@ -417,7 +406,7 @@ def create_reports(input_dir, output_dir, arg_list):
             else:
                 break
 
-        text = [[parse_label(arr[i, j]) for j in range(arr.shape[1])] for i in range(arr.shape[0])]
+        text = [[parse_label(int(arr[i, j])) for j in range(arr.shape[1])] for i in range(arr.shape[0])]
 
         arr = arr / np.max(arr)
 
@@ -430,8 +419,8 @@ def create_reports(input_dir, output_dir, arg_list):
         fig_heatmap.add_vline(x=a2_max + 0.5, line_width=5, line_color='black', opacity=1)
         fig_heatmap.add_hline(y=a1_max + 0.5, line_width=5, line_color='black', opacity=1)
         fig_heatmap.update_layout(width=750, height=750, template='simple_white',
-                                  yaxis=dict(range=[row_count-1.5, row_max-0.5]),
-                                  xaxis=dict(range=[column_count-1.5, column_max-0.5]))
+                                  yaxis=dict(range=[row_count - 1.5, row_max - 0.5]),
+                                  xaxis=dict(range=[column_count - 1.5, column_max - 0.5]))
         fig_heatmap.update_yaxes(title_text="Allele 1", tickmode='array',
                                  tickvals=np.concatenate([np.array(range(0, row_max - 1, 5)), [row_max - 1]]),
                                  ticktext=list(range(0, row_max - 1, 5)) + ['E(>%d)' % (row_max - 1)])
@@ -440,9 +429,9 @@ def create_reports(input_dir, output_dir, arg_list):
                                  ticktext=list(range(0, column_max - 1, 5)) + ['E(>%d)' % (column_max - 1)])
 
         # generate motif
-        generate_motif_report(output_dir, _key, motifs[_key], plots[_key], alignments[_key], fig_heatmap, fig_histogram, bgs)
+        generate_motif_report(arg_list.output_dir, _key, motifs[_key], plots[_key], alignments[_key], fig_heatmap, fig_histogram, bgs)
 
 
 if __name__ == '__main__':
-    input_d, output_d, args = load_arguments()
-    create_reports(input_d, output_d, args)
+    args = load_arguments()
+    create_reports(args)

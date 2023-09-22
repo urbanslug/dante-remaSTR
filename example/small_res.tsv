@@ -1,0 +1,214 @@
+motif_name	motif_sequence	chromosome	start	end	allele1	allele2	confidence	conf_allele1	conf_allele2	quality_reads	one_primer_reads	filtered_reads	conf_background	conf_background_all	conf_extended	conf_extended_all
+1
+A00380:137:HNCNNDRXY:2:1214:8205:17613 (16, 27, 20) (1, 9, 1)
+CGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTACGGGTCCCGACTGGGCACCACTTCCGGTCCGACACGGCCACGTGTTACATCTAAATGGCACCGTCCCCCGAGTGCGCCGACCTTGTG
+CGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTAC--------------------------------------------------------------------------------------
+000000000000000011111111111111111111111111122222222222222222222--------------------------------------------------------------------------------------
+_____________________________________________________________________________________________________________________________________________________
+2
+None == 1
+A00380:137:HNCNNDRXY:2:2153:1325:10614 (16, 27, 20) (1, 9, 1)
+CGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTACGGGTCCCGACTGGGCACCACTTCCGGTCCGACACGGCCACGTGTTACATCTAAATGGCACCGTCCCCCGAGTGCGCCGACCTTGTG
+CGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTAC--------------------------------------------------------------------------------------
+000000000000000011111111111111111111111111122222222222222222222--------------------------------------------------------------------------------------
+_____________________________________________________________________________________________________________________________________________________
+2
+None
+1
+A00380:137:HNCNNDRXY:2:2124:7148:33880 (20, 27, 20) (1, 9, 1)
+CTGCAGGACAGGTCCCGTGCGCCCTGCCGCACAGCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTACG
+---------------------------------GCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTAC-
+---------------------------------0000000000000000000011111111111111111111111111122222222222222222222-
+_____________________________________________________________________________________________________
+2
+None == 1
+A00380:137:HNCNNDRXY:2:1205:9516:31375 (20, 27, 20) (1, 9, 1)
+CTGCAGGACAGGTCCCGTGCGCCCTGCCGCACAGCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTACGGG
+---------------------------------GCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTAC---
+---------------------------------0000000000000000000011111111111111111111111111122222222222222222222---
+_______________________________________________________________________________________________________
+2
+None
+1
+A00380:137:HNCNNDRXY:2:1205:9516:31375 (20, 27, 20) (1, 9, 1)
+CTGCAGGACAGGTCCCGTGCGCCCTGCCGCACAGCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTACGGG
+---------------------------------GCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTAC---
+---------------------------------0000000000000000000011111111111111111111111111122222222222222222222---
+_______________________________________________________________________________________________________
+2
+None == 1
+A00380:137:HNCNNDRXY:1:1127:29197:30859 (20, 27, 20) (1, 9, 1)
+CTGCAGGACAGGTCCCGTGCGCCCTGCCGCACAGCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTACGGGTCCCGAC
+---------------------------------GCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTAC----------
+---------------------------------0000000000000000000011111111111111111111111111122222222222222222222----------
+______________________________________________________________________________________________________________
+2
+None
+1
+A00380:137:HNCNNDRXY:1:1127:29197:30859 (20, 27, 20) (1, 9, 1)
+CTGCAGGACAGGTCCCGTGCGCCCTGCCGCACAGCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTACGGGTCCCGAC
+---------------------------------GCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTAC----------
+---------------------------------0000000000000000000011111111111111111111111111122222222222222222222----------
+______________________________________________________________________________________________________________
+2
+None == 1
+A00380:137:HNCNNDRXY:1:2250:30074:22921 (20, 27, 20) (1, 9, 1)
+CTGCAGGACAGGTCCCGTGCGCCCTGCCGCACAGCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTACGGGTCCCGACTGGGCACCACTTCCGGTCCGACACGGCCACGTGGTACAT
+---------------------------------GCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTAC-------------------------------------------------
+---------------------------------0000000000000000000011111111111111111111111111122222222222222222222-------------------------------------------------
+_____________________________________________________________________________________________________________________________________________________
+2
+None
+1
+A00380:137:HNCNNDRXY:1:2277:30219:31970 (20, 27, 20) (1, 9, 1)
+CTGCAGGACAGGTCCCGTGCGCCCTGCCGCACAGCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTACGGGTCCCGACTGGGCACCACTTCCGGTCCGACACGGCCACGTGTTACAT
+---------------------------------GCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTAC-------------------------------------------------
+---------------------------------0000000000000000000011111111111111111111111111122222222222222222222-------------------------------------------------
+_____________________________________________________________________________________________________________________________________________________
+2
+None == 1
+A00380:137:HNCNNDRXY:2:1172:8874:31673 (20, 27, 20) (1, 9, 1)
+CTGCAGGACAGGTCCCGTGCGCCCTGCCGCACAGCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTACGGGTCCCGACTGGGCACCACTTCCGGTCCGACACGGCCACGTGTTACAT
+---------------------------------GCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTAC-------------------------------------------------
+---------------------------------0000000000000000000011111111111111111111111111122222222222222222222-------------------------------------------------
+_____________________________________________________________________________________________________________________________________________________
+2
+None
+1
+A00380:137:HNCNNDRXY:2:1172:8874:31673 (20, 27, 20) (1, 9, 1)
+CTGCAGGACAGGTCCCGTGCGCCCTGCCGCACAGCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTACGGGTCCCGACTGGGCACCACTTCCGGTCCGACACGGCCACGTGTTACAT
+---------------------------------GCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTAC-------------------------------------------------
+---------------------------------0000000000000000000011111111111111111111111111122222222222222222222-------------------------------------------------
+_____________________________________________________________________________________________________________________________________________________
+2
+None == 1
+A00380:137:HNCNNDRXY:2:2277:17544:27931 (20, 27, 20) (1, 9, 1)
+CTGCAGGACAGGTCCCGTGCGCCCTGCCGCACAGCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTACGGGTCCCGACTGGGCACCACTTCCGGTCCGACACGGCCACGTGTTACAT
+---------------------------------GCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTAC-------------------------------------------------
+---------------------------------0000000000000000000011111111111111111111111111122222222222222222222-------------------------------------------------
+_____________________________________________________________________________________________________________________________________________________
+2
+None
+1
+A00380:137:HNCNNDRXY:1:2169:24144:15060 (20, 27, 20) (1, 9, 1)
+CTGCCGCACAGCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTACGGGTCCCGACTGGGCACCACTTCCGGTCCGACACGGCCACGTGTTACATCTAAAT
+----------GCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTAC-------------------------------------------------------
+----------0000000000000000000011111111111111111111111111122222222222222222222-------------------------------------------------------
+____________________________________________________________________________________________________________________________________
+2
+None == 1
+A00380:137:HNCNNDRXY:2:1126:26784:30812 (20, 27, 20) (1, 9, 1)
+CTGCCGCACAGCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTACGGGTCCCGACTGGGCACCACTTCCGGTCCGACACGGCCACGTGTTACATCTAAATGGCACCGTCCCCCGAGTG
+----------GCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTAC-------------------------------------------------------------------------
+----------0000000000000000000011111111111111111111111111122222222222222222222-------------------------------------------------------------------------
+______________________________________________________________________________________________________________________________________________________
+2
+None
+1
+A00380:137:HNCNNDRXY:2:2275:2275:28228 (20, 27, 20) (1, 9, 1)
+GACAGGTCCCGTGCGCCCTGCCGCACAGCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTACGGGTCCCGACTGGGCACCACTTCCGGTCCGACACGGCCACGTGTTACATCTAAAT
+---------------------------GCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTAC-------------------------------------------------------
+---------------------------0000000000000000000011111111111111111111111111122222222222222222222-------------------------------------------------------
+_____________________________________________________________________________________________________________________________________________________
+2
+None == 1
+A00380:137:HNCNNDRXY:1:1103:3983:14653 (20, 27, 20) (1, 9, 1)
+GACAGGTCCCGTGCGCCCTGCCGCACAGCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTACGGGTCCCGACTGGGCACCACTTCCGGTCCGACACGGCCACGTGTTACATCTAAATGG
+---------------------------GCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTAC---------------------------------------------------------
+---------------------------0000000000000000000011111111111111111111111111122222222222222222222---------------------------------------------------------
+_______________________________________________________________________________________________________________________________________________________
+2
+None
+1
+A00380:137:HNCNNDRXY:1:1103:3983:14653 (20, 27, 20) (1, 9, 1)
+GACAGGTCCCGTGCGCCCTGCCGCACAGCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTACGGGTCCCGACTGGGCACCACTTCCGGTCCGACACGGCCACGTGTTACATCTAAATGG
+---------------------------GCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTAC---------------------------------------------------------
+---------------------------0000000000000000000011111111111111111111111111122222222222222222222---------------------------------------------------------
+_______________________________________________________________________________________________________________________________________________________
+2
+None == 1
+A00380:137:HNCNNDRXY:2:1252:17626:30577 (20, 27, 20) (1, 9, 1)
+GACAGGTCCCGTGCGCCCTGCCGCACAGCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTACGGGTCCCGACTGGGCACCACTTCCGGTCCGACACGGCCACGTGTTACATCTAAATGG
+---------------------------GCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTAC---------------------------------------------------------
+---------------------------0000000000000000000011111111111111111111111111122222222222222222222---------------------------------------------------------
+_______________________________________________________________________________________________________________________________________________________
+2
+None
+1
+A00380:137:HNCNNDRXY:2:2137:15980:22811 (20, 27, 20) (1, 9, 1)
+GCCTGAGAGAGCCGCTGCAGGACAGGTCCCGTGCGCCCTGCCGCACAGCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTACGGGTCCCGACTGGGCACCACTTCCGGTC
+-----------------------------------------------GCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTAC----------------------------
+-----------------------------------------------0000000000000000000011111111111111111111111111122222222222222222222----------------------------
+______________________________________________________________________________________________________________________________________________
+2
+None == 1
+A00380:137:HNCNNDRXY:2:1123:12807:2566 (20, 27, 20) (1, 9, 1)
+GCCTGAGAGAGCCGCTGCAGGACAGGTCCCGTGCGCCCTGCCGCACAGCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTACGGGTCCCGACTGGGCACCACTTCCGGTCCGACACGG
+-----------------------------------------------GCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTAC------------------------------------
+-----------------------------------------------0000000000000000000011111111111111111111111111122222222222222222222------------------------------------
+______________________________________________________________________________________________________________________________________________________
+2
+None
+1
+A00380:137:HNCNNDRXY:2:1123:12807:2566 (20, 27, 20) (1, 9, 1)
+GCCTGAGAGAGCCGCTGCAGGACAGGTCCCGTGCGCCCTGCCGCACAGCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTACGGGTCCCGACTGGGCACCACTTCCGGTCCGACACGG
+-----------------------------------------------GCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTAC------------------------------------
+-----------------------------------------------0000000000000000000011111111111111111111111111122222222222222222222------------------------------------
+______________________________________________________________________________________________________________________________________________________
+2
+None == 1
+A00380:137:HNCNNDRXY:2:1156:26829:14638 (20, 27, 20) (1, 9, 1)
+GCCTGAGAGAGCCGCTGCAGGACAGGTCCCGTGCGCCCTGCCGCACAGCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTACGGGTCCCGACTGGGCACCACTTCCGGTCCGACACGG
+-----------------------------------------------GCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTAC------------------------------------
+-----------------------------------------------0000000000000000000011111111111111111111111111122222222222222222222------------------------------------
+______________________________________________________________________________________________________________________________________________________
+2
+None
+1
+A00380:137:HNCNNDRXY:2:1156:26829:14638 (20, 27, 20) (1, 9, 1)
+GCCTGAGAGAGCCGCTGCAGGACAGGTCCCGTGCGCCCTGCCGCACAGCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTACGGGTCCCGACTGGGCACCACTTCCGGTCCGACACGG
+-----------------------------------------------GCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTAC------------------------------------
+-----------------------------------------------0000000000000000000011111111111111111111111111122222222222222222222------------------------------------
+______________________________________________________________________________________________________________________________________________________
+2
+None == 1
+A00380:137:HNCNNDRXY:2:1178:14407:7999 (20, 27, 20) (1, 9, 1)
+GCCTGAGAGAGCCGCTGCAGGACAGGTCCCGTGCGCCCTGCCGCACAGCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTACGGGTCCCGACTGGGCACCACTTCCGGTCCGACACGG
+-----------------------------------------------GCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTAC------------------------------------
+-----------------------------------------------0000000000000000000011111111111111111111111111122222222222222222222------------------------------------
+______________________________________________________________________________________________________________________________________________________
+2
+None
+1
+A00380:137:HNCNNDRXY:2:1178:14407:7999 (20, 27, 20) (1, 9, 1)
+GCCTGAGAGAGCCGCTGCAGGACAGGTCCCGTGCGCCCTGCCGCACAGCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTACGGGTCCCGACTGGGCACCACTTCCGGTCCGACACGG
+-----------------------------------------------GCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTAC------------------------------------
+-----------------------------------------------0000000000000000000011111111111111111111111111122222222222222222222------------------------------------
+______________________________________________________________________________________________________________________________________________________
+2
+None == 1
+A00380:137:HNCNNDRXY:2:2252:10574:33552 (20, 27, 20) (1, 9, 1)
+GCCTGAGAGAGCCGCTGCAGGACAGGTCCCGTGCGCCCTGCCGCACAGCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTACGGGTCCCGACTGGGCACCACTTCCGGTCCGACACGG
+-----------------------------------------------GCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTAC------------------------------------
+-----------------------------------------------0000000000000000000011111111111111111111111111122222222222222222222------------------------------------
+______________________________________________________________________________________________________________________________________________________
+2
+None
+1
+A00380:137:HNCNNDRXY:1:1106:4029:27132 (20, 27, 20) (1, 9, 1)
+GTCCCGTGCGCCCTGCCGCACAGCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTACGGGTCCCGACTGGGCACCACTTCCGGTCCGACACGGCCACGTGTTACATC
+----------------------GCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTAC--------------------------------------------------
+----------------------0000000000000000000011111111111111111111111111122222222222222222222--------------------------------------------------
+___________________________________________________________________________________________________________________________________________
+2
+None == 1
+A00380:137:HNCNNDRXY:2:2174:18358:10207 (20, 27, 20) (1, 9, 1)
+GTCCCGTGCGCCCTGCCGCACAGCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTACGGGTCCCGACTGGGCACCACTTCCGGTCCGACACGGCCACGTGTTACATCTAAATGGCACCG
+----------------------GCCTCGCCACAACCACCACCGCCGCCGCCGCCGCCGCCGCCGCCGCCCGCAACCCGCCTCTCCCTAC--------------------------------------------------------------
+----------------------0000000000000000000011111111111111111111111111122222222222222222222--------------------------------------------------------------
+_______________________________________________________________________________________________________________________________________________________
+2
+None
+131 77 77 0
+63 14
+chr10:g.93702524_93702548GCC[8]	GCC[8]	chr10	93702524	93702548	7	9	0.999999999999992	0.999999999999992	1.0	60	3	0	4.914587595037375e-37	4.914587595037375e-37	2.2101872737788584e-233	7.330629551260084e-41

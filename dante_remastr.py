@@ -10,13 +10,12 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 
-import all_call
-import arguments
-import postfilter
-import report
-import annotation
-from annotation.Motif import Motif
-from postfilter import PostFilter
+import src.all_call as all_call
+import src.arguments as arguments
+import src.report as report
+import src.annotation as annotation
+from src.annotation.Motif import Motif
+from src.postfilter import PostFilter
 
 MOTIF_PRINT_LEN = 40
 result_line_template = ('{motif_name}\t{motif_seq}\t{motif_chrom}\t{motif_start}\t{motif_end}\t{allele1}\t{allele2}\t{confidence}\t{confidence1}\t'
@@ -37,11 +36,22 @@ def shorten_str(string: str, max_length: int = MOTIF_PRINT_LEN, ellipsis_str: st
         return string
 
 
-def generate_result_line(motif: Motif, module_number: int, predicted: tuple[str, str],
+def generate_result_line(motif_class: Motif, module_number: int, predicted: tuple[str, str],
                          confidence: tuple[float, float, float, float, float, float, float], qual_num: int, primer_num: int, filt_num: int):
-    seq, rep = motif[module_number]
-    start, end = motif.get_location_subpart(module_number)
-    return result_line_template.format(motif_name=motif.name, motif_seq=f'{seq}[{rep}]', motif_chrom=motif.chrom, motif_start=start,
+    """
+    Generate result line from the template string.
+    :param motif_class: Motif - motif class
+    :param module_number: int - module number in motif
+    :param predicted: tuple[str, str] - predicted alleles (number or 'B'/'E')
+    :param confidence: tuple[7x float] - confidences of prediction
+    :param qual_num: int - number of reads with both primers
+    :param primer_num: int - number of reads with exactly one primer
+    :param filt_num: int - number of filtered out reads (no primers, many errors, ...)
+    :return: str - tsv line with result
+    """
+    seq, rep = motif_class[module_number]
+    start, end = motif_class.get_location_subpart(module_number)
+    return result_line_template.format(motif_name=motif_class.name, motif_seq=f'{seq}[{rep}]', motif_chrom=motif_class.chrom, motif_start=start,
                                        motif_end=end, allele1=predicted[0], allele2=predicted[1], confidence=confidence[0],
                                        confidence1=confidence[1], confidence2=confidence[2], qual_num=qual_num, primer_num=primer_num,
                                        filt_num=filt_num, conf_back=confidence[3], conf_back_all=confidence[4], conf_ext=confidence[5],
@@ -49,6 +59,10 @@ def generate_result_line(motif: Motif, module_number: int, predicted: tuple[str,
 
 
 def generate_result_header():
+    """
+    Generate result header from the template string.
+    :return: str - tsv header
+    """
     return result_line_template.format(motif_name='motif_name', motif_seq='motif_sequence', motif_chrom='chromosome', motif_start='start',
                                        motif_end='end', allele1='allele1', allele2='allele2', confidence='confidence', confidence1='conf_allele1',
                                        confidence2='conf_allele2', qual_num='quality_reads', primer_num='one_primer_reads', filt_num='filtered_reads',
@@ -56,16 +70,16 @@ def generate_result_header():
                                        conf_ext_all='conf_extended_all')
 
 
-def process_group(args: argparse.Namespace, df: pd.DataFrame, motif: str) -> tuple[Motif, list[str]]:
+def process_group(args: argparse.Namespace, df: pd.DataFrame, motif_str: str) -> tuple[Motif, list[str]]:
     """
     Process the group as pandas Dataframe. Return motif name if processed correctly or None otherwise.
     :param args: argparse.Namespace - namespace of program arguments
     :param df: pd.DataFrame - pandas DataFrame with information about annotated reads for a single motif to process
-    :param motif: str - motif nomenclature
+    :param motif_str: str - motif nomenclature
     :return: Motif, list(str) - motif, result lines
     """
     # build motif class
-    motif_class = Motif(motif)
+    motif_class = Motif(motif_str)
 
     # setup motif_directory
     motif_dir = f'{args.output_dir}/{motif_class.dir_name()}'
@@ -84,7 +98,8 @@ def process_group(args: argparse.Namespace, df: pd.DataFrame, motif: str) -> tup
         # deduplicate
         dedup_annot_pairs, duplicates = annotation.remove_pcr_duplicates(annotation_pairs)
 
-        # print(len(annotations), len(annotation_pairs), len([ap for ap in annotation_pairs if ap.ann1 is not None]), len([ap for ap in annotation_pairs if ap.ann2 is not None]))
+        # print(len(annotations), len(annotation_pairs), len([ap for ap in annotation_pairs if ap.ann1 is not None]),
+        # len([ap for ap in annotation_pairs if ap.ann2 is not None]))
         # print(len(dedup_annot_pairs), len(duplicates))
 
     # infer read distribution
@@ -99,7 +114,7 @@ def process_group(args: argparse.Namespace, df: pd.DataFrame, motif: str) -> tup
             annotations = annotation.pairs_to_annotations_pick(dedup_annot_pairs, module_number)
 
         # setup post filtering - no primers, insufficient quality, ...
-        postfilter_class = postfilter.PostFilter(args)
+        postfilter_class = PostFilter(args)
         qual_annot, filt_annot = postfilter_class.get_filtered(annotations, module_number, both_primers=True)
         primer_annot, filt_annot = postfilter_class.get_filtered(filt_annot, module_number, both_primers=False)
 
@@ -112,28 +127,29 @@ def process_group(args: argparse.Namespace, df: pd.DataFrame, motif: str) -> tup
                                        minl_primer2=args.min_flank_len, minl_str=args.min_rep_len)
         file_pcolor = f'{motif_dir}/pcolor_{module_number}' if args.verbose else None
         file_output = f'{motif_dir}/allcall_{module_number}.txt' if args.verbose else None
-        predicted, confidence = inference.all_call(qual_annot, primer_annot, module_number, file_pcolor, file_output, motif)
+        predicted, confidence = inference.all_call(qual_annot, primer_annot, module_number, file_pcolor, file_output, motif_str)
 
         # write the alignments
         if confidence is not None and args.verbose:
-           conf, c1, c2, _, _, _, _ = confidence
-           a1 = int(predicted[0]) if predicted[0].isdigit() else None
-           a2 = int(predicted[1]) if predicted[1].isdigit() else None
-           if a1 is not None and a1 > 0:
-               report.write_alignment(f'{motif_dir}/alignment_{module_number}_a{a1}.fasta', qual_annot, module_number, allele=a1)
-           if a2 is not None and a2 != a1 and a2 != 0:
-               report.write_alignment(f'{motif_dir}/alignment_{module_number}_a{a2}.fasta', qual_annot, module_number, allele=a2)
+            conf, c1, c2, _, _, _, _ = confidence
+            a1 = int(predicted[0]) if predicted[0].isdigit() else None
+            a2 = int(predicted[1]) if predicted[1].isdigit() else None
+            if a1 is not None and a1 > 0:
+                report.write_alignment(f'{motif_dir}/alignment_{module_number}_a{a1}.fasta', qual_annot, module_number, allele=a1)
+            if a2 is not None and a2 != a1 and a2 != 0:
+                report.write_alignment(f'{motif_dir}/alignment_{module_number}_a{a2}.fasta', qual_annot, module_number, allele=a2)
 
         # print the output
-        result_lines.append(generate_result_line(motif_class, module_number, predicted, confidence, len(qual_annot), len(primer_annot), len(filt_annot)))
+        result_lines.append(
+            generate_result_line(motif_class, module_number, predicted, confidence, len(qual_annot), len(primer_annot), len(filt_annot)))
 
     # try to get the overall nomenclature:
     if args.verbose:
         if args.deduplicate:
             annotations = annotation.pairs_to_annotations_pick(dedup_annot_pairs, None)
         for module_number, seq, _ in motif_class.get_repeating_modules():
-           postfilter_class = postfilter.PostFilter(args)
-           qual_annot_all, _ = postfilter_class.get_filtered(annotations, module_number, both_primers=True)
+            postfilter_class = PostFilter(args)
+            qual_annot_all, _ = postfilter_class.get_filtered(annotations, module_number, both_primers=True)
         report.write_histogram_nomenclature(f'{motif_dir}/nomenclature.txt', annotations)
 
     # return motif name in case it was processed normally
@@ -148,7 +164,7 @@ def generate_groups_gzipped(input_stream: typing.TextIO, column_name: str = 'mot
     :param chunk_size: int - chunk size for table processing
     :return: Iterator[pd.DataFrame] - sub-parts of the input table
     """
-    with gzip.GzipFile(fileobj=input_stream.buffer, mode='r') as gz_file:
+    with gzip.GzipFile(fileobj=input_stream.buffer, mode='r') as gz_file:  # type: typing.IO[bytes]
         # convert to text stream
         text_stream = io.TextIOWrapper(gz_file)
 
@@ -224,14 +240,14 @@ if __name__ == '__main__':
     if args.processes > 1:
         all_inputs = ((args, motif_table, motif_table[motif_column_name].iloc[0]) for motif_table in groups_iterator)
         with multiprocessing.Pool(args.processes) as pool:
-            for motif, result_lines in pool.starmap(process_group, all_inputs, chunksize=100):
-                for result_line in result_lines:
+            for motif, rls in pool.starmap(process_group, all_inputs, chunksize=100):
+                for result_line in rls:
                     report.log_str(result_line, stdout_too=sys.stdout)
                 processed_motifs.append(motif)
     else:
         for motif_table in groups_iterator:
-            motif, result_lines = process_group(args, motif_table, motif_table[motif_column_name].iloc[0])
-            for result_line in result_lines:
+            motif, rls = process_group(args, motif_table, motif_table[motif_column_name].iloc[0])
+            for result_line in rls:
                 report.log_str(result_line, stdout_too=sys.stdout)
             processed_motifs.append(motif)
 
