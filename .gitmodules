@@ -1,3 +1,4 @@
 [submodule "remastr"]
 	path = remastr
 	url = https://gitlab.com/andrejbalaz/remastr
+	main = main
