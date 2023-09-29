@@ -69,6 +69,7 @@ def load_arguments() -> argparse.Namespace:
                              help='Print all the outputs. Default is to print only the result table to stdout.')
         options.add_argument('--gzip-outputs', '-z', action='store_true', help='Store bigger outputs as gzipped files.')
         options.add_argument('--processes', '-p', type=positive_nonzero_int, help='Processes to use. Default=8', default=8)
+        options.add_argument('--progress', type=int, help='Print progress each number of motifs. Use 0 for no progress. Default=1000', default=1000)
 
         args = parser.parse_args()
 

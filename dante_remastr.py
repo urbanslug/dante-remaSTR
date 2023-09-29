@@ -86,21 +86,15 @@ def process_group(args: argparse.Namespace, df: pd.DataFrame, motif_str: str) ->
     # os.makedirs(motif_dir, exist_ok=True)
 
     # create annotations from rows
-    annotations = df.apply(lambda row: annotation.Annotation(row['read_id'], row['read'], row['reference'], row['modules'], row['log_likelihood'],
-                                                             motif_class), axis=1)
+    annotations = df.apply(lambda row: annotation.Annotation(row['read_id'], row['mate_order'], row['read'], row['reference'], row['modules'],
+                                                             row['log_likelihood'], motif_class), axis=1)
+
+    # create annotation pairs from annotations
+    annotation_pairs = annotation.annotations_to_pairs(annotations)
 
     # deduplicate?
-    dedup_annot_pairs = []
     if args.deduplicate:
-        # create annotation pairs from annotations
-        annotation_pairs = annotation.annotations_to_pairs(annotations)
-
-        # deduplicate
-        dedup_annot_pairs, duplicates = annotation.remove_pcr_duplicates(annotation_pairs)
-
-        # print(len(annotations), len(annotation_pairs), len([ap for ap in annotation_pairs if ap.ann1 is not None]),
-        # len([ap for ap in annotation_pairs if ap.ann2 is not None]))
-        # print(len(dedup_annot_pairs), len(duplicates))
+        annotation_pairs, duplicates = annotation.remove_pcr_duplicates(annotation_pairs)
 
     # infer read distribution
     read_distribution = np.bincount([len(ann.read_seq) for ann in annotations], minlength=100)
@@ -109,9 +103,8 @@ def process_group(args: argparse.Namespace, df: pd.DataFrame, motif_str: str) ->
     result_lines = []
     for module_number, seq, _ in motif_class.get_repeating_modules():
 
-        if args.deduplicate:
-            # deduplicated annotations (for each pair we keep only one)
-            annotations = annotation.pairs_to_annotations_pick(dedup_annot_pairs, module_number)
+        # pick annotations from pairs if needed
+        annotations = annotation.pairs_to_annotations_pick(annotation_pairs, module_number)
 
         # setup post filtering - no primers, insufficient quality, ...
         postfilter_class = PostFilter(args)
@@ -145,8 +138,7 @@ def process_group(args: argparse.Namespace, df: pd.DataFrame, motif_str: str) ->
 
     # try to get the overall nomenclature:
     if args.verbose:
-        if args.deduplicate:
-            annotations = annotation.pairs_to_annotations_pick(dedup_annot_pairs, None)
+        annotations = annotation.pairs_to_annotations_pick(annotation_pairs, None)
         for module_number, seq, _ in motif_class.get_repeating_modules():
             postfilter_class = PostFilter(args)
             qual_annot_all, _ = postfilter_class.get_filtered(annotations, module_number, both_primers=True)
@@ -154,6 +146,13 @@ def process_group(args: argparse.Namespace, df: pd.DataFrame, motif_str: str) ->
 
     # return motif name in case it was processed normally
     return motif_class, result_lines
+
+
+def process_group_tuple(x: tuple[argparse.Namespace, pd.DataFrame, str]) -> tuple[Motif, list[str]]:
+    """
+    Wrapper for process_group() to use in parallelization (pool.imap).
+    """
+    return process_group(x[0], x[1], x[2])
 
 
 def generate_groups_gzipped(input_stream: typing.TextIO, column_name: str = 'motif', chunk_size: int = 1000000) -> typing.Iterator[pd.DataFrame]:
@@ -240,16 +239,20 @@ if __name__ == '__main__':
     if args.processes > 1:
         all_inputs = ((args, motif_table, motif_table[motif_column_name].iloc[0]) for motif_table in groups_iterator)
         with multiprocessing.Pool(args.processes) as pool:
-            for motif, rls in pool.starmap(process_group, all_inputs, chunksize=100):
+            for motif, rls in pool.imap(process_group_tuple, all_inputs, chunksize=100):
                 for result_line in rls:
                     report.log_str(result_line, stdout_too=sys.stdout)
                 processed_motifs.append(motif)
+                if args.progress > 0 and len(processed_motifs) % args.progress == 0:
+                    report.log_str(f'Progress: {len(processed_motifs):10d} motifs done. ({datetime.now():%Y-%m-%d %H:%M:%S})')
     else:
         for motif_table in groups_iterator:
             motif, rls = process_group(args, motif_table, motif_table[motif_column_name].iloc[0])
             for result_line in rls:
                 report.log_str(result_line, stdout_too=sys.stdout)
             processed_motifs.append(motif)
+            if args.progress > 0 and len(processed_motifs) % args.progress == 0:
+                report.log_str(f'Progress: {len(processed_motifs):10d} motifs done. ({datetime.now():%Y-%m-%d %H:%M:%S})')
 
     # generate report and output files for the whole run
     if args.verbose:

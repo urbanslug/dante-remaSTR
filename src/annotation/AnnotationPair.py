@@ -157,21 +157,22 @@ def annotations_to_pairs(annots: list[Annotation]) -> list[AnnotationPair]:  # T
     """
 
     # sort:
-    sorted_list = sorted(annots, key=lambda annot: annot.read_sort_name)
+    sorted_list = sorted(annots, key=lambda annot: (annot.read_id, annot.left_pair))
 
     # remove duplicates:
     seen = set()
     deduplicated = []
     for ann in sorted_list:
-        if ann.read_sort_name not in seen:
-            seen.add(ann.read_sort_name)
+        if (ann.read_id, ann.left_pair) not in seen:
+            seen.add((ann.read_id, ann.left_pair))
             deduplicated.append(ann)
 
     result = []
 
     i = 0
     while i < len(deduplicated):
-        if i + 1 < len(deduplicated) and deduplicated[i].read_sort_name == deduplicated[i + 1].read_sort_name:
+        if i + 1 < len(deduplicated) and deduplicated[i].read_id == deduplicated[i + 1].read_id:
+            assert deduplicated[i].ordered and deduplicated[i + 1].ordered and deduplicated[i].left_pair != deduplicated[i + 1].left_pair
             result.append(AnnotationPair(deduplicated[i], deduplicated[i + 1]))
             i += 2
         else:

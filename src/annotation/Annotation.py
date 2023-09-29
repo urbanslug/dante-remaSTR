@@ -28,10 +28,11 @@ class Annotation:
     Encapsulate sequence of states from HMM and provide its readable representation and filters
     """
 
-    def __init__(self, read_id: str, read_seq: str, expected_seq: str, states: str, probability: float, motif: Motif):
+    def __init__(self, read_id: str, mate_order: int, read_seq: str, expected_seq: str, states: str, probability: float, motif: Motif):
         """
         :param read_id: str - read ID
         :param read_seq: str - read sequence
+        :param mate_order: int - mate order (0 - unpaired, 1 - left pair, 2 - right pair)
         :param expected_seq: str - expected sequence as in motif
         :param states: str - sequence of states (numbers of modules)
         :param probability: Probability of generating sequence by the most likely sequence of HMM states
@@ -40,8 +41,9 @@ class Annotation:
 
         # Store arguments into instance variables
         self.read_id = read_id
+        self.ordered = mate_order > 0
+        self.left_pair = mate_order == 1
         self.read_seq = read_seq
-        self.read_sort_name = read_id.split()[0]
         self.expected_seq = expected_seq
         self.states = states
         self.probability = probability
