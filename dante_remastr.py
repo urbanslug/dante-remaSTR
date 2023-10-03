@@ -128,9 +128,9 @@ def process_group(args: argparse.Namespace, df: pd.DataFrame, motif_str: str) ->
             a1 = int(predicted[0]) if predicted[0].isdigit() else None
             a2 = int(predicted[1]) if predicted[1].isdigit() else None
             if a1 is not None and a1 > 0:
-                report.write_alignment(f'{motif_dir}/alignment_{module_number}_a{a1}.fasta', qual_annot, module_number, allele=a1)
+                report.write_alignment(f'{motif_dir}/alignment_{module_number}_a{a1}.fasta', qual_annot, module_number, a1, zip_it=args.gzip_outputs)
             if a2 is not None and a2 != a1 and a2 != 0:
-                report.write_alignment(f'{motif_dir}/alignment_{module_number}_a{a2}.fasta', qual_annot, module_number, allele=a2)
+                report.write_alignment(f'{motif_dir}/alignment_{module_number}_a{a2}.fasta', qual_annot, module_number, a2, zip_it=args.gzip_outputs)
 
         # print the output
         result_lines.append(

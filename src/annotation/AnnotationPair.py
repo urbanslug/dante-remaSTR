@@ -35,7 +35,8 @@ class AnnotationPair:
             return second_pair.ann1 is not None and self.ann1.same_start_fragment(second_pair.ann1)
 
         # return the full comparison
-        return self.ann1.same_start_fragment(second_pair.ann1) and self.ann2.same_end_fragment(second_pair.ann2)
+        return ((second_pair.ann1 is None or self.ann1.same_start_fragment(second_pair.ann1)) and
+                (second_pair.ann2 is None or self.ann2.same_end_fragment(second_pair.ann2)))
 
     def __str__(self):
         return '\n'.join(['1', str(self.ann1), '2', str(self.ann2)])
