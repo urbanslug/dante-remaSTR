@@ -125,6 +125,26 @@ def model_template(rng, model_params, rate_func=linear_rate):
     return functools.partial(model_full, rng, model_params, rate_func=rate_func)
 
 
+def generate_models(min_rep: int, max_rep: int, multiple_backgrounds: bool = True) -> typing.Iterator[typing.Tuple[int | str, int | str]]:
+    """
+    Generate all pairs of alleles (models for generation of reads).
+    :param min_rep: int - minimal number of repetitions
+    :param max_rep: int - maximal number of repetitions
+    :param multiple_backgrounds: bool - whether to generate all background states
+    :return: generator of allele pairs (numbers or 'E' or 'B')
+    """
+
+    for model_index1 in range(min_rep, max_rep):
+        for model_index2 in range(model_index1, max_rep):
+            yield model_index1, model_index2
+        yield model_index1, 'E'
+        if multiple_backgrounds:
+            yield 'B', model_index1
+
+    yield 'B', 'B'
+    yield 'E', 'E'
+
+
 class Inference:
     """ Class for inference of alleles. """
 
@@ -357,7 +377,7 @@ class Inference:
     def infer(self, annotations: list[Annotation], filt_annotations: list[Annotation], index_rep: int,
               verbose: bool = True) -> dict[tuple[int, int]: float]:
         """
-        Does all of the inference, computes for which 2 combination of alleles are these annotations and parameters the best.
+        Does all the inference, computes for which 2 combination of alleles are these annotations and parameters the best.
         argmax_{G1, G2} P(G1, G2 | AL, COV, RL) ~ P(AL, COV, RL | G1, G2) * P(G1, G2) = prod_{read_i} P(al_i, cov_i, rl_i | G1, G2) * P(G1, G2)
          = independent G1 G2 = prod_{read_i} P(al_i, cov_i, rl_i | G1) * P(al_i, cov_i, rl_i | G2) * P(G1) * P(G2) {here G1, G2 is from possible
          alleles, background, and expanded, priors are from params}
@@ -402,27 +422,16 @@ class Inference:
         # generate all the models
         self.construct_models(min_rep, max_rep, e_allele)
 
-        tested_models = []
-
-        for model_index1 in range(min_rep, max_rep):
-            for model_index2 in range(model_index1, max_rep):
-                tested_models.append((model_index1, model_index2))
-            tested_models.append((model_index1, 'E'))
-            # tested_models.append(('B', model_index1))
-
-        tested_models.append(('B', 'B'))
-        tested_models.append(('E', 'E'))
-
         # go through every model and evaluate:
         evaluated_models = {}
-        for m1, m2 in tested_models:
+        for m1, m2 in generate_models(min_rep, max_rep, multiple_backgrounds=True):
 
             evaluated_models[(m1, m2)] = 0
 
             if verbose:
                 print('model', m1, m2)
 
-            # go through every reads
+            # go through every read
             for obs, rl, closed in zip(observed_arr, rl_arr, closed_arr):
                 lh = self.likelihood_read(obs, rl, m1, m2, closed=closed)
                 # TODO weighted sum according to the closeness/openness of reads?

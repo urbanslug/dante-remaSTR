@@ -80,7 +80,7 @@ def write_alignment(out_file: str, annotations: list[annotation.Annotation], ind
                 total_done += 1
                 continue
             state = annot.states[ai]
-            comparator = (state not in '-_', state, i)
+            comparator = (state != 'I', state, i)
             min_comp = min(comparator, min_comp)
 
         # if we have done every state, end:
@@ -127,7 +127,7 @@ def write_alignment(out_file: str, annotations: list[annotation.Annotation], ind
         return ('_' * (bckg_length - idx)) + background[:idx] + alignment[bckg_length:]
 
     states = np.array(states)
-    background_length = np.sum(states == 0)
+    background_length = np.sum(states == '0')
     if background_length > 0:
         for i in range(len(alignments)):
             alignments[i] = move_right(alignments[i], background_length)
