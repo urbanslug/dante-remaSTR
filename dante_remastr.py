@@ -125,8 +125,8 @@ def process_group(args: argparse.Namespace, df: pd.DataFrame, motif_str: str) ->
         # write the alignments
         if confidence is not None and args.verbose:
             conf, c1, c2, _, _, _, _ = confidence
-            a1 = int(predicted[0]) if predicted[0].isdigit() else None
-            a2 = int(predicted[1]) if predicted[1].isdigit() else None
+            a1 = predicted[0] if isinstance(predicted[0], int) else None
+            a2 = predicted[1] if isinstance(predicted[1], int) else None
             if a1 is not None and a1 > 0:
                 report.write_alignment(f'{motif_dir}/alignment_{module_number}_a{a1}.fasta', qual_annot, module_number, a1, zip_it=args.gzip_outputs)
             if a2 is not None and a2 != a1 and a2 != 0:
