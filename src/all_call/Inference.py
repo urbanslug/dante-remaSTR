@@ -594,10 +594,14 @@ class Inference:
         lh_corr_array = lh_array - np.max(lh_array)
         lh_sum = np.sum(np.exp(lh_corr_array))
         confidence = np.exp(lh_corr_array[predicted[0], predicted[1]]) / lh_sum
-        if predicted[0] == predicted[1]:
+        if predicted[0] == predicted[1]:  # same alleles - we compute the probability per allele
             confidence1 = np.sum(np.exp(lh_corr_array[predicted[0], :])) / lh_sum
             confidence2 = np.sum(np.exp(lh_corr_array[:, predicted[1]])) / lh_sum
-        else:
+        elif predicted[1] == lh_corr_array.shape[0]:  # expanded allele - expanded is only on one side of the array
+            confidence1 = (np.sum(np.exp(lh_corr_array[predicted[0], :])) + np.sum(np.exp(lh_corr_array[:, predicted[0]])) - np.exp(
+                lh_corr_array[predicted[0], predicted[0]])) / lh_sum
+            confidence2 = np.sum(np.exp(lh_corr_array[:, predicted[1]])) / lh_sum
+        else:  # normal behavior - different alleles , no expanded, compute all likelihoods of the alleles
             confidence1 = (np.sum(np.exp(lh_corr_array[predicted[0], :])) + np.sum(np.exp(lh_corr_array[:, predicted[0]])) - np.exp(
                 lh_corr_array[predicted[0], predicted[0]])) / lh_sum
             confidence2 = (np.sum(np.exp(lh_corr_array[:, predicted[1]])) + np.sum(np.exp(lh_corr_array[predicted[1], :])) - np.exp(
@@ -638,7 +642,7 @@ class Inference:
             write_output_fd(file_desc, predicted, conf, name)
 
     def all_call(self, annotations: list[Annotation], filt_annotations: list[Annotation], index_rep: int, file_pcolor: str | None,
-                 file_output: str | None, name: str) -> tuple[tuple[str, str], tuple[float, float, float, float, float, float, float]]:
+                 file_output: str | None, name: str) -> tuple[tuple[str | int, str | int], tuple[float, float, float, float, float, float, float]]:
         """
         Run All_call - inference of likelihoods, printing of pcolor and writing output.
         :param annotations: list(Annotation) - good (blue) annotations
