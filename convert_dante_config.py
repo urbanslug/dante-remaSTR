@@ -22,6 +22,8 @@ def load_arguments() -> argparse.Namespace:
     parser.add_argument('--dante-repo', help='Path to Dante repository. Default=use this location', default=None)
     parser.add_argument('--reference-fasta', help='Path to reference fasta. Default=/data/genome/human/grch38_decoy/grch38_decoy.fa',
                         default='/data/genome/human/grch38_decoy/grch38_decoy.fa')
+    parser.add_argument('--skip-name', '-s', action='store_true', help='Do not include the name in nomenclature output')
+    parser.add_argument('--use-chr-names', '-c', action='store_true', help='Ignore chromosome versions, use chr1..chrY notation')
 
     args = parser.parse_args()
 
@@ -59,7 +61,7 @@ if __name__ == '__main__':
 
     # generate parameters and convert to dante call
     bam_basename = os.path.basename(old_yaml.inputs[0].path).split('.')[0]
-    nomenclature_file = f'{args.output_dir}/nomenclature_{bam_basename[:15]}.txt'
+    nomenclature_file = f'{args.output_dir}/nomenclature_{bam_basename[:15]}.tsv'
     remastr_call = (f'{args.dante_repo}/remastr/target/release/remastr -f {args.reference_fasta} -n {nomenclature_file} '
                     f'-b {old_yaml.inputs[0].path} -o {args.output_dir}/{bam_basename}.tsv')
     options = (f'--param-file {old_yaml.allcall.param_file} '
@@ -71,7 +73,8 @@ if __name__ == '__main__':
         options += f'--min-rep-cnt {old_yaml.motifs[0].postfilter[0].repetitions.split(",")[1]} '
     if 'max_errors' in old_yaml.motifs[0].postfilter[0]:
         options += f'--max-rel-error {old_yaml.motifs[0].postfilter[0].max_errors} '
-    dante_call = f'{args.dante_repo}/dante_remastr.py {options} < {args.output_dir}/{bam_basename}.tsv > {args.output_dir}/{bam_basename}_res.tsv'
+    dante_call = (f'python {args.dante_repo}/dante_remastr.py {options} -vz -o {args.output_dir} < {args.output_dir}/{bam_basename}.tsv '
+                  f'> {args.output_dir}/{bam_basename}_res.tsv')
 
     # write the generated pipeline
     with open(f'{args.output_dir}/pipeline_{bam_basename[:15]}.sh', 'w') as pipeline_file:
@@ -85,11 +88,9 @@ if __name__ == '__main__':
             # generate string
             module_str = ''.join([convert_module(module.seq) for module in motif.modules[1:-1]])
 
-            # check if chromosome_version is defined
-            # if 'chromosome_version' in motif and False:
-            #    nomenclature = f'{motif.chromosome_version}:g.{motif.ref_start}_{motif.ref_end}{module_str}'
-            # else:
-            nomenclature = f'{motif.chromosome}:g.{motif.ref_start}_{motif.ref_end}{module_str}'
+            # build nomenclature string
+            nomenclature = (f'{motif.chromosome_version if "chromosome_version" in motif and not args.use_chr_names else motif.chromosome}:'
+                            f'g.{motif.ref_start + len(motif.modules[0].seq)}_{motif.ref_end - len(motif.modules[-1].seq)}{module_str}')
 
             # write it to file
-            nomenclature_file.write(f'{nomenclature}\n')
+            nomenclature_file.write(f'{nomenclature}\n' if args.skip_name else f'{motif.full_name}\t{nomenclature}\n')
