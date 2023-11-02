@@ -141,7 +141,7 @@ def process_group(args: argparse.Namespace, df: pd.DataFrame, motif_str: str) ->
         annotations = annotation.pairs_to_annotations_pick(annotation_pairs, None)
         for module_number, seq, _ in motif_class.get_repeating_modules():
             postfilter_class = PostFilter(args)
-            qual_annot_all, _ = postfilter_class.get_filtered(annotations, module_number, both_primers=True)
+            annotations, _ = postfilter_class.get_filtered(annotations, module_number, both_primers=True)
         report.write_histogram_nomenclature(f'{motif_dir}/nomenclature.txt', annotations)
 
     # return motif name in case it was processed normally

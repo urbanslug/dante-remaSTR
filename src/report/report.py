@@ -416,8 +416,7 @@ def write_all(quality_annotations: list[annotation.Annotation], filt_primer: lis
     :return: None
     """
     # create dir if not exists:
-    if len(quality_annotations) > 0 or len(filt_primer) > 0:
-        os.makedirs(motif_dir, exist_ok=True)
+    os.makedirs(motif_dir, exist_ok=True)
 
     # write output files
     write_annotations(f'{motif_dir}/annotations_{module_number}.txt', quality_annotations, zip_it=zip_it)
