@@ -54,17 +54,23 @@ def write_annotation_pairs(out_file: str, annotation_pairs: list[annotation.Anno
             fw.write(write_right + '\n')
 
 
-def write_alignment(out_file: str, annotations: list[annotation.Annotation], index_rep: int, allele: int = None, zip_it: bool = True) -> None:
+def write_alignment(out_file: str, annotations: list[annotation.Annotation], index_rep: int, allele: int = None, index_rep2: int = None,
+                    allele2: int = None, zip_it: bool = True) -> None:
     """
     Creates a multi-alignment of all annotations into output text file
     :param out_file: str - alignment filename
     :param annotations: list(Annotation) - annotated reads
     :param index_rep: int - index of repetition module of a motif
     :param allele: int/None - which allele to print only, if None print all of them
+    :param index_rep2: int - index of second repetition module of a motif
+    :param allele2: int/None - which allele2 to print only, if None print all of them
     :param zip_it: bool - whether to gzip the resulting file
     """
     if allele is not None:
-        annotations = [a for a in annotations if a.module_repetitions[index_rep] == allele]
+        if allele2 is not None and index_rep2 is not None:
+            annotations = [a for a in annotations if a.module_repetitions[index_rep] == allele and a.module_repetitions[index_rep2] == allele2]
+        else:
+            annotations = [a for a in annotations if a.module_repetitions[index_rep] == allele]
 
     alignments = [''] * len(annotations)
     align_inds = np.zeros(len(annotations), dtype=int)
@@ -102,8 +108,15 @@ def write_alignment(out_file: str, annotations: list[annotation.Annotation], ind
             else:
                 alignments[i] += '_'
 
-    reps = np.array([ann.module_repetitions[index_rep] for ann in annotations])
-    sort_inds = np.argsort(-reps)
+    # sort according to motif count:
+    if index_rep2 is not None:
+        # sorting first with 1st allele then with second
+        reps1 = np.array([-ann.module_repetitions[index_rep] for ann in annotations])
+        reps2 = np.array([-ann.module_repetitions[index_rep2] for ann in annotations])
+        sort_inds = np.lexsort((reps1, reps2))  # sort by first allele, then by second
+    else:
+        reps = np.array([-ann.module_repetitions[index_rep] for ann in annotations])
+        sort_inds = np.argsort(reps)
     annotations = np.array(annotations)[sort_inds]
     alignments = list(np.array(alignments)[sort_inds])
 
@@ -404,34 +417,46 @@ def write_histogram_image(out_prefix: str, annotations: list[annotation.Annotati
 
 
 def write_all(quality_annotations: list[annotation.Annotation], filt_primer: list[annotation.Annotation],
-              filtered_annotations: list[annotation.Annotation], motif_dir: str, module_number: int, zip_it: bool = True) -> None:
+              filtered_annotations: list[annotation.Annotation], motif_dir: str, motif_class: Motif, module_number: int, second_module_number: int = None,
+              zip_it: bool = True) -> None:
     """
     Write all output files: quality annotations, one-primer annotations, filtered annotations, statistics, repetitions + images.
     :param quality_annotations: list(Annotation) - list of blue annotations
     :param filt_primer: list(Annotation) - list of grey annotations
     :param filtered_annotations: list(Annotation) - list of filtered out annotation
     :param motif_dir: str - path to motif directory
-    :param module_number: int - index of first repetition in modules
+    :param motif_class: Motif - motif class
+    :param module_number: int - index of first studied repetition in modules
+    :param second_module_number: int - index of second studied repetition in modules (optional)
     :param zip_it: bool - whether to gzip the resulting file
     :return: None
     """
-    # create dir if not exists:
+    # create dir if not exists
     os.makedirs(motif_dir, exist_ok=True)
 
+    # create suffix for files:
+    suffix = str(module_number) if second_module_number is None else f'{module_number}_{second_module_number}'
+
     # write output files
-    write_annotations(f'{motif_dir}/annotations_{module_number}.txt', quality_annotations, zip_it=zip_it)
-    write_annotations(f'{motif_dir}/filtered_{module_number}.txt', filtered_annotations, zip_it=zip_it)
-    write_annotations(f'{motif_dir}/filtered_primer_{module_number}.txt', filt_primer, zip_it=zip_it)
-    write_alignment(f'{motif_dir}/alignment_{module_number}.fasta', quality_annotations, module_number, zip_it=zip_it)
-    write_alignment(f'{motif_dir}/alignment_filtered_{module_number}.fasta', filt_primer, module_number, zip_it=zip_it)
+    write_annotations(f'{motif_dir}/annotations_{suffix}.txt', quality_annotations, zip_it=zip_it)
+    write_annotations(f'{motif_dir}/filtered_{suffix}.txt', filtered_annotations, zip_it=zip_it)
+    write_annotations(f'{motif_dir}/filtered_primer_{suffix}.txt', filt_primer, zip_it=zip_it)
+    write_alignment(f'{motif_dir}/alignment_{suffix}.fasta', quality_annotations, module_number, index_rep2=second_module_number, zip_it=zip_it)
+    write_alignment(f'{motif_dir}/alignment_filtered_{suffix}.fasta', filt_primer, module_number, index_rep2=second_module_number, zip_it=zip_it)
 
-    write_histogram_image(f'{motif_dir}/repetitions_{module_number}', quality_annotations, filt_primer, module_number)
+    # write histogram image
+    if second_module_number is not None:
+        write_histogram_image2d(f'{motif_dir}/repetitions_{suffix}', quality_annotations + filt_primer, module_number, second_module_number,
+                                motif_class.module_str(module_number), motif_class.module_str(second_module_number))
+    else:
+        write_histogram_image(f'{motif_dir}/repetitions_{suffix}', quality_annotations, filt_primer, module_number)
 
-    write_histogram(f'{motif_dir}/repetitions_{module_number}.txt', quality_annotations,
-                    profile_file=f'{motif_dir}/profile_{module_number}.txt', index_rep=module_number)
-    write_histogram_nomenclature(f'{motif_dir}/nomenclatures_{module_number}.txt', quality_annotations, index_rep=module_number)
-    write_histogram(f'{motif_dir}/repetitions_grey_{module_number}.txt', filt_primer)
-    write_histogram_nomenclature(f'{motif_dir}/nomenclatures_grey_{module_number}.txt', filt_primer, index_rep=module_number)
+        # write histogram txt files (only for a single repetition)
+        write_histogram(f'{motif_dir}/repetitions_{suffix}.txt', quality_annotations,
+                        profile_file=f'{motif_dir}/profile_{suffix}.txt', index_rep=module_number)
+        write_histogram_nomenclature(f'{motif_dir}/nomenclatures_{suffix}.txt', quality_annotations, index_rep=module_number)
+        write_histogram(f'{motif_dir}/repetitions_grey_{suffix}.txt', filt_primer, index_rep=module_number)
+        write_histogram_nomenclature(f'{motif_dir}/nomenclatures_grey_{suffix}.txt', filt_primer, index_rep=module_number)
 
 
 def read_all_call(allcall_file: str) -> (float, int, int, float, float, float, float, float, float):
@@ -610,6 +635,7 @@ def write_report(motifs: list[Motif], post_filter: PostFilter, report_dir: str, 
                 # add to csv table:
                 result_table = add_to_result_table(result_table, motif.name, seq, i, post_filter, reads_blue, reads_grey, confidence)
 
+                # add the tables
                 mc, m, a = report.html_templates.generate_motifb64(motif.name, motif.name, seq, rep_file, pcol_file, align_file,
                                                                    filt_align_file, confidence, post_filter, highlight=[i])
                 if motif.name in mcs:
@@ -636,17 +662,19 @@ def write_report(motifs: list[Motif], post_filter: PostFilter, report_dir: str, 
                     confidence = [0.0, 0, 0]
                 tf.write(f'{motif.name}_{i}\t{confidence[1]}\t{confidence[2]}\n')
 
-    # save the report file
+    # load the report template
     script_dir = os.path.dirname(os.path.abspath(__file__))
     template = open(f'{script_dir}/report.html', 'r').read()
     template_static = open(f'{script_dir}/report.html', 'r').read()
 
+    # fill sample name and version of software
     sample = os.path.basename(report_dir)
-
-    template = custom_format(template, sample=sample)
-    template_static = custom_format(template_static, sample=sample)
+    version = open(f'{os.path.dirname(os.path.dirname(script_dir))}/version.txt', 'r').read().strip()
+    template = custom_format(template, sample=sample, version=version)
+    template_static = custom_format(template_static, sample=sample, version=version)
     tabs = []
 
+    # save the report file
     with open(f'{report_dir}/report.html', 'w') as f:
         contents_table = report.html_templates.contents.format(table='\n'.join(sorted(mcs.values())))
         template = custom_format(template, motifs_content=contents_table + '\n' + report.html_templates.make_datatable_string)

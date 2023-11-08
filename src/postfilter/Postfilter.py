@@ -44,6 +44,27 @@ class PostFilter:
 
         return is_right and has_primers and errors and flanks and repetitions
 
+    def get_filtered_list(self, annotations: list[Annotation], module_number: list[int],
+                          both_primers: list[bool] = None) -> tuple[list[Annotation], list[Annotation]]:
+        """
+        Get filtered annotations (list of modules).
+        :param annotations: list(Annotation) - annotations
+        :param module_number: list(int) - module numbers
+        :param both_primers: list(bool) or None - do we require both primers to be present
+        :return: list(Annotation), list(Annotation) - quality annotations, non-quality annotations
+        """
+        # adjust input if needed
+        if both_primers is None:
+            both_primers = [True] * len(module_number)
+        assert len(both_primers) == len(module_number)
+
+        # filter annotations
+        quality_annotations = [an for an in annotations if
+                               all([self.quality_annotation(an, mn, both_primers=bp) for mn, bp in zip(module_number, both_primers)])]
+        filtered_annotations = [an for an in annotations if an not in quality_annotations]
+
+        return quality_annotations, filtered_annotations
+
     def get_filtered(self, annotations: list[Annotation], module_number: int,
                      both_primers: bool = True) -> tuple[list[Annotation], list[Annotation]]:
         """
@@ -53,6 +74,7 @@ class PostFilter:
         :param both_primers: bool - do we require both primers to be present
         :return: list(Annotation), list(Annotation) - quality annotations, non-quality annotations
         """
+        # pick quality annotations
         quality_annotations = [an for an in annotations if self.quality_annotation(an, module_number, both_primers=both_primers)]
         filtered_annotations = [an for an in annotations if an not in quality_annotations]
 

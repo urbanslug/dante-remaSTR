@@ -10,18 +10,22 @@ class Motif:
     :ivar start: Start position of the motif.
     :ivar end: End position of the motif.
     :ivar modules: A list of tuples containing sequence and repetition count.
+    :ivar name: name of the Motif
+    :ivar motif: motif nomenclature
     """
 
-    def __init__(self, motif: str):
+    def __init__(self, motif: str, name: str = None):
         """
         Initialize a Motif object.
         :param motif: The motif string in the format "chrom:start_end[A][B]..."
+        :param name: optional name of the motif
         """
         # remove whitespace
-        self.name = motif.strip().replace(' ', '')
+        self.motif = motif.strip().replace(' ', '')
+        self.name = name if name is not None else self.motif
 
         # extract prefix, first number, second number
-        self.chrom, start, end, remainder = re.match(r'([^:]+):g\.(\d+)_(\d+)(.*)', self.name).groups()
+        self.chrom, start, end, remainder = re.match(r'([^:]+):g\.(\d+)_(\d+)(.*)', self.motif).groups()
 
         # extract sequence and repetition count
         self.modules = [(str(seq), int(num)) for seq, num in re.findall(r'([A-Z]+)\[(\d+)', remainder)]
@@ -55,6 +59,15 @@ class Motif:
         if include_flanks:
             return ''.join([f'{seq}[{num}]' for seq, num in self.modules])
         return ''.join([f'{seq}[{num}]' for seq, num in self.modules[1:-1]])
+
+    def module_str(self, module_number: int) -> str:
+        """
+        Returns string representation of modules
+        :param module_number: int - module number
+        :return: String representation of modules
+        """
+        seq, num = self.modules[module_number]
+        return f'{seq}[{num}]'
 
     def dir_name(self) -> str:
         """

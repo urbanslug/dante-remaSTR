@@ -641,17 +641,18 @@ class Inference:
         else:
             write_output_fd(file_desc, predicted, conf, name)
 
-    def all_call(self, annotations: list[Annotation], filt_annotations: list[Annotation], index_rep: int, file_pcolor: str | None,
+    def genotype(self, annotations: list[Annotation], filt_annotations: list[Annotation], index_rep: int, file_pcolor: str | None,
                  file_output: str | None, name: str) -> tuple[tuple[str | int, str | int], tuple[float, float, float, float, float, float, float]]:
         """
-        Run All_call - inference of likelihoods, printing of pcolor and writing output.
+        Genotype based on all annotations - infer likelihoods, print pcolor and write output
         :param annotations: list(Annotation) - good (blue) annotations
         :param filt_annotations: list(Annotation) - (grey) annotations with one primer
-        :param index_rep: int - index of a repetition
+        :param index_rep: i
+        nt - index of a repetition
         :param file_pcolor: str - file prefix for a pcolor image
-        :param file_output: str - file for all_call output
+        :param file_output: str - file for genotyping output
         :param name: str - name of the sample
-        :return:
+        :return: tuple - predicted symbols and confidences
         """
 
         # if we do not have any good annotations, then quit

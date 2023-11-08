@@ -10,7 +10,7 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 
-import src.all_call as all_call
+import src.inference as inference
 import src.arguments as arguments
 import src.report as report
 import src.annotation as annotation
@@ -18,8 +18,8 @@ from src.annotation.Motif import Motif
 from src.postfilter import PostFilter
 
 MOTIF_PRINT_LEN = 40
-result_line_template = ('{motif_name}\t{motif_seq}\t{motif_chrom}\t{motif_start}\t{motif_end}\t{allele1}\t{allele2}\t{confidence}\t{confidence1}\t'
-                        '{confidence2}\t{qual_num}\t{primer_num}\t{filt_num}\t{conf_back}\t{conf_back_all}\t{conf_ext}\t{conf_ext_all}')
+result_line_templ = ('{motif_name}\t{motif_nom}\t{motif_seq}\t{motif_chrom}\t{motif_start}\t{motif_end}\t{allele1}\t{allele2}\t{confidence}\t'
+                     '{confidence1}\t{confidence2}\t{qual_num}\t{primer_num}\t{filt_num}\t{conf_back}\t{conf_back_all}\t{conf_ext}\t{conf_ext_all}')
 
 
 def shorten_str(string: str, max_length: int = MOTIF_PRINT_LEN, ellipsis_str: str = '...') -> str:
@@ -36,26 +36,32 @@ def shorten_str(string: str, max_length: int = MOTIF_PRINT_LEN, ellipsis_str: st
         return string
 
 
-def generate_result_line(motif_class: Motif, module_number: int, predicted: tuple[str, str],
-                         confidence: tuple[float, float, float, float, float, float, float], qual_num: int, primer_num: int, filt_num: int):
+def generate_result_line(motif_class: Motif, predicted: tuple[str, str], confidence: tuple[float | str, ...], qual_num: int,
+                         primer_num: int, filt_num: int, module_number: int, second_module_number: int = None, ):
     """
     Generate result line from the template string.
     :param motif_class: Motif - motif class
-    :param module_number: int - module number in motif
     :param predicted: tuple[str, str] - predicted alleles (number or 'B'/'E')
-    :param confidence: tuple[7x float] - confidences of prediction
+    :param confidence: tuple[7x float/str] - confidences of prediction
     :param qual_num: int - number of reads with both primers
     :param primer_num: int - number of reads with exactly one primer
     :param filt_num: int - number of filtered out reads (no primers, many errors, ...)
+    :param module_number: int - module number in motif
+    :param second_module_number: int/None - second module number in motif
     :return: str - tsv line with result
     """
-    seq, rep = motif_class[module_number]
     start, end = motif_class.get_location_subpart(module_number)
-    return result_line_template.format(motif_name=motif_class.name, motif_seq=f'{seq}[{rep}]', motif_chrom=motif_class.chrom, motif_start=start,
-                                       motif_end=end, allele1=predicted[0], allele2=predicted[1], confidence=confidence[0],
-                                       confidence1=confidence[1], confidence2=confidence[2], qual_num=qual_num, primer_num=primer_num,
-                                       filt_num=filt_num, conf_back=confidence[3], conf_back_all=confidence[4], conf_ext=confidence[5],
-                                       conf_ext_all=confidence[6])
+    motif_seq = motif_class.module_str(module_number)
+    if second_module_number is not None:
+        _, end = motif_class.get_location_subpart(second_module_number)
+        motif_seq = ','.join([motif_class.module_str(i) for i in range(module_number, second_module_number + 1)])
+    return result_line_templ.format(motif_name=motif_class.name, motif_nom=motif_class.motif, motif_seq=motif_seq,
+                                    motif_chrom=motif_class.chrom, motif_start=start, motif_end=end, allele1=predicted[0], allele2=predicted[1],
+                                    confidence=confidence[0], confidence1=confidence[1], confidence2=confidence[2], qual_num=qual_num,
+                                    primer_num=primer_num, filt_num=filt_num, conf_back=confidence[3] if len(confidence) > 3 else '---',
+                                    conf_back_all=confidence[4] if len(confidence) > 4 else '---',
+                                    conf_ext=confidence[5] if len(confidence) > 5 else '---',
+                                    conf_ext_all=confidence[6] if len(confidence) > 6 else '---')
 
 
 def generate_result_header():
@@ -63,11 +69,11 @@ def generate_result_header():
     Generate result header from the template string.
     :return: str - tsv header
     """
-    return result_line_template.format(motif_name='motif_name', motif_seq='motif_sequence', motif_chrom='chromosome', motif_start='start',
-                                       motif_end='end', allele1='allele1', allele2='allele2', confidence='confidence', confidence1='conf_allele1',
-                                       confidence2='conf_allele2', qual_num='quality_reads', primer_num='one_primer_reads', filt_num='filtered_reads',
-                                       conf_back='conf_background', conf_back_all='conf_background_all', conf_ext='conf_extended',
-                                       conf_ext_all='conf_extended_all')
+    return result_line_templ.format(motif_name='motif_name', motif_nom='motif_nomenclature', motif_seq='motif_sequence', motif_chrom='chromosome',
+                                    motif_start='start', motif_end='end', allele1='allele1', allele2='allele2', confidence='confidence',
+                                    confidence1='conf_allele1', confidence2='conf_allele2', qual_num='quality_reads', primer_num='one_primer_reads',
+                                    filt_num='filtered_reads', conf_back='conf_background', conf_back_all='conf_background_all',
+                                    conf_ext='conf_extended', conf_ext_all='conf_extended_all')
 
 
 def process_group(args: argparse.Namespace, df: pd.DataFrame, motif_str: str) -> tuple[Motif, list[str]]:
@@ -79,15 +85,16 @@ def process_group(args: argparse.Namespace, df: pd.DataFrame, motif_str: str) ->
     :return: Motif, list(str) - motif, result lines
     """
     # build motif class
-    motif_class = Motif(motif_str)
+    name = None if 'name' not in df.columns or df.iloc[0]['name'] in ['None', ''] else df.iloc[0]['name']
+    motif_class = Motif(motif_str, name)
 
     # setup motif_directory
     motif_dir = f'{args.output_dir}/{motif_class.dir_name()}'
-    # os.makedirs(motif_dir, exist_ok=True)
 
     # create annotations from rows
-    annotations = df.apply(lambda row: annotation.Annotation(row['read_id'], row['mate_order'], row['read'], row['reference'], row['modules'],
-                                                             row['log_likelihood'], motif_class), axis=1)
+    annotations = df.apply(
+        lambda row: annotation.Annotation(row['read_id'], row['mate_order'], row['read'].replace('_', ''), row['reference'], row['modules'],
+                                          row['log_likelihood'], motif_class), axis=1)
 
     # create annotation pairs from annotations
     annotation_pairs = annotation.annotations_to_pairs(annotations)
@@ -101,7 +108,8 @@ def process_group(args: argparse.Namespace, df: pd.DataFrame, motif_str: str) ->
 
     # create report for each repeating module
     result_lines = []
-    for module_number, seq, _ in motif_class.get_repeating_modules():
+    repeating_modules = motif_class.get_repeating_modules()
+    for i, (module_number, _, _) in enumerate(repeating_modules):
 
         # pick annotations from pairs if needed
         annotations = annotation.pairs_to_annotations_pick(annotation_pairs, module_number)
@@ -113,14 +121,14 @@ def process_group(args: argparse.Namespace, df: pd.DataFrame, motif_str: str) ->
 
         # write files if needed
         if args.verbose:
-            report.write_all(qual_annot, primer_annot, filt_annot, motif_dir, module_number, zip_it=args.gzip_outputs)
+            report.write_all(qual_annot, primer_annot, filt_annot, motif_dir, motif_class, module_number, zip_it=args.gzip_outputs)
 
         # run inference - this takes most of the time (for no --verbose)
-        inference = all_call.Inference(read_distribution, args.param_file, str_rep=args.min_rep_cnt, minl_primer1=args.min_flank_len,
-                                       minl_primer2=args.min_flank_len, minl_str=args.min_rep_len)
         file_pcolor = f'{motif_dir}/pcolor_{module_number}' if args.verbose else None
         file_output = f'{motif_dir}/allcall_{module_number}.txt' if args.verbose else None
-        predicted, confidence = inference.all_call(qual_annot, primer_annot, module_number, file_pcolor, file_output, motif_str)
+        inference_class = inference.Inference(read_distribution, args.param_file, str_rep=args.min_rep_cnt, minl_primer1=args.min_flank_len,
+                                              minl_primer2=args.min_flank_len, minl_str=args.min_rep_len)
+        predicted, confidence = inference_class.genotype(qual_annot, primer_annot, module_number, file_pcolor, file_output, motif_str)
 
         # write the alignments
         if confidence is not None and args.verbose:
@@ -132,14 +140,40 @@ def process_group(args: argparse.Namespace, df: pd.DataFrame, motif_str: str) ->
             if a2 is not None and a2 != a1 and a2 != 0:
                 report.write_alignment(f'{motif_dir}/alignment_{module_number}_a{a2}.fasta', qual_annot, module_number, a2, zip_it=args.gzip_outputs)
 
-        # print the output
+        # infer phasing (if we are not on the first repeating module)
+        if i != 0:
+            # get the last module number
+            last_num = repeating_modules[i - 1][0]
+
+            # post filtering
+            both_good_annot, filtered_annot = postfilter_class.get_filtered_list(annotations, [last_num, module_number], both_primers=[True, True])
+            left_good_annot, left_bad_annot = postfilter_class.get_filtered_list(filtered_annot, [last_num, module_number],
+                                                                                 both_primers=[False, True])
+            right_good_annot, none_good_annot = postfilter_class.get_filtered_list(left_bad_annot, [last_num, module_number],
+                                                                                   both_primers=[True, False])
+            one_good_annot = left_good_annot + right_good_annot
+
+            # write files
+            if args.verbose:
+                report.write_all(both_good_annot, one_good_annot, none_good_annot, motif_dir, motif_class, last_num, module_number,
+                                 zip_it=args.gzip_outputs)
+
+            # infer phasing
+            phasing, supp_reads = inference.phase(both_good_annot, last_num, module_number)
+
+            # append to the result line TODO remove from here? and add to html exports.
+            result_lines.append(
+                generate_result_line(motif_class, phasing, supp_reads, len(both_good_annot), len(one_good_annot), len(none_good_annot), last_num,
+                                     module_number))
+
+        # append to the result line
         result_lines.append(
-            generate_result_line(motif_class, module_number, predicted, confidence, len(qual_annot), len(primer_annot), len(filt_annot)))
+            generate_result_line(motif_class, predicted, confidence, len(qual_annot), len(primer_annot), len(filt_annot), module_number))
 
     # try to get the overall nomenclature:
     if args.verbose:
         annotations = annotation.pairs_to_annotations_pick(annotation_pairs, None)
-        for module_number, seq, _ in motif_class.get_repeating_modules():
+        for module_number, _, _ in motif_class.get_repeating_modules():
             postfilter_class = PostFilter(args)
             annotations, _ = postfilter_class.get_filtered(annotations, module_number, both_primers=True)
         report.write_histogram_nomenclature(f'{motif_dir}/nomenclature.txt', annotations)

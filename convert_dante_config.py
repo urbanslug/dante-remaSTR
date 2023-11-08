@@ -62,7 +62,7 @@ if __name__ == '__main__':
     # generate parameters and convert to dante call
     bam_basename = os.path.basename(old_yaml.inputs[0].path).split('.')[0]
     nomenclature_file = f'{args.output_dir}/nomenclature_{bam_basename[:15]}.tsv'
-    remastr_call = (f'{args.dante_repo}/remastr/target/release/remastr -f {args.reference_fasta} -n {nomenclature_file} '
+    remastr_call = (f'{args.dante_repo}/remastr/target/release/remastr -f {args.reference_fasta} -m {nomenclature_file} '
                     f'-b {old_yaml.inputs[0].path} -o {args.output_dir}/{bam_basename}.tsv')
     options = (f'--param-file {old_yaml.allcall.param_file} '
                f'-p {old_yaml.general.cpu} ')
