@@ -14,7 +14,7 @@ import pandas as pd
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-from src import annotation
+from src import annotation, inference
 from src import report
 from src.annotation.Motif import Motif
 from src.postfilter import PostFilter
@@ -165,15 +165,11 @@ def sorted_repetitions(annotations: list[annotation.Annotation]) -> list[tuple[t
     return sorted(count_dict.items(), key=lambda k: k[0])
 
 
-def write_histogram(out_file: str, annotations: list[annotation.Annotation], profile_file: str = None,
-                    index_rep: int = None, quiet: bool = False) -> None:
+def write_histogram(out_file: str, annotations: list[annotation.Annotation], ) -> None:
     """
     Stores quantity of different combinations of module repetitions into text file
     :param out_file: str - output file for repetitions
     :param annotations: Annotated reads
-    :param profile_file: str - output file for profile
-    :param index_rep: int - index repetition
-    :param quiet: boolean - write profile?
     """
     # setup
     sorted_reps = sorted_repetitions(annotations)
@@ -184,16 +180,26 @@ def write_histogram(out_file: str, annotations: list[annotation.Annotation], pro
             rep_code = '\t'.join(map(str, repetitions))
             fw.write(f'{counts}\t{rep_code}\n')
 
-    # write profile if possible and needed
-    if not quiet and profile_file is not None and index_rep is not None:
-        length = max([0] + [x[0][index_rep] for x in sorted_reps])
-        profile = np.zeros(length + 1, dtype=int)
 
-        for repetitions, counts in sorted_reps:
-            profile[repetitions[index_rep]] += counts
+def write_profile(profile_file: str, annotations: list[annotation.Annotation], index_rep: int) -> None:
+    """
+    Stores quantity of different combinations of module repetitions into text file
+    :param profile_file: str - output file for repetitions
+    :param annotations: Annotated reads
+    :param index_rep: int - index of the first repetition
+    """
+    # setup
+    sorted_reps = sorted_repetitions(annotations)
 
-        with open(profile_file, 'w') as f:
-            f.write('\t'.join(map(str, profile)))
+    # write profile
+    length = max([0] + [x[0][index_rep] for x in sorted_reps])
+    profile = np.zeros(length + 1, dtype=int)
+
+    for repetitions, counts in sorted_reps:
+        profile[repetitions[index_rep]] += counts
+
+    with open(profile_file, 'w') as f:
+        f.write('\t'.join(map(str, profile)))
 
 
 def write_histogram_nomenclature(out_file: str, annotations: list[annotation.Annotation],
@@ -310,7 +316,7 @@ def write_histogram_image2d(out_prefix: str, deduplicated: list[annotation.Annot
     fig.update_traces(texttemplate='%{text}', textfont_size=7,
                       hovertemplate='<b>{name1}:\t%{y}<br />{name2}:\t%{x}</b><br />Full / Partial:\t%{text}'.
                       format(name1=str1, y='{y}', name2=str2, x='{x}', text='{text}'))
-    fig.update_layout(width=800, height=700, template='simple_white')
+    fig.update_layout(width=800, height=600, template='simple_white')
     fig.update_yaxes(title_text=str1)
     fig.update_xaxes(title_text=str2)
 
@@ -417,7 +423,8 @@ def write_histogram_image(out_prefix: str, annotations: list[annotation.Annotati
 
 
 def write_all(quality_annotations: list[annotation.Annotation], filt_primer: list[annotation.Annotation],
-              filtered_annotations: list[annotation.Annotation], motif_dir: str, motif_class: Motif, module_number: int, second_module_number: int = None,
+              filtered_annotations: list[annotation.Annotation], motif_dir: str, motif_class: Motif, module_number: int,
+              second_module_number: int = None,
               zip_it: bool = True) -> None:
     """
     Write all output files: quality annotations, one-primer annotations, filtered annotations, statistics, repetitions + images.
@@ -450,16 +457,18 @@ def write_all(quality_annotations: list[annotation.Annotation], filt_primer: lis
                                 motif_class.module_str(module_number), motif_class.module_str(second_module_number))
     else:
         write_histogram_image(f'{motif_dir}/repetitions_{suffix}', quality_annotations, filt_primer, module_number)
+        write_profile(f'{motif_dir}/profile_{suffix}.txt', quality_annotations, index_rep=module_number)
 
-        # write histogram txt files (only for a single repetition)
-        write_histogram(f'{motif_dir}/repetitions_{suffix}.txt', quality_annotations,
-                        profile_file=f'{motif_dir}/profile_{suffix}.txt', index_rep=module_number)
-        write_histogram_nomenclature(f'{motif_dir}/nomenclatures_{suffix}.txt', quality_annotations, index_rep=module_number)
-        write_histogram(f'{motif_dir}/repetitions_grey_{suffix}.txt', filt_primer, index_rep=module_number)
-        write_histogram_nomenclature(f'{motif_dir}/nomenclatures_grey_{suffix}.txt', filt_primer, index_rep=module_number)
+    # write histogram txt files
+    write_histogram(f'{motif_dir}/repetitions_{suffix}.txt', quality_annotations)
+    write_histogram_nomenclature(f'{motif_dir}/nomenclatures_{suffix}.txt', quality_annotations, index_rep=module_number,
+                                 index_rep2=second_module_number)
+    write_histogram(f'{motif_dir}/repetitions_grey_{suffix}.txt', filt_primer)
+    write_histogram_nomenclature(f'{motif_dir}/nomenclatures_grey_{suffix}.txt', filt_primer, index_rep=module_number,
+                                 index_rep2=second_module_number)
 
 
-def read_all_call(allcall_file: str) -> (float, int, int, float, float, float, float, float, float):
+def read_all_call(allcall_file: str) -> tuple[float, int, int, float, float, float, float, float, float] | None:
     """
     Read AllCall output and returns allele predictions and confidences.
     :param allcall_file: str - filename of AllCall output
@@ -533,8 +542,8 @@ def get_read_count(filename: str) -> int:
     return reads
 
 
-def add_to_result_table(result_table: pd.DataFrame, motif_name: str, seq: str, module_number: int, post_filter: PostFilter, reads_blue: int,
-                        reads_grey: int, confidence: tuple[float, int, int, float, float, float, float, float, float]) -> pd.DataFrame:
+def add_to_result_table(result_table: pd.DataFrame, motif_name: str, seq: str, module_number: int | str, post_filter: PostFilter, reads_blue: int,
+                        reads_grey: int, confidence: tuple[float | str, int | str, int | str, float | str, float | str, ...] | None) -> pd.DataFrame:
     """
     Create report table in pandas.
     :param result_table: pandas.DataFrame - table with the results
@@ -562,10 +571,10 @@ def add_to_result_table(result_table: pd.DataFrame, motif_name: str, seq: str, m
         result_table.at[f'{motif_name}_{module_number}', 'Allele 2 prediction'] = confidence[2]
         result_table.at[f'{motif_name}_{module_number}', 'Allele 1 confidence'] = confidence[3]
         result_table.at[f'{motif_name}_{module_number}', 'Allele 2 confidence'] = confidence[4]
-        result_table.at[f'{motif_name}_{module_number}', 'Both Background prob.'] = confidence[5]
-        result_table.at[f'{motif_name}_{module_number}', 'One Background prob.'] = confidence[6]
-        result_table.at[f'{motif_name}_{module_number}', 'Background Expanded prob.'] = confidence[7]
-        result_table.at[f'{motif_name}_{module_number}', 'One Expanded prob.'] = confidence[8]
+        result_table.at[f'{motif_name}_{module_number}', 'Both Background prob.'] = confidence[5] if len(confidence) > 5 else ''
+        result_table.at[f'{motif_name}_{module_number}', 'One Background prob.'] = confidence[6] if len(confidence) > 6 else ''
+        result_table.at[f'{motif_name}_{module_number}', 'Background Expanded prob.'] = confidence[7] if len(confidence) > 7 else ''
+        result_table.at[f'{motif_name}_{module_number}', 'One Expanded prob.'] = confidence[8] if len(confidence) > 8 else ''
 
     return result_table
 
@@ -615,29 +624,77 @@ def write_report(motifs: list[Motif], post_filter: PostFilter, report_dir: str, 
     with open(all_profiles, 'w') as pf, open(all_true, 'w') as tf:
         for motif in motifs:
             seq = motif.modules_str(include_flanks=True)
-            for i, _, _ in motif.get_repeating_modules():
+            repeating_modules = motif.get_repeating_modules()
+            for index, (module_number, _, _) in enumerate(repeating_modules):
+                # read phasing info
+                if index != 0:
+                    # adjust helper variables
+                    last_module = repeating_modules[index - 1][0]
+                    suffix = f'{last_module}_{module_number}'
+
+                    # read repetition file
+                    rep_file = find_file(f'{report_dir}/{motif.dir_name()}/repetitions_{suffix}.json')
+                    align_file = find_file(f'{report_dir}/{motif.dir_name()}/alignment_{suffix}.fasta', include_gzip=True)
+                    filt_align_file = find_file(f'{report_dir}/{motif.dir_name()}/alignment_filtered_{suffix}.fasta', include_gzip=True)
+
+                    # get number of reads:
+                    reads_blue = get_read_count(f'{report_dir}/{motif.dir_name()}/repetitions_{suffix}.txt')
+                    reads_grey = get_read_count(f'{report_dir}/{motif.dir_name()}/repetitions_grey_{suffix}.txt')
+
+                    # read phasing info
+                    phasing, supp_reads = inference.load_phasing(f'{report_dir}/{motif.dir_name()}/phasing_{suffix}.txt')
+                    confidence = (supp_reads[0], phasing[0], phasing[1], supp_reads[1], supp_reads[2])
+
+                    # create table row
+                    row = report.html_templates.generate_row(motif.name, seq, confidence, post_filter, reads_blue, reads_grey,
+                                                             highlight=[last_module, module_number])
+                    rows[motif.name] = rows.get(motif.name, []) + [row]
+                    rows_static.append(row)
+
+                    # add to csv table:
+                    result_table = add_to_result_table(result_table, motif.name, seq, suffix, post_filter, reads_blue, reads_grey, confidence)
+
+                    # add the tables
+                    mc, m, a = report.html_templates.generate_motifb64(motif.name, motif.name, seq, rep_file, None, align_file, filt_align_file,
+                                                                       confidence, post_filter, highlight=[last_module, module_number])
+
+                    if motif.name in mcs:
+                        ms[motif.name].append(m)
+                        alignments[motif.dir_name()][1].append(a[1])
+                    else:
+                        mcs[motif.name] = mc
+                        ms[motif.name] = [m]
+                        alignments[motif.dir_name()] = (a[0], [a[1]])
+
+                    mc, m, a = report.html_templates.generate_motifb64(motif.name, motif.name, seq, rep_file, None, align_file, filt_align_file,
+                                                                       confidence, post_filter, highlight=[last_module, module_number], static=True)
+                    if mc not in mcs_static:
+                        mcs_static.append(mc)
+                    ms_static.append(m)
+
                 # read files
-                rep_file = find_file(f'{report_dir}/{motif.dir_name()}/repetitions_{i}.json')
-                pcol_file = find_file(f'{report_dir}/{motif.dir_name()}/pcolor_{i}.json')
-                align_file = find_file(f'{report_dir}/{motif.dir_name()}/alignment_{i}.fasta', include_gzip=True)
-                filt_align_file = find_file(f'{report_dir}/{motif.dir_name()}/alignment_filtered_{i}.fasta', include_gzip=True)
-                confidence = read_all_call(f'{report_dir}/{motif.dir_name()}/allcall_{i}.txt')
+                rep_file = find_file(f'{report_dir}/{motif.dir_name()}/repetitions_{module_number}.json')
+                pcol_file = find_file(f'{report_dir}/{motif.dir_name()}/pcolor_{module_number}.json')
+                align_file = find_file(f'{report_dir}/{motif.dir_name()}/alignment_{module_number}.fasta', include_gzip=True)
+                filt_align_file = find_file(f'{report_dir}/{motif.dir_name()}/alignment_filtered_{module_number}.fasta', include_gzip=True)
+                confidence = read_all_call(f'{report_dir}/{motif.dir_name()}/allcall_{module_number}.txt')
 
                 # get number of reads:
-                reads_blue = get_read_count(f'{report_dir}/{motif.dir_name()}/repetitions_{i}.txt')
-                reads_grey = get_read_count(f'{report_dir}/{motif.dir_name()}/repetitions_grey_{i}.txt')
+                reads_blue = get_read_count(f'{report_dir}/{motif.dir_name()}/repetitions_{module_number}.txt')
+                reads_grey = get_read_count(f'{report_dir}/{motif.dir_name()}/repetitions_grey_{module_number}.txt')
 
-                # generate rows of table and images
-                row = report.html_templates.generate_row(motif.name, seq, confidence, post_filter, reads_blue, reads_grey, highlight=[i])
+                # generate rows of tables and images
+                row = report.html_templates.generate_row(motif.name, seq, None if confidence is None else confidence[:5], post_filter, reads_blue,
+                                                         reads_grey, highlight=[module_number])
                 rows[motif.name] = rows.get(motif.name, []) + [row]
                 rows_static.append(row)
 
                 # add to csv table:
-                result_table = add_to_result_table(result_table, motif.name, seq, i, post_filter, reads_blue, reads_grey, confidence)
+                result_table = add_to_result_table(result_table, motif.name, seq, module_number, post_filter, reads_blue, reads_grey, confidence)
 
                 # add the tables
                 mc, m, a = report.html_templates.generate_motifb64(motif.name, motif.name, seq, rep_file, pcol_file, align_file,
-                                                                   filt_align_file, confidence, post_filter, highlight=[i])
+                                                                   filt_align_file, confidence, post_filter, highlight=[module_number])
                 if motif.name in mcs:
                     ms[motif.name].append(m)
                     alignments[motif.dir_name()][1].append(a[1])
@@ -647,20 +704,20 @@ def write_report(motifs: list[Motif], post_filter: PostFilter, report_dir: str, 
                     alignments[motif.dir_name()] = (a[0], [a[1]])
 
                 mc, m, a = report.html_templates.generate_motifb64(motif.name, motif.name, seq, rep_file, pcol_file, align_file, filt_align_file,
-                                                                   confidence, post_filter, highlight=[i], static=True)
+                                                                   confidence, post_filter, highlight=[module_number], static=True)
                 if mc not in mcs_static:
                     mcs_static.append(mc)
                 ms_static.append(m)
 
                 # add to profiles
-                with open(f'{report_dir}/{motif.dir_name()}/profile_{i}.txt') as po:
+                with open(f'{report_dir}/{motif.dir_name()}/profile_{module_number}.txt') as po:
                     line = po.readline()
-                    pf.write(f'{motif.name}_{i}\t{line}\n')
+                    pf.write(f'{motif.name}_{module_number}\t{line}\n')
 
                 # add to true
                 if confidence is None:
                     confidence = [0.0, 0, 0]
-                tf.write(f'{motif.name}_{i}\t{confidence[1]}\t{confidence[2]}\n')
+                tf.write(f'{motif.name}_{module_number}\t{confidence[1]}\t{confidence[2]}\n')
 
     # load the report template
     script_dir = os.path.dirname(os.path.abspath(__file__))

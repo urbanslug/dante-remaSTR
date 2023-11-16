@@ -27,3 +27,31 @@ def phase(annotations: list[Annotation], module_number1: int, module_number2: in
     phasing = (f'{rep1[0]}/{rep1[1]}', f'{rep2[0]}/{rep2[1]}')
     supported_reads = (f'{cnt1 + cnt2}/{len(annotations)}', f'{cnt1}/{len(annotations)}', f'{cnt2}/{len(annotations)}')
     return phasing, supported_reads
+
+
+def save_phasing(phasing_file: str, phasing: tuple[str, str], supp_reads: tuple[str, str, str]) -> None:
+    """
+    Save the phasing information to a file.
+    :param phasing_file: str - filename where to save the phasing information
+    :param phasing: tuple - phasing information
+    :param supp_reads: tuple - supporting reads (number of reads that support the
+    """
+    # save into a file:
+    with open(phasing_file, 'w') as f:
+        f.write(f'{phasing[0]}\t{phasing[1]}\n')
+        f.write(f'{supp_reads[0]}\t{supp_reads[1]}\t{supp_reads[2]}\n')
+
+
+def load_phasing(phasing_file: str) -> tuple[tuple[str, str], tuple[str, str, str]]:
+    """
+    Load the phasing information from a file.
+    :param phasing_file: str - filename from where to load the phasing information
+    :return: tuple - predicted symbols and confidences
+    """
+    with open(phasing_file, 'r') as f:
+        phasing = f.readline().strip().split('\t')
+        supp_reads = f.readline().strip().split('\t')
+
+    print(phasing_file, phasing, supp_reads)
+
+    return (phasing[0], phasing[1]), (supp_reads[0], supp_reads[1], supp_reads[2])

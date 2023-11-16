@@ -39,10 +39,10 @@ row_string = """  <tr>
     <td class="tg-s6z2">{motif_name}</td>
     <td class="tg-s6z2">{str_seq}</td>
     <td class="tg-s6z2">{allele1}</td>
-    <td class="tg-s6z2">{allele1_conf:.1%}</td>
+    <td class="tg-s6z2">{allele1_conf}</td>
     <td class="tg-s6z2">{allele2}</td>
-    <td class="tg-s6z2">{allele2_conf:.1%}</td>
-    <td class="tg-s6z2">{motif_conf:.1%}</td>
+    <td class="tg-s6z2">{allele2_conf}</td>
+    <td class="tg-s6z2">{motif_conf}</td>
     <td class="tg-s6z2">{reads_blue}</td>
     <td class="tg-s6z2">{reads_grey}</td>
     <td class="tg-s6z2">{post_bases}</td>
@@ -361,7 +361,19 @@ def highlight_subpart(seq: str, highlight: int | list[int]) -> tuple[str, str]:
     return ''.join(split), ''.join(str_part)
 
 
-def generate_row(motif: str, sequence: str, confidence: tuple[float, int, int, float, float, float, float, float, float],
+def float_to_str(c: float | str, percents: bool = False) -> str:
+    """
+    Convert float confidence to string.
+    :param c: float/str - confidence
+    :param percents: bool - whether to output as a percents or not
+    :return: str - converted to string
+    """
+    if isinstance(c, float):
+        return f'{c * 100: .1f}%' if percents else f'{c: .1f}'
+    return c
+
+
+def generate_row(motif: str, sequence: str, confidence: tuple[float | str, int | str, int | str, float | str, float | str] | None,
                  postfilter: PostFilter, reads_blue: int, reads_grey: int, highlight: list[int] = None):
     """
     Generate rows of a summary table in html report.
@@ -393,13 +405,13 @@ def generate_row(motif: str, sequence: str, confidence: tuple[float, int, int, f
                                            motif_name=motif, motif_seq=smaller_seq, reads_blue=reads_blue,
                                            reads_grey=reads_grey, str_seq=subpart, post_errors=errors)
     else:
-        (c, a1, a2, c1, c2, _, _, _, _) = confidence
+        (c, a1, a2, c1, c2) = confidence
         if a1 == 0 and a2 == 0:
             a1 = 'BG'
             a2 = 'BG'
-        return row_string.format(post_bases=postfilter.min_rep_len, post_reps=postfilter.min_rep_cnt, motif_name=motif,
-                                 motif_seq=smaller_seq, reads_blue=reads_blue, reads_grey=reads_grey, motif_conf=c,
-                                 allele1=a1, allele2=a2, allele1_conf=c1, allele2_conf=c2, str_seq=subpart,
+        return row_string.format(post_bases=postfilter.min_rep_len, post_reps=postfilter.min_rep_cnt, motif_name=motif, motif_seq=smaller_seq,
+                                 reads_blue=reads_blue, reads_grey=reads_grey, motif_conf=float_to_str(c, percents=True), allele1=a1, allele2=a2,
+                                 allele1_conf=float_to_str(c1, percents=True), allele2_conf=float_to_str(c2, percents=True), str_seq=subpart,
                                  post_errors=errors)
 
 
@@ -416,8 +428,8 @@ def get_alignment_name(alignment_file: str, allele: int) -> str:
     return alignment_file[:fasta_index] + '_a' + str(allele) + alignment_file[fasta_index:]
 
 
-def generate_motifb64(motif_name: str, description: str, sequence: str, repetition: str, pcolor: str, alignment: str | None,
-                      filtered_alignment: str | None, confidence: tuple[float, int, int, float, float, float, float, float, float],
+def generate_motifb64(motif_name: str, description: str, sequence: str, repetition: str, pcolor: str | None, alignment: str | None,
+                      filtered_alignment: str | None, confidence: tuple[float | str, int | str, int | str, float | str, float | str, ...] | None,
                       postfilter: PostFilter, highlight: list[int] = None, static: bool = False) -> tuple[str, str, tuple[str, str]]:
     """
     Generate part of a html report for each motif.
@@ -445,11 +457,11 @@ def generate_motifb64(motif_name: str, description: str, sequence: str, repetiti
     if confidence is None:
         result = '-- (---.-%%) -- (---.-%%) total ---.-%%'
     else:
-        (c, a1, a2, c1, c2, _, _, _, _) = confidence
+        (c, a1, a2, c1, c2) = confidence[:5]
         if (a1 == 'B' and a2 == 'B') or (a1 == 0 and a2 == 0):
-            result = f'BG {c * 100: 5.1f}%'
+            result = f'BG {float_to_str(c, percents=True)}'
         else:
-            result = f'{str(a1):2s} ({c1 * 100: 5.1f}%) {str(a2):2s} ({c2 * 100: 5.1f}%) total {c * 100: 5.1f}%'
+            result = f'{str(a1):2s} ({float_to_str(c1, percents=True)}) {str(a2):2s} ({float_to_str(c2, percents=True)}) total {float_to_str(c, percents=True)}'
             if alignment is not None:
                 align_html_a1 = generate_alignment(f'{motif_clean}_{str(a1)}', get_alignment_name(alignment, a1), motif_clean.split('_')[0],
                                                    f'Allele 1 ({str(a1):2s}) alignment visualization')
@@ -490,7 +502,7 @@ def generate_motifb64(motif_name: str, description: str, sequence: str, repetiti
                 (motif, ''))
 
 
-def generate_alignment(motif: str, alignment_file: str, motif_id: str, display_text: str = 'Click to toggle alignment visualization'):
+def generate_alignment(motif: str, alignment_file: str, motif_id: str, display_text: str = 'Click to toggle alignment visualization') -> str:
     """
     Generate HTML code for the fancy alignment.
     :param motif: str - name of the motif

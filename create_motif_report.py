@@ -167,7 +167,7 @@ def generate_row(motif_name: str, a1: str, c1: str, a2: str, c2: str, c: str, re
 def parse_alleles(num: str) -> str | int:
     if num == 'B' or num == 'E':
         return num
-    elif num == '---':
+    elif num == '---' or '/' in num:
         return -1
     else:
         return int(num)
@@ -428,8 +428,8 @@ def create_reports(arg_list: argparse.Namespace):
                                  ticktext=list(range(0, column_max - 1, 5)) + ['E(>%d)' % (column_max - 1)])
 
         # generate motif
-        generate_motif_report(arg_list.output_dir, _key, motifs[_key], plots[_key],
-                              alignments.get(_key, ['no alignments available'] * len(plots[_key])), fig_heatmap, fig_histogram, bgs)
+        generate_motif_report(arg_list.output_dir, _key, motifs[_key], plots.get(_key, []),
+                              alignments.get(_key, ['no alignments available'] * len(plots.get(_key, []))), fig_heatmap, fig_histogram, bgs)
 
 
 if __name__ == '__main__':

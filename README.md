@@ -94,7 +94,7 @@ The `dante_remastr` Python part does not need to be compiled.
 Run both parts as follows:
 
 ```bash
-remastr/target/release/remastr -f <reference_fasta> -n <nomenclature_txt> -b <reads_bam> -o <remastr_output_tsv>
+remastr/target/release/remastr -f <reference_fasta> -m <nomenclature_txt> -b <reads_bam> -o <remastr_output_tsv>
 conda activate dante_remastr
 python dante_remastr.py [optional_arguments] < <remastr_output_tsv> > <dante_output_tsv>
 ```

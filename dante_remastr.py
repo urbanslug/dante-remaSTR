@@ -93,7 +93,7 @@ def process_group(args: argparse.Namespace, df: pd.DataFrame, motif_str: str) ->
 
     # create annotations from rows
     annotations = df.apply(
-        lambda row: annotation.Annotation(row['read_id'], row['mate_order'], row['read'].replace('_', ''), row['reference'], row['modules'],
+        lambda row: annotation.Annotation(row['read_id'], row['mate_order'], row['read'], row['reference'], row['modules'],
                                           row['log_likelihood'], motif_class), axis=1)
 
     # create annotation pairs from annotations
@@ -160,6 +160,10 @@ def process_group(args: argparse.Namespace, df: pd.DataFrame, motif_str: str) ->
 
             # infer phasing
             phasing, supp_reads = inference.phase(both_good_annot, last_num, module_number)
+
+            # write phasing into a file
+            if args.verbose:
+                inference.save_phasing(f'{motif_dir}/phasing_{last_num}_{module_number}.txt', phasing, supp_reads)
 
             # append to the result line TODO remove from here? and add to html exports.
             result_lines.append(
@@ -250,6 +254,19 @@ def generate_groups(input_stream: typing.TextIO, column_name: str = 'motif', chu
         yield current_group_data
 
 
+def report_group(result_lines: list[str], progress: int, num_processed: int) -> None:
+    """
+    Report results of a group.
+    :param result_lines: list(str) - result lines to report
+    :param progress: int - how many lines to report progress
+    :param num_processed: int - how many were processed already
+    """
+    for result_line in result_lines:
+        report.log_str(result_line, stdout_too=sys.stdout)
+    if progress > 0 and num_processed % progress == 0:
+        report.log_str(f'Progress: {num_processed:10d} motifs done. ({datetime.now():%Y-%m-%d %H:%M:%S})')
+
+
 if __name__ == '__main__':
     # save the time of the start
     start_time = datetime.now()
@@ -270,23 +287,16 @@ if __name__ == '__main__':
     processed_motifs = []
     groups_iterator = generate_groups_gzipped(sys.stdin, motif_column_name) if args.input_gzipped else generate_groups(sys.stdin, motif_column_name)
     groups_iterator = itertools.islice(groups_iterator, args.start_motif, args.start_motif + args.max_motifs if args.max_motifs is not None else None)
+    all_inputs = ((args, motif_table, motif_table[motif_column_name].iloc[0]) for motif_table in groups_iterator)
     if args.processes > 1:
-        all_inputs = ((args, motif_table, motif_table[motif_column_name].iloc[0]) for motif_table in groups_iterator)
         with multiprocessing.Pool(args.processes) as pool:
             for motif, rls in pool.imap(process_group_tuple, all_inputs, chunksize=100):
-                for result_line in rls:
-                    report.log_str(result_line, stdout_too=sys.stdout)
                 processed_motifs.append(motif)
-                if args.progress > 0 and len(processed_motifs) % args.progress == 0:
-                    report.log_str(f'Progress: {len(processed_motifs):10d} motifs done. ({datetime.now():%Y-%m-%d %H:%M:%S})')
+                report_group(rls, args.progress, len(processed_motifs))
     else:
-        for motif_table in groups_iterator:
-            motif, rls = process_group(args, motif_table, motif_table[motif_column_name].iloc[0])
-            for result_line in rls:
-                report.log_str(result_line, stdout_too=sys.stdout)
+        for motif, rls in (process_group(*inputs) for inputs in all_inputs):
             processed_motifs.append(motif)
-            if args.progress > 0 and len(processed_motifs) % args.progress == 0:
-                report.log_str(f'Progress: {len(processed_motifs):10d} motifs done. ({datetime.now():%Y-%m-%d %H:%M:%S})')
+            report_group(rls, args.progress, len(processed_motifs))
 
     # generate report and output files for the whole run
     if args.verbose:
