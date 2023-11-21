@@ -79,7 +79,7 @@ def write_alignment(out_file: str, annotations: list[annotation.Annotation], ind
 
     while True:
         # get minimal state:
-        min_comp = (True, '9', -1)
+        min_comp = (True, 'Z', -1)
         total_done = 0
         for i, (annot, ai) in enumerate(zip(annotations, align_inds)):
             if ai >= len(annot.states):
