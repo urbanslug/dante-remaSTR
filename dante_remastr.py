@@ -165,7 +165,7 @@ def process_group(args: argparse.Namespace, df: pd.DataFrame, motif_str: str) ->
             if args.verbose:
                 inference.save_phasing(f'{motif_dir}/phasing_{last_num}_{module_number}.txt', phasing, supp_reads)
 
-            # append to the result line TODO remove from here? and add to html exports.
+            # append to the result line
             result_lines.append(
                 generate_result_line(motif_class, phasing, supp_reads, len(both_good_annot), len(one_good_annot), len(none_good_annot), last_num,
                                      module_number))

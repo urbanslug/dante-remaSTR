@@ -1,3 +1,4 @@
+import os
 from collections import Counter
 
 from src.annotation import Annotation
@@ -42,16 +43,18 @@ def save_phasing(phasing_file: str, phasing: tuple[str, str], supp_reads: tuple[
         f.write(f'{supp_reads[0]}\t{supp_reads[1]}\t{supp_reads[2]}\n')
 
 
-def load_phasing(phasing_file: str) -> tuple[tuple[str, str], tuple[str, str, str]]:
+def load_phasing(phasing_file: str) -> tuple[tuple[str, str], tuple[str, str, str]] | None:
     """
     Load the phasing information from a file.
     :param phasing_file: str - filename from where to load the phasing information
     :return: tuple - predicted symbols and confidences
     """
+    if not os.path.exists(phasing_file):
+        return None
+
+    # load the file
     with open(phasing_file, 'r') as f:
         phasing = f.readline().strip().split('\t')
         supp_reads = f.readline().strip().split('\t')
-
-    print(phasing_file, phasing, supp_reads)
 
     return (phasing[0], phasing[1]), (supp_reads[0], supp_reads[1], supp_reads[2])

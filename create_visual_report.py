@@ -8,6 +8,8 @@ import textwrap
 
 import pandas as pd
 
+from src.inference import load_phasing
+from src.report.html_templates import float_to_str
 from src.report.report import read_all_call
 
 
@@ -159,7 +161,10 @@ def create_report(args: argparse.Namespace) -> None:
                     c, a1, a2, c1, c2 = 0.0, '--', '--', 0.0, 0.0
                     repetitions = repetitions.replace('.png', '.json')
                 elif rep_idx2 is not None:
-                    c, a1, a2, c1, c2 = 0.0, '--', '--', 0.0, 0.0
+                    # read phasing:
+                    phasing_file = f'{os.path.realpath(args.input_dir)}/{sample}/{motif}/phasing_{number}_{rep_idx2}.txt'
+                    phasing_file_contents = load_phasing(phasing_file)
+                    (a1, a2), (c, c1, c2) = (('--', '--'), (0.0, 0.0, 0.0)) if phasing_file_contents is None else phasing_file_contents
                     repetitions = repetitions.replace('.png', '.json')
                 else:
                     assert os.path.exists(allcall), allcall
@@ -171,8 +176,8 @@ def create_report(args: argparse.Namespace) -> None:
                 rep_idx = table_row['Repetition index']
                 sequence_highlight = ','.join(
                     [f'<b>{s}</b>' if i + 1 == rep_idx or i + 1 == rep_idx2 else s for i, s in enumerate(sequence.split(','))])
-                table.at[row_name + ' result', sample] = (f'alleles: {str(a1):2s} ({c1 * 100: 5.1f}%) {str(a2):2s} '
-                                                          f'({c2 * 100: 5.1f}%) total {c * 100: 5.1f}%<br />'
+                table.at[row_name + ' result', sample] = (f'alleles: {str(a1):2s} ({float_to_str(c1, percents=True)}) {str(a2):2s} '
+                                                          f'({float_to_str(c2, percents=True)}) total {float_to_str(c, percents=True)}<br />'
                                                           f'{sequence_highlight}')
     # resort the columns
     table = table[samples]

@@ -150,7 +150,7 @@ class AnnotationPair:
         return None
 
 
-def annotations_to_pairs(annots: list[Annotation]) -> list[AnnotationPair]:  # TODO nevieme ktory read je lavy a pravy tak toto je zle teraz
+def annotations_to_pairs(annots: list[Annotation]) -> list[AnnotationPair]:
     """
     Convert an array of annotations to annotation pairs array.
     :param annots: list(Annotation) - annotations
