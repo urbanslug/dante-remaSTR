@@ -167,7 +167,7 @@ def generate_row(motif_name: str, a1: str, c1: str, a2: str, c2: str, c: str, re
 def parse_alleles(num: str) -> str | int:
     if num == 'B' or num == 'E':
         return num
-    elif num == '---' or '/' in num:
+    elif num == '---' or '/' in num or '|' in num:
         return -1
     else:
         return int(num)
