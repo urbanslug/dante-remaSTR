@@ -27,6 +27,7 @@ def load_arguments() -> argparse.Namespace:
     parser.add_argument('--use-old-defaults', '-d', action='store_true', help='Use old defaults for dante_remastr call')
     parser.add_argument('--visualize', '-v', action='store_true', help='Print all the outputs. Default is to print only the result table to stdout.')
     parser.add_argument('--skip-call', '-s', action='store_true', help='Skip the calling of scripts, just do a dry run.')
+    parser.add_argument('--ignore-errors', '-e', action='store_true', help='Ignore errors and continue, otherwise end after first non 0 return code.')
 
     args = parser.parse_args()
 
@@ -38,6 +39,20 @@ def load_arguments() -> argparse.Namespace:
         args.param_file = f'{args.dante_repo}/src/inference/training_input/miseq_params.params'
 
     return args
+
+
+def run_command(command: str, exit_on_error: bool, skip_call: bool):
+    """
+    Prints and runs the command
+    :param command: str - command to run
+    :param exit_on_error: bool - whether to exit on error
+    :param skip_call: bool - dry run? do not call the command
+    """
+    print(command)
+    if not skip_call:
+        return_code = subprocess.call(command, shell=True)
+        if exit_on_error and return_code != 0:
+            exit(return_code)
 
 
 if __name__ == '__main__':
@@ -70,19 +85,16 @@ if __name__ == '__main__':
                       f'{output_dir}/{sample_name}.tsv > {output_dir}/{sample_name}_res.tsv')
 
         # print and call commands
-        print(remastr_call)
         if not args.skip_call:
             os.makedirs(output_dir, exist_ok=True)
-            subprocess.call(remastr_call, shell=True)
-        print(dante_call)
-        if not args.skip_call:
-            subprocess.call(dante_call, shell=True)
+        run_command(remastr_call, not args.ignore_errors, args.skip_call)
+        run_command(dante_call, not args.ignore_errors, args.skip_call)
 
     # gather results
     output_dir = args.output_dir if args.skip_subpath else f'{args.output_dir}/{nomenclature_name}'
     call_gather = f'python {args.dante_repo}/gather_result_files.py {output_dir}'
     call_motif = f'python {args.dante_repo}/create_motif_report.py {output_dir}'
     call_visual = f'python {args.dante_repo}/create_visual_report.py {output_dir}'
-    print(call_gather)
-    print(call_motif)
-    print(call_visual)
+    run_command(call_gather, not args.ignore_errors, args.skip_call)
+    run_command(call_motif, not args.ignore_errors, args.skip_call)
+    run_command(call_visual, not args.ignore_errors, args.skip_call)
