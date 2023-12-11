@@ -6,7 +6,6 @@ import gzip
 from collections import Counter
 
 import matplotlib
-from matplotlib.colors import ListedColormap
 import plotly.graph_objects as go
 import numpy as np
 import pandas as pd
@@ -259,17 +258,22 @@ def write_histogram_image2d(out_prefix: str, deduplicated: list[annotation.Annot
         if not c1 and c2:
             data_primer[r1:, r2] += 1
 
-    # create colormap:
-    cmap = matplotlib.cm.Reds
-    my_cmap = cmap(np.arange(int(cmap.N * 0.15), int(cmap.N * 0.9)))  # start from orange to deep red (but not the almost-black red)
-    my_cmap[0, -1] = 0.0  # Set alpha on the lowest element only
-    my_cmap = ListedColormap(my_cmap)
+    # create colormaps:
+    cmap_blue = matplotlib.cm.get_cmap('Blues')
+    cmap_blue = cmap_blue(np.arange(int(cmap_blue.N * 0.15), int(cmap_blue.N * 0.8)))  # start from light blue to deep blue
+    cmap_blue[0, -1] = 0.0  # Set alpha on the lowest element only
+    cmap_grey = matplotlib.cm.get_cmap('Greys')
+    cmap_grey = cmap_grey(np.arange(int(cmap_grey.N * 0.15), int(cmap_grey.N * 0.6)))  # start from light grey to deep grey
+    cmap_grey[0, -1] = 0.0  # Set alpha on the lowest element only
+    cmap_grey_plotly = [(i, f'rgba({c[0]}, {c[1]}, {c[2]}, {c[3]})') for i, c in [(0.0, cmap_grey[0]), (0.01, cmap_grey[1]), (1.0, cmap_grey[-1])]]
+    cmap_blue_plotly = [(i, f'rgba({c[0]}, {c[1]}, {c[2]}, {c[3]})') for i, c in [(0.0, cmap_blue[0]), (0.01, cmap_blue[1]), (1.0, cmap_blue[-1])]]
 
     # plot pcolor
     plt.figure(figsize=(12, 8))
-    img2 = plt.pcolor(data_primer[:max_ticks, :max_ticks], cmap='Blues', alpha=0.4, edgecolor=(1.0, 1.0, 1.0, 0.0), lw=0, vmin=np.min(data_primer),
+    img2 = plt.pcolor(data_primer[:max_ticks, :max_ticks], cmap=matplotlib.colors.ListedColormap(cmap_grey), alpha=0.4,
+                      edgecolor=(1.0, 1.0, 1.0, 0.0), lw=0, vmin=np.min(data_primer),
                       vmax=np.max(data_primer) + 0.01)
-    img1 = plt.pcolor(data[:max_ticks, :max_ticks], cmap=my_cmap, vmin=np.min(data), vmax=np.max(data) + 0.01)
+    img1 = plt.pcolor(data[:max_ticks, :max_ticks], cmap=matplotlib.colors.ListedColormap(cmap_blue), vmin=np.min(data), vmax=np.max(data) + 0.01)
     plt.xticks()
     plt.ylabel('STR %d [%s]' % (index_rep + 1, seq.split('-')[-1]))
     plt.xlabel('STR %d [%s]' % (index_rep2 + 1, seq2.split('-')[-1]))
@@ -304,14 +308,11 @@ def write_histogram_image2d(out_prefix: str, deduplicated: list[annotation.Annot
     text = [[parse_labels(data[i, j], data_primer[i, j]) for j in range(data.shape[1])] for i in range(data.shape[0])]
 
     fig = go.Figure()
-    fig.add_trace(go.Heatmap(z=data_primer[:max_ticks, :max_ticks], name='Repetitions heatmap',
-                             showscale=True, colorbar_x=1.3, colorbar_title='Partial reads', colorscale='Blues'))
+    if np.sum(data_primer[:max_ticks, :max_ticks]) > 0:
+        fig.add_trace(go.Heatmap(z=data_primer[:max_ticks, :max_ticks], name='Repetitions heatmap',
+                                 showscale=True, colorbar_x=1.3, colorbar_title='Partial reads', colorscale=cmap_grey_plotly))
     fig.add_trace(go.Heatmap(z=data[:max_ticks, :max_ticks], text=text, name='Repetitions heatmap',
-                             showscale=True, colorbar_title='Full reads',
-                             colorscale=[[0.0, 'rgba(255, 255, 255, 0.0)'],
-                                         [0.01, 'rgba(249, 217, 201, 1.0)'],
-                                         [0.5, 'rgba(229, 103, 76, 1.0)'],
-                                         [1.0, 'rgba(143, 33, 29, 1.0)']]))
+                             showscale=True, colorbar_title='Full reads', colorscale=cmap_blue_plotly))
 
     fig.update_traces(texttemplate='%{text}', textfont_size=7,
                       hovertemplate='<b>{name1}:\t%{y}<br />{name2}:\t%{x}</b><br />Full / Partial:\t%{text}'.
@@ -642,8 +643,11 @@ def write_report(motifs: list[Motif], post_filter: PostFilter, report_dir: str, 
                     reads_grey = get_read_count(f'{report_dir}/{motif.dir_name()}/repetitions_grey_{suffix}.txt')
 
                     # read phasing info
-                    phasing, supp_reads = inference.load_phasing(f'{report_dir}/{motif.dir_name()}/phasing_{suffix}.txt')
-                    confidence = (supp_reads[0], phasing[0], phasing[1], supp_reads[1], supp_reads[2])
+                    phasing_info = inference.load_phasing(f'{report_dir}/{motif.dir_name()}/phasing_{suffix}.txt')
+                    confidence = None
+                    if phasing_info is not None:
+                        phasing, supp_reads = phasing_info
+                        confidence = (supp_reads[0], phasing[0], phasing[1], supp_reads[1], supp_reads[2])
 
                     # create table row
                     row = report.html_templates.generate_row(motif.name, seq, confidence, post_filter, reads_blue, reads_grey,
