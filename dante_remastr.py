@@ -290,7 +290,7 @@ if __name__ == '__main__':
     all_inputs = ((args, motif_table, motif_table[motif_column_name].iloc[0]) for motif_table in groups_iterator)
     if args.processes > 1:
         with multiprocessing.Pool(args.processes) as pool:
-            for motif, rls in pool.imap(process_group_tuple, all_inputs, chunksize=100):
+            for motif, rls in pool.imap(process_group_tuple, all_inputs, chunksize=5):
                 processed_motifs.append(motif)
                 report_group(rls, args.progress, len(processed_motifs))
     else:
