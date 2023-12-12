@@ -543,12 +543,12 @@ def get_read_count(filename: str) -> int:
     return reads
 
 
-def add_to_result_table(result_table: pd.DataFrame, motif_name: str, seq: str, module_number: int | str, post_filter: PostFilter, reads_blue: int,
+def add_to_result_table(result_table: pd.DataFrame, motif: Motif, seq: str, module_number: int | str, post_filter: PostFilter, reads_blue: int,
                         reads_grey: int, confidence: tuple[float | str, int | str, int | str, float | str, float | str, ...] | None) -> pd.DataFrame:
     """
     Create report table in pandas.
     :param result_table: pandas.DataFrame - table with the results
-    :param motif_name: str - motif name
+    :param motif: Motif - motif
     :param seq: str - sequence
     :param module_number: int - module number
     :param post_filter: PostFilter - post-filter options
@@ -558,24 +558,25 @@ def add_to_result_table(result_table: pd.DataFrame, motif_name: str, seq: str, m
     :return: pandas.DataFrame - table with all the results
     """
     # write the results into a table in TSV format
-    result_table.at[f'{motif_name}_{module_number}', 'Motif'] = motif_name
-    result_table.at[f'{motif_name}_{module_number}', 'Sequence'] = seq
-    result_table.at[f'{motif_name}_{module_number}', 'Repetition index'] = module_number
-    result_table.at[f'{motif_name}_{module_number}', 'Postfilter bases'] = post_filter.min_rep_len
-    result_table.at[f'{motif_name}_{module_number}', 'Postfilter repetitions'] = post_filter.min_rep_cnt
-    result_table.at[f'{motif_name}_{module_number}', 'Reads (full)'] = reads_blue
-    result_table.at[f'{motif_name}_{module_number}', 'Reads (partial)'] = reads_grey
+    result_table.at[f'{motif.name}_{module_number}', 'Motif'] = motif.name
+    result_table.at[f'{motif.name}_{module_number}', 'Sequence'] = seq
+    result_table.at[f'{motif.name}_{module_number}', 'Repetition index'] = module_number
+    result_table.at[f'{motif.name}_{module_number}', 'Postfilter bases'] = post_filter.min_rep_len
+    result_table.at[f'{motif.name}_{module_number}', 'Postfilter repetitions'] = post_filter.min_rep_cnt
+    result_table.at[f'{motif.name}_{module_number}', 'Reads (full)'] = reads_blue
+    result_table.at[f'{motif.name}_{module_number}', 'Reads (partial)'] = reads_grey
+    result_table.at[f'{motif.name}_{module_number}', 'Nomenclature'] = motif.motif
 
     if confidence is not None:
-        result_table.at[f'{motif_name}_{module_number}', 'Overall confidence'] = confidence[0]
-        result_table.at[f'{motif_name}_{module_number}', 'Allele 1 prediction'] = confidence[1]
-        result_table.at[f'{motif_name}_{module_number}', 'Allele 2 prediction'] = confidence[2]
-        result_table.at[f'{motif_name}_{module_number}', 'Allele 1 confidence'] = confidence[3]
-        result_table.at[f'{motif_name}_{module_number}', 'Allele 2 confidence'] = confidence[4]
-        result_table.at[f'{motif_name}_{module_number}', 'Both Background prob.'] = confidence[5] if len(confidence) > 5 else ''
-        result_table.at[f'{motif_name}_{module_number}', 'One Background prob.'] = confidence[6] if len(confidence) > 6 else ''
-        result_table.at[f'{motif_name}_{module_number}', 'Background Expanded prob.'] = confidence[7] if len(confidence) > 7 else ''
-        result_table.at[f'{motif_name}_{module_number}', 'One Expanded prob.'] = confidence[8] if len(confidence) > 8 else ''
+        result_table.at[f'{motif.name}_{module_number}', 'Overall confidence'] = confidence[0]
+        result_table.at[f'{motif.name}_{module_number}', 'Allele 1 prediction'] = confidence[1]
+        result_table.at[f'{motif.name}_{module_number}', 'Allele 2 prediction'] = confidence[2]
+        result_table.at[f'{motif.name}_{module_number}', 'Allele 1 confidence'] = confidence[3]
+        result_table.at[f'{motif.name}_{module_number}', 'Allele 2 confidence'] = confidence[4]
+        result_table.at[f'{motif.name}_{module_number}', 'Both Background prob.'] = confidence[5] if len(confidence) > 5 else ''
+        result_table.at[f'{motif.name}_{module_number}', 'One Background prob.'] = confidence[6] if len(confidence) > 6 else ''
+        result_table.at[f'{motif.name}_{module_number}', 'Background Expanded prob.'] = confidence[7] if len(confidence) > 7 else ''
+        result_table.at[f'{motif.name}_{module_number}', 'One Expanded prob.'] = confidence[8] if len(confidence) > 8 else ''
 
     return result_table
 
@@ -605,7 +606,7 @@ def write_report(motifs: list[Motif], post_filter: PostFilter, report_dir: str, 
     :return: None
     """
     # tsv file with table:
-    result_table = pd.DataFrame([], columns=['Motif', 'Sequence', 'Repetition index', 'Postfilter bases', 'Postfilter repetitions',
+    result_table = pd.DataFrame([], columns=['Motif', 'Nomenclature', 'Sequence', 'Repetition index', 'Postfilter bases', 'Postfilter repetitions',
                                              'Overall confidence', 'Allele 1 prediction', 'Allele 1 confidence', 'Allele 2 prediction',
                                              'Allele 2 confidence', 'Reads (full)', 'Reads (partial)', 'Both Background prob.',
                                              'One Background prob.', 'Background Expanded prob.', 'One Expanded prob.'])
@@ -656,7 +657,7 @@ def write_report(motifs: list[Motif], post_filter: PostFilter, report_dir: str, 
                     rows_static.append(row)
 
                     # add to csv table:
-                    result_table = add_to_result_table(result_table, motif.name, seq, suffix, post_filter, reads_blue, reads_grey, confidence)
+                    result_table = add_to_result_table(result_table, motif, seq, suffix, post_filter, reads_blue, reads_grey, confidence)
 
                     # add the tables
                     mc, m, a = report.html_templates.generate_motifb64(motif.name, motif.name, seq, rep_file, None, align_file, filt_align_file,
@@ -694,7 +695,7 @@ def write_report(motifs: list[Motif], post_filter: PostFilter, report_dir: str, 
                 rows_static.append(row)
 
                 # add to csv table:
-                result_table = add_to_result_table(result_table, motif.name, seq, module_number, post_filter, reads_blue, reads_grey, confidence)
+                result_table = add_to_result_table(result_table, motif, seq, module_number, post_filter, reads_blue, reads_grey, confidence)
 
                 # add the tables
                 mc, m, a = report.html_templates.generate_motifb64(motif.name, motif.name, seq, rep_file, pcol_file, align_file,
