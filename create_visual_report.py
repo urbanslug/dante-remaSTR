@@ -1,5 +1,6 @@
 import argparse
 import base64
+import enum
 import glob
 import json
 import os
@@ -98,6 +99,8 @@ def df_to_html_table(df: pd.DataFrame) -> str:
                         border: none;
                         vertical-align: middle;
                         text-align: center;
+                        max-width: 600px;
+                        word-wrap: break-word;
                     }
                     th, td {
                         padding: 8px;
@@ -217,14 +220,38 @@ def to_sample_name(sample_id: int | str, samples: list[str]) -> str:
     assert False, sample_id
 
 
-def check_genotypes(mother_genotypes: tuple[str, str], father_genotypes: tuple[str, str], child_genotypes: tuple[str, str]) -> bool:
+class ChromEnum(enum.Enum):
+    X = 'X'
+    Y = 'Y'
+    NORM = 'NORM'
+
+
+def check_genotypes(mother_genotypes: tuple[str, str], father_genotypes: tuple[str, str], child_genotypes: tuple[str, str], son: bool,
+                    chrom: ChromEnum = ChromEnum.NORM) -> bool:
     """
     Check if genotypes are valid (children could have been produced by this mother and father genotypes)
     :param mother_genotypes: mother's genotypes
     :param father_genotypes: father's genotypes
     :param child_genotypes: child's genotypes
+    :param son: whether this child is son
+    :param chrom: which chromosome is this on (normal or X or Y)
     :return: True if genotypes of child are obtainable from mother and father genotypes (or are background or expanded)
     """
+    # chrX is inherited from mother for sons and the genotype should be homozygous
+    if son and chrom == ChromEnum.X:
+        child_genotype = [item for item in child_genotypes if item not in ('B', 'E')]
+        return len(child_genotype) == 0 or (len(child_genotype) == 1 and child_genotype[0] in mother_genotypes)
+
+    # chrY is inherited from father for sons and the genotype should be homozygous
+    if son and chrom == ChromEnum.Y:
+        child_genotype = [item for item in child_genotypes if item not in ('B', 'E')]
+        return len(child_genotype) == 0 or (len(child_genotype) == 1 and child_genotype[0] in father_genotypes)
+
+    # there should be no calls for chrY motifs in daughters
+    if not son and chrom == ChromEnum.Y:
+        return child_genotypes[0] == 'B' and child_genotypes[1] == 'B'
+
+    # normal diploid case - one from mother and one from father
     return ((child_genotypes[0] in mother_genotypes + ('B', 'E') and child_genotypes[1] in father_genotypes + ('B', 'E')) or
             (child_genotypes[0] in father_genotypes + ('B', 'E') and child_genotypes[1] in mother_genotypes + ('B', 'E')))
 
@@ -244,12 +271,14 @@ def create_report(args: argparse.Namespace) -> None:
 
     # save the genotyping info for later use
     genotypes = defaultdict(dict)
+    nomenclatures = {}
 
     # fill the table
     table = pd.DataFrame()
     for motif in motifs:
         for sample in samples:
             subtable = pd_tables[sample][pd_tables[sample]['Motif'] == motif]
+            nomenclature = subtable['Nomenclature'].iloc[0] if 'Nomenclature' in subtable.columns and len(subtable['Nomenclature']) > 0 else None
             single_reps = len(subtable)
             # look if there are more all-call results:
             for repetitions in sorted(glob.glob(f'{os.path.realpath(args.input_dir)}/{sample}/{motif}/repetitions_*.png')):
@@ -285,6 +314,7 @@ def create_report(args: argparse.Namespace) -> None:
                     c, a1, a2, c1, c2, _, _, _, _ = read_all_call(allcall)
                     genotypes[row_name][sample] = (c, a1, a2, c1, c2)
 
+                nomenclatures[row_name] = nomenclature
                 table.at[row_name, sample] = repetitions
                 table_row = subtable.iloc[number - 1]
                 sequence = table_row['Sequence']
@@ -317,9 +347,15 @@ def create_report(args: argparse.Namespace) -> None:
             # check validity of genotyping info
             mother_genotype = genotypes[row_name][args.mother][1:3] if args.mother in genotypes[row_name] else ('B', 'B')
             father_genotype = genotypes[row_name][args.father][1:3] if args.father in genotypes[row_name] else ('B', 'B')
-            wrong_children = [child for child in args.daughters + args.sons if
-                              not check_genotypes(mother_genotype, father_genotype,
-                                                  genotypes[row_name][child][1:3] if child in genotypes[row_name] else ('B', 'B'))]
+            nomenclature = nomenclatures[row_name]
+            chrom_str = str(nomenclature).split(':')[0].split('.')[0].strip()
+            chrom = ChromEnum.X if chrom_str in ['chrX', 'NC_000023'] else (ChromEnum.Y if chrom_str in ['chrY', 'NC_000024'] else ChromEnum.NORM)
+            wrong_children = ([child for child in args.daughters if not check_genotypes(mother_genotype, father_genotype,
+                                                                                        genotypes[row_name][child][1:3] if child in genotypes[
+                                                                                            row_name] else ('B', 'B'), False, chrom)] +
+                              [child for child in args.sons if not check_genotypes(mother_genotype, father_genotype,
+                                                                                   genotypes[row_name][child][1:3] if child in genotypes[
+                                                                                       row_name] else ('B', 'B'), True, chrom)])
 
             # generate the ancestor graph
             draw_simple_family_tree(args.mother, args.father, args.daughters, args.sons, ancestor_filename, info, wrong_children)
