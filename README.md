@@ -104,6 +104,12 @@ To list the optional arguments for the Python part, run:
 ```bash
 python dante_remastr.py --help
 ```
+
+Or simply use the provided pipeline script (try `python remastr_pipeline.py --help` for argument listing):
+
+```bash
+python remastr_pipeline.py <bams_files> <nomenclature_file> <output_dir>
+```
  
 ### Example of the whole pipeline
 
