@@ -19,7 +19,8 @@ from src.postfilter import PostFilter
 
 MOTIF_PRINT_LEN = 40
 result_line_templ = ('{motif_name}\t{motif_nom}\t{motif_seq}\t{motif_chrom}\t{motif_start}\t{motif_end}\t{allele1}\t{allele2}\t{confidence}\t'
-                     '{confidence1}\t{confidence2}\t{qual_num}\t{primer_num}\t{filt_num}\t{conf_back}\t{conf_back_all}\t{conf_ext}\t{conf_ext_all}')
+                     '{confidence1}\t{confidence2}\t{reads_a1}\t{reads_a2}\t{qual_num}\t{primer_num}\t{filt_num}\t{conf_back}\t{conf_back_all}\t'
+                     '{conf_ext}\t{conf_ext_all}')
 
 
 def shorten_str(string: str, max_length: int = MOTIF_PRINT_LEN, ellipsis_str: str = '...') -> str:
@@ -37,7 +38,8 @@ def shorten_str(string: str, max_length: int = MOTIF_PRINT_LEN, ellipsis_str: st
 
 
 def generate_result_line(motif_class: Motif, predicted: tuple[str, str], confidence: tuple[float | str, ...], qual_num: int,
-                         primer_num: int, filt_num: int, module_number: int, second_module_number: int = None, ):
+                         primer_num: int, filt_num: int, module_number: int, reads_a1: int = None, reads_a2: int = None,
+                         second_module_number: int = None):
     """
     Generate result line from the template string.
     :param motif_class: Motif - motif class
@@ -47,6 +49,8 @@ def generate_result_line(motif_class: Motif, predicted: tuple[str, str], confide
     :param primer_num: int - number of reads with exactly one primer
     :param filt_num: int - number of filtered out reads (no primers, many errors, ...)
     :param module_number: int - module number in motif
+    :param reads_a1: int - number of exact match reads for allele1
+    :param reads_a2: int - number of exact match reads for allele2
     :param second_module_number: int/None - second module number in motif
     :return: str - tsv line with result
     """
@@ -57,8 +61,10 @@ def generate_result_line(motif_class: Motif, predicted: tuple[str, str], confide
         motif_seq = ','.join([motif_class.module_str(i) for i in range(module_number, second_module_number + 1)])
     return result_line_templ.format(motif_name=motif_class.name, motif_nom=motif_class.motif, motif_seq=motif_seq,
                                     motif_chrom=motif_class.chrom, motif_start=start, motif_end=end, allele1=predicted[0], allele2=predicted[1],
-                                    confidence=confidence[0], confidence1=confidence[1], confidence2=confidence[2], qual_num=qual_num,
-                                    primer_num=primer_num, filt_num=filt_num, conf_back=confidence[3] if len(confidence) > 3 else '---',
+                                    confidence=confidence[0], confidence1=confidence[1], confidence2=confidence[2],
+                                    reads_a1=reads_a1 if reads_a1 is not None else '---', reads_a2=reads_a2 if reads_a2 is not None else '---',
+                                    qual_num=qual_num, primer_num=primer_num, filt_num=filt_num,
+                                    conf_back=confidence[3] if len(confidence) > 3 else '---',
                                     conf_back_all=confidence[4] if len(confidence) > 4 else '---',
                                     conf_ext=confidence[5] if len(confidence) > 5 else '---',
                                     conf_ext_all=confidence[6] if len(confidence) > 6 else '---')
@@ -71,9 +77,9 @@ def generate_result_header():
     """
     return result_line_templ.format(motif_name='motif_name', motif_nom='motif_nomenclature', motif_seq='motif_sequence', motif_chrom='chromosome',
                                     motif_start='start', motif_end='end', allele1='allele1', allele2='allele2', confidence='confidence',
-                                    confidence1='conf_allele1', confidence2='conf_allele2', qual_num='quality_reads', primer_num='one_primer_reads',
-                                    filt_num='filtered_reads', conf_back='conf_background', conf_back_all='conf_background_all',
-                                    conf_ext='conf_extended', conf_ext_all='conf_extended_all')
+                                    confidence1='conf_allele1', confidence2='conf_allele2', reads_a1='reads_a1', reads_a2='reads_a2',
+                                    qual_num='quality_reads', primer_num='one_primer_reads', filt_num='filtered_reads', conf_back='conf_background',
+                                    conf_back_all='conf_background_all', conf_ext='conf_extended', conf_ext_all='conf_extended_all')
 
 
 def process_group(args: argparse.Namespace, df: pd.DataFrame, motif_str: str) -> tuple[Motif, list[str]]:
@@ -130,11 +136,15 @@ def process_group(args: argparse.Namespace, df: pd.DataFrame, motif_str: str) ->
                                               minl_primer2=args.min_flank_len, minl_str=args.min_rep_len)
         predicted, confidence = inference_class.genotype(qual_annot, primer_annot, module_number, file_pcolor, file_output, motif_str)
 
+        # get number of precise alignments for each allele
+        a1 = int(predicted[0]) if isinstance(predicted[0], int) else None
+        a2 = int(predicted[1]) if isinstance(predicted[1], int) else None
+        reads_a1 = 0 if a1 is None else len([a for a in qual_annot if a.module_repetitions[module_number] == a1])
+        reads_a2 = 0 if a2 is None else len([a for a in qual_annot if a.module_repetitions[module_number] == a2])
+
         # write the alignments
         if confidence is not None and args.verbose:
             conf, c1, c2, _, _, _, _ = confidence
-            a1 = int(predicted[0]) if isinstance(predicted[0], int) else None
-            a2 = int(predicted[1]) if isinstance(predicted[1], int) else None
             if a1 is not None and a1 > 0:
                 report.write_alignment(f'{motif_dir}/alignment_{module_number}_a{a1}.fasta', qual_annot, module_number, a1, zip_it=args.gzip_outputs)
             if a2 is not None and a2 != a1 and a2 != 0:
@@ -168,11 +178,12 @@ def process_group(args: argparse.Namespace, df: pd.DataFrame, motif_str: str) ->
             # append to the result line
             result_lines.append(
                 generate_result_line(motif_class, phasing, supp_reads, len(both_good_annot), len(one_good_annot), len(none_good_annot), last_num,
-                                     module_number))
+                                     second_module_number=module_number))
 
         # append to the result line
         result_lines.append(
-            generate_result_line(motif_class, predicted, confidence, len(qual_annot), len(primer_annot), len(filt_annot), module_number))
+            generate_result_line(motif_class, predicted, confidence, len(qual_annot), len(primer_annot), len(filt_annot), module_number,
+                                 reads_a1=reads_a1, reads_a2=reads_a2))
 
     # try to get the overall nomenclature:
     if args.verbose:

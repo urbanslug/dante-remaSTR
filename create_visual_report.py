@@ -279,31 +279,30 @@ def create_report(args: argparse.Namespace) -> None:
         for sample in samples:
             subtable = pd_tables[sample][pd_tables[sample]['Motif'] == motif]
             nomenclature = subtable['Nomenclature'].iloc[0] if 'Nomenclature' in subtable.columns and len(subtable['Nomenclature']) > 0 else None
-            single_reps = len(subtable)
+
             # look if there are more all-call results:
-            for repetitions in sorted(glob.glob(f'{os.path.realpath(args.input_dir)}/{sample}/{motif}/repetitions_*.png')):
-                parts = os.path.basename(repetitions[:-4]).split('_')
-                if len(parts) == 2:
-                    number = int(parts[1])
+            for i, row in subtable.iterrows():
+                number = row['Repetition index']
+                repetitions = f'{os.path.realpath(args.input_dir)}/{sample}/{motif}/repetitions_{number}.png'
+                if not os.path.exists(repetitions):
+                    continue
+
+                parts = number.split('_')
+                if len(parts) == 1:
+                    number = int(number)
                     allcall = repetitions.replace('repetitions', 'allcall')[:-4] + '.txt'
                     rep_idx2 = None
                     row_name = f'{motif} REP_{number}'
-                elif len(parts) == 3:
-                    number = int(parts[1])
+                elif len(parts) == 2:
+                    number = int(parts[0])
                     allcall = None
-                    rep_idx2 = int(parts[2])
-                    row_name = f'{motif} PHASING {number}-{number + 1}'
+                    rep_idx2 = int(parts[1])
+                    row_name = f'{motif} PHASING {number}-{rep_idx2}'
                 else:
                     assert False
 
                 # phasing instead of genotyping
-                if number > single_reps:
-                    number -= single_reps
-                    row_name = f'{motif} PHASING {number}-{number + 1}'
-                    rep_idx2 = subtable.iloc[number]['Repetition index']
-                    c, a1, a2, c1, c2 = 0.0, '--', '--', 0.0, 0.0
-                    repetitions = repetitions.replace('.png', '.json')
-                elif rep_idx2 is not None:
+                if rep_idx2 is not None:
                     # read phasing:
                     phasing_file = f'{os.path.realpath(args.input_dir)}/{sample}/{motif}/phasing_{number}_{rep_idx2}.txt'
                     phasing_file_contents = load_phasing(phasing_file)
@@ -316,9 +315,8 @@ def create_report(args: argparse.Namespace) -> None:
 
                 nomenclatures[row_name] = nomenclature
                 table.at[row_name, sample] = repetitions
-                table_row = subtable.iloc[number - 1]
-                sequence = table_row['Sequence']
-                rep_idx = table_row['Repetition index']
+                sequence = row['Sequence']
+                rep_idx = row['Repetition index']
                 sequence_highlight = ','.join(
                     [f'<b>{s}</b>' if i + 1 == rep_idx or i + 1 == rep_idx2 else s for i, s in enumerate(sequence.split(','))])
                 table.at[row_name + ' result', sample] = (f'alleles: {str(a1):2s} ({float_to_str(c1, percents=True)}) {str(a2):2s} '
@@ -366,7 +364,7 @@ def create_report(args: argparse.Namespace) -> None:
     # resort the columns
     table = table[(['Ancestry'] + samples) if 'Ancestry' in list(table.columns) else samples]
 
-    # go through them and create a html file
+    # create a html file
     with open(f'{args.output_dir}/{args.output_name}', 'w') as f:
         f.write(df_to_html_table(table))
 

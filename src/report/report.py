@@ -469,7 +469,7 @@ def write_all(quality_annotations: list[annotation.Annotation], filt_primer: lis
                                  index_rep2=second_module_number)
 
 
-def read_all_call(allcall_file: str) -> tuple[float, int, int, float, float, float, float, float, float] | None:
+def read_all_call(allcall_file: str) -> tuple[float, int | str, int | str, float, float, float, float, float, float] | None:
     """
     Read AllCall output and returns allele predictions and confidences.
     :param allcall_file: str - filename of AllCall output
@@ -531,10 +531,10 @@ def get_read_count(filename: str) -> int:
     :param filename: str - filename
     :return: int - number of reads
     """
-    # get reads count:
     if not os.path.exists(filename):
         return 0
 
+    # get reads count:
     reads = 0
     with open(filename) as f:
         for line in f:
@@ -543,8 +543,30 @@ def get_read_count(filename: str) -> int:
     return reads
 
 
+def get_alelle_count(filename: str, allele: int | str | None, module_number: int) -> int:
+    """
+    Get repetition number of a certain allele from repetitions filename.
+    :param filename: str - filename
+    :param allele: int - repetitions of the allele
+    :param module_number: int - module number
+    :return: int - number of repetitions of the allele
+    """
+    if not os.path.exists(filename) or not isinstance(allele, int):
+        return 0
+
+    reads = 0
+    with open(filename) as f:
+        for line in f:
+            count, *modules = line.split()
+            if int(modules[module_number]) == allele:
+                reads += int(count)
+
+    return reads
+
+
 def add_to_result_table(result_table: pd.DataFrame, motif: Motif, seq: str, module_number: int | str, post_filter: PostFilter, reads_blue: int,
-                        reads_grey: int, confidence: tuple[float | str, int | str, int | str, float | str, float | str, ...] | None) -> pd.DataFrame:
+                        reads_grey: int, confidence: tuple[float | str, int | str, int | str, float | str, float | str, ...] | None,
+                        reads_a1: int = None, reads_a2: int = None) -> pd.DataFrame:
     """
     Create report table in pandas.
     :param result_table: pandas.DataFrame - table with the results
@@ -555,6 +577,8 @@ def add_to_result_table(result_table: pd.DataFrame, motif: Motif, seq: str, modu
     :param reads_blue: int - number of full reads
     :param reads_grey: int - number of partial reads
     :param confidence: tuple - allele predictions and their confidence
+    :param reads_a1: int - number of reads with exact match for allele1
+    :param reads_a2: int - number of reads with exact match for allele2
     :return: pandas.DataFrame - table with all the results
     """
     # write the results into a table in TSV format
@@ -566,6 +590,10 @@ def add_to_result_table(result_table: pd.DataFrame, motif: Motif, seq: str, modu
     result_table.at[f'{motif.name}_{module_number}', 'Reads (full)'] = reads_blue
     result_table.at[f'{motif.name}_{module_number}', 'Reads (partial)'] = reads_grey
     result_table.at[f'{motif.name}_{module_number}', 'Nomenclature'] = motif.motif
+    if reads_a1 is not None:
+        result_table.at[f'{motif.name}_{module_number}', 'Allele 1 reads'] = reads_a1
+    if reads_a2 is not None:
+        result_table.at[f'{motif.name}_{module_number}', 'Allele 2 reads'] = reads_a2
 
     if confidence is not None:
         result_table.at[f'{motif.name}_{module_number}', 'Overall confidence'] = confidence[0]
@@ -607,9 +635,9 @@ def write_report(motifs: list[Motif], post_filter: PostFilter, report_dir: str, 
     """
     # tsv file with table:
     result_table = pd.DataFrame([], columns=['Motif', 'Nomenclature', 'Sequence', 'Repetition index', 'Postfilter bases', 'Postfilter repetitions',
-                                             'Overall confidence', 'Allele 1 prediction', 'Allele 1 confidence', 'Allele 2 prediction',
-                                             'Allele 2 confidence', 'Reads (full)', 'Reads (partial)', 'Both Background prob.',
-                                             'One Background prob.', 'Background Expanded prob.', 'One Expanded prob.'])
+                                             'Overall confidence', 'Allele 1 prediction', 'Allele 1 confidence', 'Allele 1 reads',
+                                             'Allele 2 prediction', 'Allele 2 confidence', 'Allele 2 reads', 'Reads (full)', 'Reads (partial)',
+                                             'Both Background prob.', 'One Background prob.', 'Background Expanded prob.', 'One Expanded prob.'])
 
     # merge all_profiles:
     all_profiles = f'{report_dir}/all_profiles.txt'
@@ -656,7 +684,7 @@ def write_report(motifs: list[Motif], post_filter: PostFilter, report_dir: str, 
                     rows[motif.name] = rows.get(motif.name, []) + [row]
                     rows_static.append(row)
 
-                    # add to csv table:
+                    # add to tsv table:
                     result_table = add_to_result_table(result_table, motif, seq, suffix, post_filter, reads_blue, reads_grey, confidence)
 
                     # add the tables
@@ -687,6 +715,10 @@ def write_report(motifs: list[Motif], post_filter: PostFilter, report_dir: str, 
                 # get number of reads:
                 reads_blue = get_read_count(f'{report_dir}/{motif.dir_name()}/repetitions_{module_number}.txt')
                 reads_grey = get_read_count(f'{report_dir}/{motif.dir_name()}/repetitions_grey_{module_number}.txt')
+                reads_a1 = get_alelle_count(f'{report_dir}/{motif.dir_name()}/repetitions_{module_number}.txt',
+                                            None if confidence is None else confidence[1], module_number)
+                reads_a2 = get_alelle_count(f'{report_dir}/{motif.dir_name()}/repetitions_{module_number}.txt',
+                                            None if confidence is None else confidence[2], module_number)
 
                 # generate rows of tables and images
                 row = report.html_templates.generate_row(motif.name, seq, None if confidence is None else confidence[:5], post_filter, reads_blue,
@@ -694,8 +726,9 @@ def write_report(motifs: list[Motif], post_filter: PostFilter, report_dir: str, 
                 rows[motif.name] = rows.get(motif.name, []) + [row]
                 rows_static.append(row)
 
-                # add to csv table:
-                result_table = add_to_result_table(result_table, motif, seq, module_number, post_filter, reads_blue, reads_grey, confidence)
+                # add to tsv table:
+                result_table = add_to_result_table(result_table, motif, seq, module_number, post_filter, reads_blue, reads_grey, confidence, reads_a1,
+                                                   reads_a2)
 
                 # add the tables
                 mc, m, a = report.html_templates.generate_motifb64(motif.name, motif.name, seq, rep_file, pcol_file, align_file,
