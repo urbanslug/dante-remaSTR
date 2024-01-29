@@ -32,17 +32,17 @@ class PostFilter:
         primers = ann.primers(module_number)
         has_primers = primers == 2 if both_primers else primers >= 1
 
-        errors = (ann.has_less_errors(self.max_rel_error, relative=True) and
-                  ann.has_less_errors(self.max_abs_error, relative=False))
+        has_less_errors = (ann.has_less_errors(self.max_rel_error, relative=True) and
+                           ann.has_less_errors(self.max_abs_error, relative=False))
 
         left_flank = sum(ann.module_bases[module_number + 1:]) >= self.min_flank_len
         right_flank = sum(ann.module_bases[:module_number]) >= self.min_flank_len
-        flanks = left_flank and right_flank if both_primers else left_flank or right_flank
+        has_flanks = left_flank and right_flank if both_primers else left_flank or right_flank
 
-        repetitions = (ann.module_bases[module_number] >= self.min_rep_len and
-                       ann.module_repetitions[module_number] >= self.min_rep_cnt)
+        has_repetitions = (ann.module_bases[module_number] >= self.min_rep_len and
+                           ann.module_repetitions[module_number] >= self.min_rep_cnt)
 
-        return is_right and has_primers and errors and flanks and repetitions
+        return is_right and has_primers and has_less_errors and has_flanks and has_repetitions
 
     def get_filtered_list(self, annotations: list[Annotation], module_number: list[int],
                           both_primers: list[bool] = None) -> tuple[list[Annotation], list[Annotation]]:

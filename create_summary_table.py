@@ -22,10 +22,10 @@ def load_arguments() -> argparse.Namespace:
     parser.add_argument('--sample-regex', '-r', help='Regex for sample name. Default=\'.*\' (all samples)', default='.*')
     parser.add_argument('--table-name', type=str, help='Name of input table. Default=\'table.tsv\'', default='table.tsv')
 
-    args = parser.parse_args()
-    args.output_name = os.path.abspath(args.output_name)
+    parsed_args = parser.parse_args()
+    parsed_args.output_name = os.path.abspath(parsed_args.output_name)
 
-    return args
+    return parsed_args
 
 
 def create_report(args: argparse.Namespace) -> None:
@@ -53,7 +53,7 @@ def create_report(args: argparse.Namespace) -> None:
 
     # extract sample number if present
     global_table['Sample ID'] = global_table['Sample'].apply(
-        lambda sample: int(re.search(r'\d+', sample).group(0)) if re.search(r'\d+', sample) else None)
+        lambda sample_name: int(re.search(r'\d+', sample_name).group(0)) if re.search(r'\d+', sample_name) else None)
 
     # resort the columns
     first_columns = ['Sequencing Technology', 'Sample', 'Sample ID']
@@ -66,5 +66,5 @@ def create_report(args: argparse.Namespace) -> None:
 
 
 if __name__ == '__main__':
-    args = load_arguments()
-    create_report(args)
+    arguments = load_arguments()
+    create_report(arguments)

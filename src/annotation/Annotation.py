@@ -106,7 +106,7 @@ class Annotation:
         repetitions = self.__get_bases_per_module()
 
         # Divide by the module length where applicable
-        return tuple([1 if reps == 1 and cnt > 0 else int(cnt // len(seq)) for (seq, reps), cnt in zip(self.motif.get_modules(), repetitions)])
+        return tuple([1 if reps == 1 and cnt > 0 else round(cnt / len(seq)) for (seq, reps), cnt in zip(self.motif.get_modules(), repetitions)])
 
     def __get_module_sequences(self) -> tuple[str]:
         """
@@ -213,12 +213,13 @@ class Annotation:
         :param relative: bool - if the errors are relative to the annotated length
         :return: bool - True if the number of errors is less than allowed
         """
-        if max_errors is None:
+        errors = self.n_deletions + self.n_insertions + self.n_mismatches
+
+        if max_errors is None or errors == 0:
             return True
 
-        errors = self.n_deletions + self.n_insertions + self.n_mismatches
         if relative:
-            return errors / float(len(self.read_seq)) <= max_errors
+            return errors / float(sum(self.module_bases)) <= max_errors
         else:
             return errors <= max_errors
 
