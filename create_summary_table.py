@@ -20,10 +20,12 @@ def load_arguments() -> argparse.Namespace:
     parser.add_argument('input_path', help='Glob path to directory with input tables.')
     parser.add_argument('output_name', help='Path to output file. Default=\'global_table.tsv\'', nargs='?', default='global_table.tsv')
     parser.add_argument('--sample-regex', '-r', help='Regex for sample name. Default=\'.*\' (all samples)', default='.*')
-    parser.add_argument('--table-name', type=str, help='Name of input table. Default=\'table.tsv\'', default='table.tsv')
+    parser.add_argument('--table-name', help='Name of input table. Default=\'table.tsv\'', default='table.tsv')
+    parser.add_argument('--phasing-table', help='Path to phasing table. Default=\'global_table_phasing.tsv\'', default='global_table_phasing.tsv')
 
     parsed_args = parser.parse_args()
     parsed_args.output_name = os.path.abspath(parsed_args.output_name)
+    parsed_args.phasing_table = os.path.abspath(parsed_args.phasing_table)
 
     return parsed_args
 
@@ -60,9 +62,19 @@ def create_report(args: argparse.Namespace) -> None:
     global_table = global_table[first_columns + [column for column in list(global_table.columns) if column not in first_columns]]
     global_table.sort_values(['Motif', 'Sample ID', 'Sample', 'Sequencing Technology'], ascending=True, inplace=True)
 
+    # split the table
+    global_wo_phasing = global_table[~global_table['Repetition index'].str.contains('_', na=True)]
+    global_w_phasing = global_table[global_table['Repetition index'].str.contains('_', na=True)]
+
+    # append motifs that have phasing
+    motifs_phasing = pd.unique(global_w_phasing['Motif'])
+    global_w_phasing = global_table[global_table['Motif'].isin(motifs_phasing)]
+
     # write the global table to output
-    print(f'Writing table with {global_table.shape} rows/columns to {args.output_name}')
-    global_table.to_csv(args.output_name, sep='\t')
+    print(f'Writing table with {global_wo_phasing.shape} rows/columns to {args.output_name}')
+    global_wo_phasing.to_csv(args.output_name, sep='\t', index=False)
+    print(f'Writing table with {global_w_phasing.shape} rows/columns to {args.phasing_table}')
+    global_w_phasing.to_csv(args.phasing_table, sep='\t', index=False)
 
 
 if __name__ == '__main__':
