@@ -312,7 +312,7 @@ if __name__ == '__main__':
     # generate report and output files for the whole run
     if args.verbose:
         post_filter = PostFilter(args)
-        report.write_report(processed_motifs, post_filter, args.output_dir, args.nomenclatures)
+        report.write_report(sorted(processed_motifs), post_filter, args.output_dir, args.nomenclatures)
 
     # print the time of the end
     end_time = datetime.now()

@@ -239,12 +239,12 @@ def check_genotypes(mother_genotypes: tuple[str, str], father_genotypes: tuple[s
     """
     # chrX is inherited from mother for sons and the genotype should be homozygous
     if son and chrom == ChromEnum.X:
-        child_genotype = [item for item in child_genotypes if item not in ('B', 'E')]
+        child_genotype = list(set([item for item in child_genotypes if item not in ('B', 'E')]))
         return len(child_genotype) == 0 or (len(child_genotype) == 1 and child_genotype[0] in mother_genotypes)
 
     # chrY is inherited from father for sons and the genotype should be homozygous
     if son and chrom == ChromEnum.Y:
-        child_genotype = [item for item in child_genotypes if item not in ('B', 'E')]
+        child_genotype = list(set([item for item in child_genotypes if item not in ('B', 'E')]))
         return len(child_genotype) == 0 or (len(child_genotype) == 1 and child_genotype[0] in father_genotypes)
 
     # there should be no calls for chrY motifs in daughters

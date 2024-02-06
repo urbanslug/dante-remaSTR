@@ -22,7 +22,7 @@ class Motif:
         """
         # remove whitespace
         self.motif = motif.strip().replace(' ', '')
-        self.name = name if name is not None else self.motif
+        self.name = (name if name is not None else self.motif).replace(':', '-').replace('.', '_').replace('/', '_')
 
         # extract prefix, first number, second number
         self.chrom, start, end, remainder = re.match(r'([^:]+):g\.(\d+)_(\d+)(.*)', self.motif).groups()
@@ -50,6 +50,20 @@ class Motif:
         """
         return f'{self.chrom}:g.{self.start}_{self.end}' + self.modules_str(include_flanks=False)
 
+    def __lt__(self, obj):
+        """
+        Less than for sorting purposes.
+        :return: bool - if this object comes before the other
+        """
+        return self.name < obj.name
+
+    def __eq__(self, obj):
+        """
+        Equal to for sorting purposes.
+        :return: bool - if this object is equal to the other
+        """
+        return self.name == obj.name
+
     def modules_str(self, include_flanks: bool = False) -> str:
         """
         Returns string representation of modules
@@ -74,7 +88,7 @@ class Motif:
         Returns possible directory name of the motif.
         :return: str - directory name for the motif
         """
-        return self.name.replace(':', '-').replace('.', '_')
+        return self.name
 
     def get_modules(self) -> List[Tuple[str, int]]:
         """
