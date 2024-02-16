@@ -76,7 +76,7 @@ summary_plot_string = """
 motif_plot_string = """<h3>{sample_name}</h3>
 <table>
     <tr>
-        <td colspan="2">
+        <td colspan="1">
             <div class="hist pic100" id="hist-{sample_id}"></div>
             <script>
                 Plotly.react('hist-{sample_id}', {hist_plot}, {{}});

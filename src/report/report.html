@@ -4,19 +4,19 @@
     <meta charset="UTF-8">
     <title>Dante report</title>
 
-    <script type="text/javascript" src="msa.min.gz.js"></script>
-    <script type="text/javascript" src="https://gen-clc.cusp.uniba.sk/dante/msa.min.gz.js"></script>
+    <script src="msa.min.gz.js"></script>
+    <script src="https://gen-clc.cusp.uniba.sk/dante/msa.min.gz.js"></script>
 
-    <script type="text/javascript" src="plotly-2.14.0.min.js"></script>
-    <script type="text/javascript" src="https://cdn.plot.ly/plotly-2.14.0.min.js"></script>
+    <script src="plotly-2.14.0.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.14.0.min.js"></script>
 
     <link rel="stylesheet" type="text/css" href="https://www.w3schools.com/w3css/4/w3.css">
 
-    <script type="text/javascript" src="jquery-3.6.1.min.js"></script>
-    <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.1/jquery.min.js"></script>
+    <script src="jquery-3.6.1.min.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.1/jquery.min.js"></script>
 
-    <script type="text/javascript" src="datatables.min.js"></script>
-    <script type="text/javascript" src="https://cdn.datatables.net/1.12.1/js/jquery.dataTables.js"></script>
+    <script src="datatables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.12.1/js/jquery.dataTables.js"></script>
     <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.12.1/css/jquery.dataTables.css">
 
     <style>
@@ -24,16 +24,17 @@
             padding: 20px;
             font-family: Verdana, sans-serif;
             font-size: 15px;
-            line-height: 1.5
+            line-height: 1.5;
         }
 
         .tg, .mtg {
             border-collapse: collapse;
             border-spacing: 0;
+            width: 100%;
         }
 
         .tg td, .mtg td {
-            padding: 10px 5px;
+            padding: 7px 3px;
             border-style: solid;
             border-width: 1px;
             overflow: hidden;
@@ -42,7 +43,7 @@
 
         .tg th, .mtg th {
             font-weight: normal;
-            padding: 10px 5px;
+            padding: 7px 3px;
             border-style: solid;
             border-width: 1px;
             overflow: hidden;
@@ -50,7 +51,11 @@
         }
 
         .tg .tg-s6z2, .mtg .mtg-s6z2 {
-            text-align: center
+            text-align: center;
+        }
+
+        .tg-smaller {
+            font-size: 13px;
         }
 
         .nomtg {
@@ -69,12 +74,11 @@
         }
 
         /* Style the buttons that are used to open the tab content */
-        .tab button {
+        .tab a {
             display: block;
             background-color: inherit;
             color: black;
             padding: 10px 8px 10px 8px;
-            width: 100%;
             border: none;
             outline: none;
             text-align: left;
@@ -83,12 +87,12 @@
         }
 
         /* Change background color of buttons on hover */
-        .tab button:hover {
+        .tab a:hover {
             background-color: #ddd;
         }
 
         /* Create an active/current "tab button" class */
-        .tab button.active {
+        .tab a.active {
             background-color: #ccc;
         }
 

@@ -2,6 +2,8 @@ import gzip
 import numpy as np
 import re
 
+import pandas as pd
+
 from src.postfilter import PostFilter
 
 contents = """
@@ -27,9 +29,7 @@ make_datatable_string = """
 
 content_string = """ <tr>
     <td class="mtg-s6z2">
-        <button class="tablinks" onclick="openTab(event, '{motif_name}'); $('.{motif_name}').trigger('content-change');">
-            <a href="#{motif_name}">{motif}</a>
-        </button>
+        <a href="#{motif_name}" class="tablinks" onclick="openTab(event, '{motif_name}'); $('.{motif_name}').trigger('content-change');">{motif}</a>
     </td>
 </tr>"""
 
@@ -37,37 +37,23 @@ content_string_empty = ""
 
 row_string = """  <tr>
     <td class="tg-s6z2">{motif_name}</td>
-    <td class="tg-s6z2">{str_seq}</td>
+    <td class="tg-s6z2">{motif_nomenclature}</td>
     <td class="tg-s6z2">{allele1}</td>
-    <td class="tg-s6z2">{allele1_conf}</td>
+    <td class="tg-s6z2">{conf_allele1}</td>
+    <td class="tg-s6z2">{reads_a1}</td>
+    <td class="tg-s6z2">{indels_p100_a1}</td>
+    <td class="tg-s6z2">{mismatches_p100_a1}</td>
     <td class="tg-s6z2">{allele2}</td>
-    <td class="tg-s6z2">{allele2_conf}</td>
-    <td class="tg-s6z2">{motif_conf}</td>
-    <td class="tg-s6z2">{reads_blue}</td>
-    <td class="tg-s6z2">{reads_grey}</td>
-    <td class="tg-s6z2">{post_bases}</td>
-    <td class="tg-s6z2">{post_reps}</td>
-    <td class="tg-s6z2">{post_errors}</td>
-    <td class="tg-s6z2">{motif_seq}</td>
+    <td class="tg-s6z2">{conf_allele2}</td>
+    <td class="tg-s6z2">{reads_a2}</td>
+    <td class="tg-s6z2">{indels_p100_a2}</td>
+    <td class="tg-s6z2">{mismatches_p100_a2}</td>
+    <td class="tg-s6z2">{confidence}</td>
+    <td class="tg-s6z2">{indels_p100}</td>
+    <td class="tg-s6z2">{mismatches_p100}</td>
+    <td class="tg-s6z2">{quality_reads}</td>
+    <td class="tg-s6z2">{one_primer_reads}</td>
   </tr>"""
-
-row_string_empty_old = """  <tr>
-    <td class="tg-s6z2">{motif_name}</td>
-    <td class="tg-s6z2">{str_seq}</td>
-    <td class="tg-s6z2">---</td>
-    <td class="tg-s6z2">---</td>
-    <td class="tg-s6z2">---</td>
-    <td class="tg-s6z2">---</td>
-    <td class="tg-s6z2">---</td>
-    <td class="tg-s6z2">{reads_blue}</td>
-    <td class="tg-s6z2">{reads_grey}</td>
-    <td class="tg-s6z2">{post_bases}</td>
-    <td class="tg-s6z2">{post_reps}</td>
-    <td class="tg-s6z2">{post_errors}</td>
-    <td class="tg-s6z2">{motif_seq}</td>
-  </tr>"""
-
-row_string_empty = ""
 
 nomenclature_string = """
 <tr>
@@ -89,25 +75,33 @@ motif_summary = """
 <table class="tg" id="tg-{motif_id}">
     <thead>
         <tr>
-            <th class="tg-s6z2" rowspan="2">Motif</th>
-            <th class="tg-s6z2" rowspan="2">STR<br>sequence</th>
-            <th class="tg-s6z2" colspan="2">Allele 1</th>
-            <th class="tg-s6z2" colspan="2">Allele 2</th>
-            <th class="tg-s6z2" rowspan="2">Overall<br>confidence</th>
+            <th class="tg-s6z2" rowspan="3">Motif</th>
+            <th class="tg-s6z2" rowspan="3">Sequence</th>
+            <th class="tg-s6z2" colspan="5">Allele 1</th>
+            <th class="tg-s6z2" colspan="5">Allele 2</th>
+            <th class="tg-s6z2" rowspan="3">Overall<br>confidence</th>
+            <th class="tg-s6z2" colspan="2">Errors (100 reads)</th>
             <th class="tg-s6z2" colspan="2">Reads</th>
-            <th class="tg-s6z2" colspan="3">Postfilter</th>
-            <th class="tg-s6z2" rowspan="2">Sequence</th>
         </tr>
         <tr>
-            <td class="tg-s6z2">prediction</td>
-            <td class="tg-s6z2">confidence</td>
-            <td class="tg-s6z2">prediction</td>
-            <td class="tg-s6z2">confidence</td>
-            <td class="tg-s6z2">full</td>
-            <td class="tg-s6z2">partial</td>
-            <td class="tg-s6z2">bases</td>
-            <td class="tg-s6z2">modules</td>
-            <td class="tg-s6z2">max. errors</td>
+            <td class="tg-smaller" rowspan="2">prediction</td>
+            <td class="tg-smaller" rowspan="2">confidence</td>
+            <td class="tg-smaller" rowspan="2">reads</td>
+            <td class="tg-smaller" colspan="2">Errors (100 reads)</td>
+            <td class="tg-smaller" rowspan="2">prediction</td>
+            <td class="tg-smaller" rowspan="2">confidence</td>
+            <td class="tg-smaller" rowspan="2">reads</td>
+            <td class="tg-smaller" colspan="2">Errors (100 reads)</td>
+            <td class="tg-smaller" rowspan="2">indel</td>
+            <td class="tg-smaller" rowspan="2">mismatch</td>
+            <td class="tg-smaller" rowspan="2">full</td>
+            <td class="tg-smaller" rowspan="2">partial</td>
+        </tr>
+        <tr>
+            <td class="tg-smaller">indel</td>
+            <td class="tg-smaller">mismatch</td>
+            <td class="tg-smaller">indel</td>
+            <td class="tg-smaller">mismatch</td>
         </tr>
     </thead>
     <tbody>
@@ -131,25 +125,34 @@ motif_summary_static = """
 <table class="tg">
     <thead>
         <tr>
-            <th class="tg-s6z2" rowspan="2">Motif</th>
-            <th class="tg-s6z2" rowspan="2">STR<br>sequence</th>
-            <th class="tg-s6z2" colspan="2">Allele 1</th>
-            <th class="tg-s6z2" colspan="2">Allele 2</th>
-            <th class="tg-s6z2" rowspan="2">Overall<br>confidence</th>
+            <th class="tg-s6z2" rowspan="3">Motif</th>
+            <th class="tg-s6z2" rowspan="3">Sequence</th>
+            <th class="tg-s6z2" colspan="5">Allele 1</th>
+            <th class="tg-s6z2" colspan="5">Allele 2</th>
+            <th class="tg-s6z2" rowspan="3">Overall<br>confidence</th>
+            <th class="tg-s6z2" colspan="2">Errors (100 reads)</th>
             <th class="tg-s6z2" colspan="2">Reads</th>
-            <th class="tg-s6z2" colspan="3">Postfilter</th>
-            <th class="tg-s6z2" rowspan="2">Sequence</th>
+
         </tr>
         <tr>
-            <td class="tg-s6z2">prediction</td>
-            <td class="tg-s6z2">confidence</td>
-            <td class="tg-s6z2">prediction</td>
-            <td class="tg-s6z2">confidence</td>
-            <td class="tg-s6z2">full</td>
-            <td class="tg-s6z2">partial</td>
-            <td class="tg-s6z2">bases</td>
-            <td class="tg-s6z2">modules</td>
-            <td class="tg-s6z2">max. errors</td>
+            <td class="tg-s6z2" rowspan="2">prediction</td>
+            <td class="tg-s6z2" rowspan="2">confidence</td>
+            <td class="tg-s6z2" rowspan="2">reads</td>
+            <td class="tg-s6z2" colspan="2">Errors (100 reads)</td>
+            <td class="tg-s6z2" rowspan="2">prediction</td>
+            <td class="tg-s6z2" rowspan="2">confidence</td>
+            <td class="tg-s6z2" rowspan="2">reads</td>
+            <td class="tg-s6z2" colspan="2">Errors (100 reads)</td>
+            <td class="tg-s6z2" rowspan="2">indel</td>
+            <td class="tg-s6z2" rowspan="2">mismatch</td>
+            <td class="tg-s6z2" rowspan="2">full</td>
+            <td class="tg-s6z2" rowspan="2">partial</td>
+        </tr>
+        <tr>
+            <td class="tg-s6z2">indel</td>
+            <td class="tg-s6z2">mismatch</td>
+            <td class="tg-s6z2">indel</td>
+            <td class="tg-s6z2">mismatch</td>
         </tr>
     </thead>
     <tbody>
@@ -159,32 +162,14 @@ motif_summary_static = """
 </div>
 """
 
-motif_string = """<h2 id="{motif_name}">{motif}</h2>
-<p>{sequence}</p>
-postfilter: bases {post_bases} , repetitions {post_reps} , max. errors {errors}<br>
-alleles: {result}<br>
-<table class="plots">
-    <tr>
-        <td colspan="2">
-            <img class="hist pic100" alt="{motif_name} repetitions" src="{motif_reps}" />
-        </td>
-        <td colspan="1">
-            <img class="pcol pic100" alt="{motif_name} pcolor" src="{motif_pcolor}" />
-        </td>
-    </tr>
-</table>
-<p><a href="{alignment}">Link to alignments</a></p>
-<p><a href="#content">Back to content</a></p>
-"""
-
 motif_stringb64 = """
-<h2 id="{motif_name}">{motif}</h2>
+<h2 id="data-{motif_name}">{motif}</h2>
 <p>{sequence}</p>
 postfilter: bases {post_bases} , repetitions {post_reps} , max. errors {errors}<br>
 alleles: {result}<br>
 <table class="plots">
     <tr>
-        <td colspan="2">
+        <td colspan="1">
             <div class="hist pic100 {motif_id}" id="hist-{motif_name}"></div>
             <script>
                 {{
@@ -227,7 +212,7 @@ alleles: {result}<br>
 """
 
 motif_stringb64_reponly = """
-<h2 id="{motif_name}">{motif}</h2>
+<h2 id="data-{motif_name}">{motif}</h2>
 <p>{sequence}</p>
 postfilter: bases {post_bases} , repetitions {post_reps} , max. errors {errors}<br>
 alleles: {result}<br>
@@ -264,7 +249,7 @@ postfilter: bases {post_bases} , repetitions {post_reps} , max. errors {errors}<
 alleles: {result}<br>
 <table class="plots">
     <tr>
-        <td colspan="2">
+        <td colspan="1">
             <div class="hist pic100 {motif_id}" id="hist-{motif_name}"></div>
             <script>
                 Plotly.react('hist-{motif_name}', {motif_reps}, {{}});
@@ -373,19 +358,15 @@ def float_to_str(c: float | str, percents: bool = False) -> str:
     return c
 
 
-def generate_row(motif: str, sequence: str, confidence: tuple[float | str, int | str, int | str, float | str, float | str] | None,
-                 postfilter: PostFilter, reads_blue: int, reads_grey: int, highlight: list[int] = None):
+def generate_row(sequence: str, result: pd.Series, postfilter: PostFilter) -> str:
     """
     Generate rows of a summary table in html report.
-    :param motif: str - motif name
     :param sequence: str - motif sequence
-    :param confidence: tuple - motif confidences and allele predictions
+    :param result: pd.Series - result row to convert to table
     :param postfilter: PostFilter - postfilter dict from config
-    :param reads_blue: int - number of full reads
-    :param reads_grey: int - number of partial reads
-    :param highlight: list(int)/None - which part of seq to highlight
     :return: str - html string with rows of the summary table
     """
+    highlight = list(map(int, str(result['repetition_index']).split('_')))
     sequence, subpart = highlight_subpart(sequence, highlight)
 
     # shorten sequence:
@@ -396,23 +377,17 @@ def generate_row(motif: str, sequence: str, confidence: tuple[float | str, int |
 
     # errors:
     errors = f'{postfilter.max_rel_error * 100:.0f}%'
-    if postfilter.max_abs_error is None:
+    if postfilter.max_abs_error is not None:
         errors += f' (abs={postfilter.max_abs_error})'
 
     # fill templates:
-    if confidence is None:
-        return row_string_empty_old.format(post_bases=postfilter.min_rep_len, post_reps=postfilter.min_rep_cnt,
-                                           motif_name=motif, motif_seq=smaller_seq, reads_blue=reads_blue,
-                                           reads_grey=reads_grey, str_seq=subpart, post_errors=errors)
-    else:
-        (c, a1, a2, c1, c2) = confidence
-        if a1 == 0 and a2 == 0:
-            a1 = 'BG'
-            a2 = 'BG'
-        return row_string.format(post_bases=postfilter.min_rep_len, post_reps=postfilter.min_rep_cnt, motif_name=motif, motif_seq=smaller_seq,
-                                 reads_blue=reads_blue, reads_grey=reads_grey, motif_conf=float_to_str(c, percents=True), allele1=a1, allele2=a2,
-                                 allele1_conf=float_to_str(c1, percents=True), allele2_conf=float_to_str(c2, percents=True), str_seq=subpart,
-                                 post_errors=errors)
+    updated_result = {'conf_allele1': float_to_str(result['conf_allele1'], percents=True),
+                      'conf_allele2': float_to_str(result['conf_allele2'], percents=True),
+                      'confidence': float_to_str(result['confidence'], percents=True), 'motif_nomenclature': smaller_seq,
+                      'indels_p100': float_to_str(result['indels_p100']), 'mismatches_p100': float_to_str(result['mismatches_p100']),
+                      'indels_p100_a1': float_to_str(result['indels_p100_a1']), 'mismatches_p100_a1': float_to_str(result['mismatches_p100_a1']),
+                      'indels_p100_a2': float_to_str(result['indels_p100_a2']), 'mismatches_p100_a2': float_to_str(result['mismatches_p100_a2'])}
+    return row_string.format(**{**result, **updated_result})
 
 
 def get_alignment_name(alignment_file: str, allele: int) -> str:
@@ -428,50 +403,48 @@ def get_alignment_name(alignment_file: str, allele: int) -> str:
     return alignment_file[:fasta_index] + '_a' + str(allele) + alignment_file[fasta_index:]
 
 
-def generate_motifb64(motif_name: str, description: str, sequence: str, repetition: str, pcolor: str | None, alignment: str | None,
-                      filtered_alignment: str | None, confidence: tuple[float | str, int | str, int | str, float | str, float | str, ...] | None,
-                      postfilter: PostFilter, highlight: list[int] = None, static: bool = False) -> tuple[str, str, tuple[str, str]]:
+def generate_motifb64(sequence: str, result: pd.Series, repetition: str, pcolor: str | None, alignment: str | None, filtered_alignment: str | None,
+                      postfilter: PostFilter, static: bool = False) -> tuple[str, str, tuple[str, str]]:
     """
     Generate part of a html report for each motif.
-    :param motif_name: str - motif name
-    :param description: str - motif description
     :param sequence: str - motif sequence
     :param repetition: str - filename of repetitions figures
     :param pcolor: str - filename of pcolor figures
     :param alignment: str/None - filename of alignment file
     :param filtered_alignment: str/None - filename of filtered alignment file
-    :param confidence: tuple - motif confidences and allele predictions
     :param postfilter: PostFilter - postfilter arguments
-    :param highlight: list(int)/None - which part of seq to highlight
     :param static: bool - generate static code?
     :return: (str, str) - content and main part of the html report for motifs
     """
     # prepare and generate alignments
+    highlight = list(map(int, str(result['repetition_index']).split('_')))
     sequence, subpart = highlight_subpart(sequence, highlight)
-    motif = f'{motif_name} &ndash; {description}'
-    motif_name = f'{motif_name.replace("/", "_")}_{",".join(map(str, highlight)) if highlight is not None else "mot"}'
+    motif = result['motif_name']
+    motif_name = f'{result["motif_name"].replace("/", "_")}_{",".join(map(str, highlight)) if highlight is not None else "mot"}'
     motif_clean = re.sub(r'[^\w_]', '', motif_name)
     motif_clean_id = motif_clean.rsplit('_', 1)[0] if highlight == [1] else motif_clean  # trick to solve static html
     align_html_a1 = ''
     align_html_a2 = ''
-    if confidence is None:
-        result = '-- (---.-%%) -- (---.-%%) total ---.-%%'
+
+    a1 = result['allele1']
+    a2 = result['allele2']
+    c = result['confidence']
+    c1 = result['conf_allele1']
+    c2 = result['conf_allele2']
+    if (a1 == 'B' and a2 == 'B') or (a1 == 0 and a2 == 0):
+        result = f'BG {float_to_str(c, percents=True)}'
     else:
-        (c, a1, a2, c1, c2) = confidence[:5]
-        if (a1 == 'B' and a2 == 'B') or (a1 == 0 and a2 == 0):
-            result = f'BG {float_to_str(c, percents=True)}'
-        else:
-            result = f'{str(a1):2s} ({float_to_str(c1, percents=True)}) {str(a2):2s} ({float_to_str(c2, percents=True)}) total {float_to_str(c, percents=True)}'
-            if alignment is not None:
-                align_html_a1 = generate_alignment(f'{motif_clean}_{str(a1)}', get_alignment_name(alignment, a1), motif_clean.split('_')[0],
-                                                   f'Allele 1 ({str(a1):2s}) alignment visualization')
-                if a1 != a2:
-                    align_html_a2 = generate_alignment(f'{motif_clean}_{str(a2)}', get_alignment_name(alignment, a2), motif_clean.split('_')[0],
-                                                       f'Allele 2 ({str(a2):2s}) alignment visualization')
+        result = f'{str(a1):2s} ({float_to_str(c1, percents=True)}) {str(a2):2s} ({float_to_str(c2, percents=True)}) total {float_to_str(c, percents=True)}'
+        if alignment is not None:
+            align_html_a1 = generate_alignment(f'{motif_clean}_{str(a1)}', get_alignment_name(alignment, a1), motif_clean.split('_')[0],
+                                               f'Allele 1 ({str(a1):2s}) alignment visualization')
+            if a1 != a2:
+                align_html_a2 = generate_alignment(f'{motif_clean}_{str(a2)}', get_alignment_name(alignment, a2), motif_clean.split('_')[0],
+                                                   f'Allele 2 ({str(a2):2s}) alignment visualization')
 
     # errors:
     errors = f'{postfilter.max_rel_error * 100:.0f}%'
-    if postfilter.max_abs_error is None:
+    if postfilter.max_abs_error is not None:
         errors += f' (abs={postfilter.max_abs_error})'
 
     # return content and picture parts:
@@ -493,7 +466,7 @@ def generate_motifb64(motif_name: str, description: str, sequence: str, repetiti
         return (content_string.format(motif_name=motif_clean.rsplit('_', 1)[0], motif=motif),
                 motif_template.format(post_bases=postfilter.min_rep_len, post_reps=postfilter.min_rep_cnt, motif_name=motif_clean_id,
                                       motif_id=motif_clean.rsplit('_', 1)[0], motif=motif, motif_reps=reps, result=result, motif_pcolor=pcol,
-                                      alignment=f'{motif_name}/alignments.html', sequence=sequence, errors=errors),
+                                      alignment=f'{motif_name.replace(" ", "%20")}/alignments.html', sequence=sequence, errors=errors),
                 (motif, alignment_string.format(sequence=sequence, alignment=align_html + align_html_a1 + align_html_a2 + filt_align_html)))
     else:
         return (content_string_empty.format(motif_name=motif_clean.rsplit('_', 1)[0], motif=motif),

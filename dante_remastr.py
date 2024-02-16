@@ -17,13 +17,8 @@ import src.annotation as annotation
 from src.annotation.Motif import Motif
 from src.postfilter import PostFilter
 
-MOTIF_PRINT_LEN = 40
-result_line_templ = ('{motif_name}\t{motif_nom}\t{motif_seq}\t{motif_chrom}\t{motif_start}\t{motif_end}\t{allele1}\t{allele2}\t{confidence}\t'
-                     '{confidence1}\t{confidence2}\t{reads_a1}\t{reads_a2}\t{qual_num}\t{primer_num}\t{filt_num}\t{conf_back}\t{conf_back_all}\t'
-                     '{conf_ext}\t{conf_ext_all}')
 
-
-def shorten_str(string: str, max_length: int = MOTIF_PRINT_LEN, ellipsis_str: str = '...') -> str:
+def shorten_str(string: str, max_length: int = 40, ellipsis_str: str = '...') -> str:
     """
     Shorten string to max_length and include ellipsis.
     :param string: str - string to shorten
@@ -37,9 +32,27 @@ def shorten_str(string: str, max_length: int = MOTIF_PRINT_LEN, ellipsis_str: st
         return string
 
 
-def generate_result_line(motif_class: Motif, predicted: tuple[str, str], confidence: tuple[float | str, ...], qual_num: int,
-                         primer_num: int, filt_num: int, module_number: int, reads_a1: int = None, reads_a2: int = None,
-                         second_module_number: int = None):
+def errors_per_hundred(errors: list[tuple[int, int, int]], relative: bool = False) -> tuple[float | str, float | str]:
+    """
+    Count number of errors per hundred reads. Relative per length or absolute number.
+    :param errors: list[tuple[int, int, int]] - indels, mismatches and length of module
+    :param relative: bool - relative?
+    :return: tuple[float, float] - number of indels, mismatches per hundred reads
+    """
+    # if we have no reads, return '---'
+    if len(errors) == 0:
+        return '---', '---'
+
+    if relative:
+        mean_length = np.mean([length for _, _, length in errors])
+        return (np.mean([indels / float(length) for indels, _, length in errors]) * 100.0 * mean_length,
+                np.mean([mismatches / float(length) for _, mismatches, length in errors]) * 100.0 * mean_length)
+    else:
+        return np.mean([indels for indels, _, _ in errors]) * 100.0, np.mean([mismatches for _, mismatches, _ in errors]) * 100.0
+
+
+def generate_result_line(motif_class: Motif, predicted: tuple[str, str], confidence: tuple[float | str, ...], qual_num: int, primer_num: int,
+                         filt_num: int, module_number: int, qual_annot: list[annotation.Annotation] = None, second_module_number: int = None) -> dict:
     """
     Generate result line from the template string.
     :param motif_class: Motif - motif class
@@ -49,46 +62,59 @@ def generate_result_line(motif_class: Motif, predicted: tuple[str, str], confide
     :param primer_num: int - number of reads with exactly one primer
     :param filt_num: int - number of filtered out reads (no primers, many errors, ...)
     :param module_number: int - module number in motif
-    :param reads_a1: int - number of exact match reads for allele1
-    :param reads_a2: int - number of exact match reads for allele2
+    :param qual_annot: list[Annotation] - list of quality annotations for error and number of reads
     :param second_module_number: int/None - second module number in motif
-    :return: str - tsv line with result
+    :return: dict - result dictionary
     """
+    # setup motif info
     start, end = motif_class.get_location_subpart(module_number)
     motif_seq = motif_class.module_str(module_number)
     if second_module_number is not None:
         _, end = motif_class.get_location_subpart(second_module_number)
         motif_seq = ','.join([motif_class.module_str(i) for i in range(module_number, second_module_number + 1)])
-    return result_line_templ.format(motif_name=motif_class.name, motif_nom=motif_class.motif, motif_seq=motif_seq,
-                                    motif_chrom=motif_class.chrom, motif_start=start, motif_end=end, allele1=predicted[0], allele2=predicted[1],
-                                    confidence=confidence[0], confidence1=confidence[1], confidence2=confidence[2],
-                                    reads_a1=reads_a1 if reads_a1 is not None else '---', reads_a2=reads_a2 if reads_a2 is not None else '---',
-                                    qual_num=qual_num, primer_num=primer_num, filt_num=filt_num,
-                                    conf_back=confidence[3] if len(confidence) > 3 else '---',
-                                    conf_back_all=confidence[4] if len(confidence) > 4 else '---',
-                                    conf_ext=confidence[5] if len(confidence) > 5 else '---',
-                                    conf_ext_all=confidence[6] if len(confidence) > 6 else '---')
+
+    # get info about errors and number of reads from quality annotations if provided
+    reads_a1 = reads_a2 = '---'
+    indels_rel = mismatches_rel = '---'
+    indels_rel1 = mismatches_rel1 = '---'
+    indels_rel2 = mismatches_rel2 = '---'
+    if qual_annot is not None:
+        # get info about number of reads
+        a1 = int(predicted[0]) if isinstance(predicted[0], int) else None
+        a2 = int(predicted[1]) if isinstance(predicted[1], int) else None
+        reads_a1 = 0 if a1 is None else len([a for a in qual_annot if a.module_repetitions[module_number] == a1])
+        reads_a2 = 0 if a2 is None else len([a for a in qual_annot if a.module_repetitions[module_number] == a2])
+
+        # get info about errors
+        errors = [a.get_module_errors(module_number) for a in qual_annot]
+        errors_a1 = [a.get_module_errors(module_number) for a in qual_annot if a.module_repetitions[module_number] == a1]
+        errors_a2 = [a.get_module_errors(module_number) for a in qual_annot if a.module_repetitions[module_number] == a2]
+        assert len([l for i, m, l in errors if l == 0]) == 0
+
+        # extract error metrics
+        indels_rel, mismatches_rel = errors_per_hundred(errors, relative=True)
+        indels_rel1, mismatches_rel1 = errors_per_hundred(errors_a1, relative=True)
+        indels_rel2, mismatches_rel2 = errors_per_hundred(errors_a2, relative=True)
+
+    # return dictionary
+    return {'motif_name': motif_class.name, 'motif_nomenclature': motif_class.motif, 'motif_sequence': motif_seq, 'chromosome': motif_class.chrom,
+            'start': start, 'end': end, 'allele1': predicted[0], 'allele2': predicted[1], 'confidence': confidence[0], 'conf_allele1': confidence[1],
+            'conf_allele2': confidence[2], 'reads_a1': reads_a1, 'reads_a2': reads_a2, 'indels_p100': indels_rel, 'mismatches_p100': mismatches_rel,
+            'indels_p100_a1': indels_rel1, 'indels_p100_a2': indels_rel2, 'mismatches_p100_a1': mismatches_rel1,
+            'mismatches_p100_a2': mismatches_rel2, 'quality_reads': qual_num, 'one_primer_reads': primer_num, 'filtered_reads': filt_num,
+            'conf_background': confidence[3] if len(confidence) > 3 else '---',
+            'conf_background_all': confidence[4] if len(confidence) > 4 else '---',
+            'conf_extended': confidence[5] if len(confidence) > 5 else '---', 'conf_extended_all': confidence[6] if len(confidence) > 6 else '---',
+            'repetition_index': module_number if second_module_number is None else f'{module_number}_{second_module_number}'}
 
 
-def generate_result_header():
-    """
-    Generate result header from the template string.
-    :return: str - tsv header
-    """
-    return result_line_templ.format(motif_name='motif_name', motif_nom='motif_nomenclature', motif_seq='motif_sequence', motif_chrom='chromosome',
-                                    motif_start='start', motif_end='end', allele1='allele1', allele2='allele2', confidence='confidence',
-                                    confidence1='conf_allele1', confidence2='conf_allele2', reads_a1='reads_a1', reads_a2='reads_a2',
-                                    qual_num='quality_reads', primer_num='one_primer_reads', filt_num='filtered_reads', conf_back='conf_background',
-                                    conf_back_all='conf_background_all', conf_ext='conf_extended', conf_ext_all='conf_extended_all')
-
-
-def process_group(args: argparse.Namespace, df: pd.DataFrame, motif_str: str) -> tuple[Motif, list[str]]:
+def process_group(args: argparse.Namespace, df: pd.DataFrame, motif_str: str) -> tuple[Motif, list[dict]]:
     """
     Process the group as pandas Dataframe. Return motif name if processed correctly or None otherwise.
     :param args: argparse.Namespace - namespace of program arguments
     :param df: pd.DataFrame - pandas DataFrame with information about annotated reads for a single motif to process
     :param motif_str: str - motif nomenclature
-    :return: Motif, list(str) - motif, result lines
+    :return: Motif, list(dict) - motif, result lines
     """
     # build motif class
     name = None if 'name' not in df.columns or df.iloc[0]['name'] in ['None', ''] else df.iloc[0]['name']
@@ -139,8 +165,6 @@ def process_group(args: argparse.Namespace, df: pd.DataFrame, motif_str: str) ->
         # get number of precise alignments for each allele
         a1 = int(predicted[0]) if isinstance(predicted[0], int) else None
         a2 = int(predicted[1]) if isinstance(predicted[1], int) else None
-        reads_a1 = 0 if a1 is None else len([a for a in qual_annot if a.module_repetitions[module_number] == a1])
-        reads_a2 = 0 if a2 is None else len([a for a in qual_annot if a.module_repetitions[module_number] == a2])
 
         # write the alignments
         if confidence is not None and args.verbose:
@@ -183,7 +207,7 @@ def process_group(args: argparse.Namespace, df: pd.DataFrame, motif_str: str) ->
         # append to the result line
         result_lines.append(
             generate_result_line(motif_class, predicted, confidence, len(qual_annot), len(primer_annot), len(filt_annot), module_number,
-                                 reads_a1=reads_a1, reads_a2=reads_a2))
+                                 qual_annot=qual_annot))
 
     # try to get the overall nomenclature:
     if args.verbose:
@@ -197,7 +221,7 @@ def process_group(args: argparse.Namespace, df: pd.DataFrame, motif_str: str) ->
     return motif_class, result_lines
 
 
-def process_group_tuple(x: tuple[argparse.Namespace, pd.DataFrame, str]) -> tuple[Motif, list[str]]:
+def process_group_tuple(x: tuple[argparse.Namespace, pd.DataFrame, str]) -> tuple[Motif, list[dict]]:
     """
     Wrapper for process_group() to use in parallelization (pool.imap).
     """
@@ -265,17 +289,25 @@ def generate_groups(input_stream: typing.TextIO, column_name: str = 'motif', chu
         yield current_group_data
 
 
-def report_group(result_lines: list[str], progress: int, num_processed: int) -> None:
+def consume_iterator(results_iterator: typing.Generator[tuple[Motif, list[dict]], any, None]) -> tuple[list[Motif], pd.DataFrame]:
     """
-    Report results of a group.
-    :param result_lines: list(str) - result lines to report
-    :param progress: int - how many lines to report progress
-    :param num_processed: int - how many were processed already
+    Consume iterator of results.
+    :param results_iterator: generator - motif and its corresponding results of modules
+    :return: list[Motif], pd.DataFrame - motifs in list and table of all results
     """
-    for result_line in result_lines:
-        report.log_str(result_line, stdout_too=sys.stdout)
-    if progress > 0 and num_processed % progress == 0:
-        report.log_str(f'Progress: {num_processed:10d} motifs done. ({datetime.now():%Y-%m-%d %H:%M:%S})')
+    # consume iterator of results
+    all_result_lines = []
+    all_motifs = []
+    for i, (motif, rls) in enumerate(results_iterator):
+        # append data
+        all_motifs.append(motif)
+        all_result_lines.extend(rls)
+
+        # report progress
+        if args.progress > 0 and (i + 1) % args.progress == 0:
+            report.log_str(f'Progress: {i + 1:10d} motifs done. ({datetime.now():%Y-%m-%d %H:%M:%S})')
+
+    return all_motifs, pd.DataFrame.from_dict(all_result_lines).sort_values(by=['motif_name'], kind='stable')
 
 
 if __name__ == '__main__':
@@ -290,29 +322,27 @@ if __name__ == '__main__':
     report.log_str('DANTE_remaSTR = "Da Amazing NucleoTide Exposer" (remastered)')
     report.log_str(f'DANTE_remaSTR Starting : {start_time:%Y-%m-%d %H:%M:%S}')
 
-    # log header, data will be logged in the process_group
-    report.log_str(generate_result_header(), stdout_too=sys.stdout)
-
     # process the input
     motif_column_name = 'motif'
-    processed_motifs = []
     groups_iterator = generate_groups_gzipped(sys.stdin, motif_column_name) if args.input_gzipped else generate_groups(sys.stdin, motif_column_name)
     groups_iterator = itertools.islice(groups_iterator, args.start_motif, args.start_motif + args.max_motifs if args.max_motifs is not None else None)
     all_inputs = ((args, motif_table, motif_table[motif_column_name].iloc[0]) for motif_table in groups_iterator)
+
+    # create iterator of results
     if args.processes > 1:
         with multiprocessing.Pool(args.processes) as pool:
-            for motif, rls in pool.imap(process_group_tuple, all_inputs, chunksize=5):
-                processed_motifs.append(motif)
-                report_group(rls, args.progress, len(processed_motifs))
+            all_motifs, rl_df = consume_iterator(pool.imap(process_group_tuple, all_inputs, chunksize=5))
     else:
-        for motif, rls in (process_group(*inputs) for inputs in all_inputs):
-            processed_motifs.append(motif)
-            report_group(rls, args.progress, len(processed_motifs))
+        all_motifs, rl_df = consume_iterator((process_group(*inputs) for inputs in all_inputs))
+
+    #  write the dataframe to stdout
+    report.log_str(f'Writing results to stdout. ({datetime.now():%Y-%m-%d %H:%M:%S})')
+    rl_df.to_csv(sys.stdout, sep='\t')
 
     # generate report and output files for the whole run
     if args.verbose:
         post_filter = PostFilter(args)
-        report.write_report(sorted(processed_motifs), post_filter, args.output_dir, args.nomenclatures)
+        report.write_report(sorted(all_motifs), rl_df, post_filter, args.output_dir, args.nomenclatures)
 
     # print the time of the end
     end_time = datetime.now()

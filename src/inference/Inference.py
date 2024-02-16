@@ -503,7 +503,8 @@ class Inference:
             lh_view[-bg_size:, self.min_rep + bg_size:self.min_rep + 2 * bg_size] = lh_view[0, self.max_rep]
 
             # plotting
-            plt.title('%s likelihood of each option for %s' % ('Loglog' if lognorm else 'Log', name))
+            title = '%s likelihood of options (%s)' % ('Loglog' if lognorm else 'Log', name)
+            plt.title(title)
             plt.xlabel('2nd allele')
             plt.ylabel('1st allele')
             start_ticks = 5
@@ -556,7 +557,7 @@ class Inference:
             fig.update_layout(width=500, height=450,
                               template='simple_white',
                               yaxis_fixedrange=True, xaxis_fixedrange=True,
-                              title='%s likelihood of each option for %s' % ('Loglog' if lognorm else 'Log', name))
+                              title=title)
             fig.update_yaxes(title_text='1st allele', tickmode='array',
                              tickvals=np.concatenate([np.array(range(start_ticks - self.min_rep + 1, max_str - self.min_rep + 1, step_ticks)), [0]]),
                              ticktext=list(range(start_ticks, max_str, step_ticks)) + ['B'])
