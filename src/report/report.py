@@ -315,7 +315,7 @@ def write_histogram_image2d(out_prefix: str, deduplicated: list[annotation.Annot
                              showscale=True, colorbar_title='Full reads', colorscale=cmap_blue_plotly))
 
     fig.update_traces(texttemplate='%{text}', textfont_size=7,
-                      hovertemplate='<b>{name1}:\t%{y}<br />{name2}:\t%{x}</b><br />Full / Partial:\t%{text}'.
+                      hovertemplate='<b>{name1}:\t%{y}<br>{name2}:\t%{x}</b><br>Full / Partial:\t%{text}'.
                       format(name1=str1, y='{y}', name2=str2, x='{x}', text='{text}'))
     fig.update_layout(width=800, height=600, template='simple_white')
     fig.update_yaxes(title_text=str1)

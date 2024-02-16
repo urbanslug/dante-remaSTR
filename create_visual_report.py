@@ -128,7 +128,7 @@ def df_to_html_table(df: pd.DataFrame) -> str:
             if str(cell).endswith(('.png', '.jpg', '.jpeg')) and os.path.exists(cell):
                 img_data = encode_image(cell)
                 style = 'style="width: 250px;"' if sample == 'Ancestry' else ''
-                cell = f'<img src="data:image/png;base64,{img_data}" {style}>'
+                cell = f'<img src="data:image/png;base64,{img_data}" {style} alt={str(sample)}>'
             elif str(cell).endswith('.json') and os.path.exists(cell):
                 cell = create_plotly(cell, motif_name=(str(index) + str(sample)).replace(' ', ''))
             elif pd.isna(cell):
@@ -320,7 +320,7 @@ def create_report(args: argparse.Namespace) -> None:
                 sequence_highlight = ','.join(
                     [f'<b>{s}</b>' if i + 1 == rep_idx or i + 1 == rep_idx2 else s for i, s in enumerate(sequence.split(','))])
                 table.at[row_name + ' result', sample] = (f'alleles: {str(a1):2s} ({float_to_str(c1, percents=True)}) {str(a2):2s} '
-                                                          f'({float_to_str(c2, percents=True)}) total {float_to_str(c, percents=True)}<br />'
+                                                          f'({float_to_str(c2, percents=True)}) total {float_to_str(c, percents=True)}<br>'
                                                           f'{sequence_highlight}')
 
     # add ancestor graphs if needed

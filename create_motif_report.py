@@ -220,6 +220,7 @@ def create_reports(arg_list: argparse.Namespace):
     paths = []
 
     # find all report files in root directory
+    # TODO refactor - extract info from tables: paths = glob.glob(f'{arg_list.input_dir}/**/table.tsv')
     for root, dirs, files in os.walk(arg_list.input_dir):
         for file in files:
             if file == 'report.html':
@@ -248,21 +249,21 @@ def create_reports(arg_list: argparse.Namespace):
 
         # find table of class 'tg' and extract all rows from it
         for cl in file.find_all(class_='tg'):
-            for row in cl.find_all('tr'):
+            for i, row in enumerate(cl.find_all('tr')):
                 columns = row.find_all('td')
 
                 # remove head rows
                 if columns == [] or columns[0].text.strip() == 'prediction':
                     continue
 
-                if len(columns) >= 9:
-                    name = re.sub(r'[^\w_]', '', columns[0].text.strip()) + '_' + columns[1].text.strip()
+                if len(columns) >= 17:
+                    name = re.sub(r'[^\w_]', '', columns[0].text.strip()) + '_' + str(i + 1)
                     if ',' in name:
                         break
 
                     doc = [sample, columns[2].text.strip(), columns[3].text.strip().replace('%', ''),
-                           columns[4].text.strip(), columns[5].text.strip().replace('%', ''),
-                           columns[6].text.strip().replace('%', ''), columns[7].text.strip(), columns[8].text.strip()]
+                           columns[7].text.strip(), columns[8].text.strip().replace('%', ''),
+                           columns[12].text.strip().replace('%', ''), columns[15].text.strip(), columns[16].text.strip()]
 
                     # append to list
                     motifs[name] = motifs.get(name, []) + [doc]
@@ -382,7 +383,7 @@ def create_reports(arg_list: argparse.Namespace):
                                    tickvals=np.concatenate([np.array([0, 1]), np.array(range(5, max_count + 1, 5)), np.array([max_count + 1])]),
                                    ticktext=['B', 1] + list(range(5, max_count + 1, 5)) + ['E(>%d)' % (max_count + 1)])
         fig_histogram.update_yaxes(title_text="Count")
-        fig_histogram.update_traces(hovertemplate="<b>Prediction:\t%{x}</b><br />Count:\t%{y}<br />", textfont_size=7)
+        fig_histogram.update_traces(hovertemplate="<b>Prediction:\t%{x}</b><br>Count:\t%{y}<br>", textfont_size=7)
         fig_histogram.update_layout(width=1000, height=500, template='simple_white',
                                     barmode='stack', yaxis_fixedrange=True, hovermode='x')
 
@@ -412,7 +413,7 @@ def create_reports(arg_list: argparse.Namespace):
         # create heatmap of alleles
         fig_heatmap = go.Figure(data=[
             go.Heatmap(z=list(arr), text=text, textfont={"size": 10}, colorscale='Hot_r',
-                       hovertemplate="<b>Allele 1:\t%{y}<br />Allele 2:\t%{x}</b><br />Count:\t%{text}",
+                       hovertemplate="<b>Allele 1:\t%{y}<br>Allele 2:\t%{x}</b><br>Count:\t%{text}",
                        texttemplate="%{text}", name='Prediction heatmap')
         ])
         fig_heatmap.add_vline(x=a2_max + 0.5, line_width=5, line_color='black', opacity=1)
