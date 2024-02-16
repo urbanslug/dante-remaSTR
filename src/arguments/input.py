@@ -52,8 +52,8 @@ def load_arguments() -> argparse.Namespace:
         postfilter.add_argument('--min-rep-len', '-rl', type=positive_int, help='Minimal repetition length in bases. Default=3', default=3)
         postfilter.add_argument('--min-rep-cnt', '-rc', type=positive_int, help='Minimal repetition count. Default=1', default=1)
         postfilter.add_argument('--max-abs-error', '-ea', type=positive_int, help='Maximal number of errors. Default=All', default=None)
-        postfilter.add_argument('--max-rel-error', '-er', type=probability, help='Maximal ratio of errors to read length. Default=0.1 (10%%)',
-                                default=0.1)
+        postfilter.add_argument('--max-rel-error', '-er', type=probability, help='Maximal ratio of errors to read length. Default=All',
+                                default=1.0)
 
         options = parser.add_argument_group('Options')
         options.add_argument('--start-motif', type=positive_int, help='Starting motif index (from 0). Default=0', default=0)
