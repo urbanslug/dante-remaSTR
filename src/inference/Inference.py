@@ -337,6 +337,7 @@ class Inference:
 
             return self.likelihood_rl(rl) * partial_likelihood / float(number_of_options)
 
+    @functools.lru_cache()
     def likelihood_read(self, observed: int, rl: int, model_index1: int, model_index2: int, closed: bool = True) -> float:
         """
         Compute likelihood of generation of a read from either of those models.
