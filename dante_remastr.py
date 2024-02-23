@@ -32,9 +32,9 @@ def shorten_str(string: str, max_length: int = 40, ellipsis_str: str = '...') ->
         return string
 
 
-def errors_per_hundred(errors: list[tuple[int, int, int]], relative: bool = False) -> tuple[float | str, float | str]:
+def errors_per_read(errors: list[tuple[int, int, int]], relative: bool = False) -> tuple[float | str, float | str]:
     """
-    Count number of errors per hundred reads. Relative per length or absolute number.
+    Count number of errors per read. Relative per length or absolute number.
     :param errors: list[tuple[int, int, int]] - indels, mismatches and length of module
     :param relative: bool - relative?
     :return: tuple[float, float] - number of indels, mismatches per hundred reads
@@ -45,10 +45,10 @@ def errors_per_hundred(errors: list[tuple[int, int, int]], relative: bool = Fals
 
     if relative:
         mean_length = np.mean([length for _, _, length in errors])
-        return (np.mean([indels / float(length) for indels, _, length in errors]) * 100.0 * mean_length,
-                np.mean([mismatches / float(length) for _, mismatches, length in errors]) * 100.0 * mean_length)
+        return (np.mean([indels / float(length) for indels, _, length in errors]) * mean_length,
+                np.mean([mismatches / float(length) for _, mismatches, length in errors]) * mean_length)
     else:
-        return np.mean([indels for indels, _, _ in errors]) * 100.0, np.mean([mismatches for _, mismatches, _ in errors]) * 100.0
+        return np.mean([indels for indels, _, _ in errors]), np.mean([mismatches for _, mismatches, _ in errors])
 
 
 def generate_result_line(motif_class: Motif, predicted: tuple[str, str], confidence: tuple[float | str, ...], qual_num: int, primer_num: int,
@@ -92,16 +92,16 @@ def generate_result_line(motif_class: Motif, predicted: tuple[str, str], confide
         assert len([l for i, m, l in errors if l == 0]) == 0
 
         # extract error metrics
-        indels_rel, mismatches_rel = errors_per_hundred(errors, relative=True)
-        indels_rel1, mismatches_rel1 = errors_per_hundred(errors_a1, relative=True)
-        indels_rel2, mismatches_rel2 = errors_per_hundred(errors_a2, relative=True)
+        indels_rel, mismatches_rel = errors_per_read(errors, relative=True)
+        indels_rel1, mismatches_rel1 = errors_per_read(errors_a1, relative=True)
+        indels_rel2, mismatches_rel2 = errors_per_read(errors_a2, relative=True)
 
     # return dictionary
     return {'motif_name': motif_class.name, 'motif_nomenclature': motif_class.motif, 'motif_sequence': motif_seq, 'chromosome': motif_class.chrom,
             'start': start, 'end': end, 'allele1': predicted[0], 'allele2': predicted[1], 'confidence': confidence[0], 'conf_allele1': confidence[1],
-            'conf_allele2': confidence[2], 'reads_a1': reads_a1, 'reads_a2': reads_a2, 'indels_p100': indels_rel, 'mismatches_p100': mismatches_rel,
-            'indels_p100_a1': indels_rel1, 'indels_p100_a2': indels_rel2, 'mismatches_p100_a1': mismatches_rel1,
-            'mismatches_p100_a2': mismatches_rel2, 'quality_reads': qual_num, 'one_primer_reads': primer_num, 'filtered_reads': filt_num,
+            'conf_allele2': confidence[2], 'reads_a1': reads_a1, 'reads_a2': reads_a2, 'indels': indels_rel, 'mismatches': mismatches_rel,
+            'indels_a1': indels_rel1, 'indels_a2': indels_rel2, 'mismatches_a1': mismatches_rel1, 'mismatches_a2': mismatches_rel2,
+            'quality_reads': qual_num, 'one_primer_reads': primer_num, 'filtered_reads': filt_num,
             'conf_background': confidence[3] if len(confidence) > 3 else '---',
             'conf_background_all': confidence[4] if len(confidence) > 4 else '---',
             'conf_extended': confidence[5] if len(confidence) > 5 else '---', 'conf_extended_all': confidence[6] if len(confidence) > 6 else '---',
@@ -153,7 +153,8 @@ def process_group(args: argparse.Namespace, df: pd.DataFrame, motif_str: str) ->
 
         # write files if needed
         if args.verbose:
-            report.write_all(qual_annot, primer_annot, filt_annot, motif_dir, motif_class, module_number, zip_it=args.gzip_outputs)
+            report.write_all(qual_annot, primer_annot, filt_annot, motif_dir, motif_class, module_number,
+                             zip_it=args.gzip_outputs, cutoff_alignments=args.cutoff_alignments)
 
         # run inference - this takes most of the time (for no --verbose)
         file_pcolor = f'{motif_dir}/pcolor_{module_number}' if args.verbose else None
@@ -170,9 +171,11 @@ def process_group(args: argparse.Namespace, df: pd.DataFrame, motif_str: str) ->
         if confidence is not None and args.verbose:
             conf, c1, c2, _, _, _, _ = confidence
             if a1 is not None and a1 > 0:
-                report.write_alignment(f'{motif_dir}/alignment_{module_number}_a{a1}.fasta', qual_annot, module_number, a1, zip_it=args.gzip_outputs)
+                report.write_alignment(f'{motif_dir}/alignment_{module_number}_a{a1}.fasta', qual_annot, module_number, a1,
+                                       zip_it=args.gzip_outputs, cutoff_after=args.cutoff_alignments)
             if a2 is not None and a2 != a1 and a2 != 0:
-                report.write_alignment(f'{motif_dir}/alignment_{module_number}_a{a2}.fasta', qual_annot, module_number, a2, zip_it=args.gzip_outputs)
+                report.write_alignment(f'{motif_dir}/alignment_{module_number}_a{a2}.fasta', qual_annot, module_number, a2,
+                                       zip_it=args.gzip_outputs, cutoff_after=args.cutoff_alignments)
 
         # infer phasing (if we are not on the first repeating module)
         if i != 0:
@@ -190,7 +193,7 @@ def process_group(args: argparse.Namespace, df: pd.DataFrame, motif_str: str) ->
             # write files
             if args.verbose:
                 report.write_all(both_good_annot, one_good_annot, none_good_annot, motif_dir, motif_class, last_num, module_number,
-                                 zip_it=args.gzip_outputs)
+                                 zip_it=args.gzip_outputs, cutoff_alignments=args.cutoff_alignments)
 
             # infer phasing
             phasing, supp_reads = inference.phase(both_good_annot, last_num, module_number)

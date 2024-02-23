@@ -41,6 +41,7 @@ class Annotation:
 
         # Store arguments into instance variables
         self.read_id = read_id
+        self.mate_order = mate_order
         self.ordered = mate_order > 0
         self.left_pair = mate_order == 1
         self.read_seq = read_seq
@@ -381,3 +382,32 @@ class Annotation:
             nomenclatures.append(nomenclature)
 
         return '\t'.join(nomenclatures)
+
+    def get_shortened_annotation(self, shorten_length: int) -> Annotation:
+        """
+        Get shortened annotation with specified shorten length beyond annotated modules.
+        :param shorten_length: int - how many bases to keep beyond modules
+        :return: Annotation - shortened annotation
+        """
+
+        # search for start
+        start = -1
+        for i in range(len(self.states)):
+            if self.states[i] != '-':
+                start = i
+                break
+
+        # search for end
+        end = -1
+        for i in range(len(self.states) - 1, -1, -1):
+            if self.states[i] != '-':
+                end = i
+                break
+
+        # adjust start and end for shorten length
+        start = max(start - shorten_length, 0)
+        end = min(end + 1 + shorten_length, len(self.states))  # +1 for use as list range
+
+        # return shortened Annotation
+        return Annotation(self.read_id, self.mate_order, self.read_seq[start:end], self.expected_seq[start:end],
+                          self.states[start:end], self.probability, self.motif)

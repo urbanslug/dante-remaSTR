@@ -70,11 +70,15 @@ def load_arguments() -> argparse.Namespace:
         options.add_argument('--gzip-outputs', '-z', action='store_true', help='Store bigger outputs as gzipped files.')
         options.add_argument('--processes', '-p', type=positive_nonzero_int, help='Processes to use. Default=8', default=8)
         options.add_argument('--progress', type=int, help='Print progress each number of motifs. Use 0 for no progress. Default=1000', default=1000)
+        options.add_argument('--cutoff-alignments', type=int, help='How many bases to keep beyond annotated part. '
+                                                                   'Provide negative (or huge number) for no cutoff. Default=20', default=20)
 
         args = parser.parse_args()
 
         if args.output_dir is None:
             args.output_dir = os.getcwd()
+        if args.cutoff_alignments < 0:
+            args.cutoff_alignments = None
 
     except argparse.ArgumentTypeError as e:
         print('ERROR: Argument parser error. ' + str(e))

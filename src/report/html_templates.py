@@ -41,16 +41,16 @@ row_string = """  <tr>
     <td class="tg-s6z2">{allele1}</td>
     <td class="tg-s6z2">{conf_allele1}</td>
     <td class="tg-s6z2">{reads_a1}</td>
-    <td class="tg-s6z2">{indels_p100_a1}</td>
-    <td class="tg-s6z2">{mismatches_p100_a1}</td>
+    <td class="tg-s6z2">{indels_a1}</td>
+    <td class="tg-s6z2">{mismatches_a1}</td>
     <td class="tg-s6z2">{allele2}</td>
     <td class="tg-s6z2">{conf_allele2}</td>
     <td class="tg-s6z2">{reads_a2}</td>
-    <td class="tg-s6z2">{indels_p100_a2}</td>
-    <td class="tg-s6z2">{mismatches_p100_a2}</td>
+    <td class="tg-s6z2">{indels_a2}</td>
+    <td class="tg-s6z2">{mismatches_a2}</td>
     <td class="tg-s6z2">{confidence}</td>
-    <td class="tg-s6z2">{indels_p100}</td>
-    <td class="tg-s6z2">{mismatches_p100}</td>
+    <td class="tg-s6z2">{indels}</td>
+    <td class="tg-s6z2">{mismatches}</td>
     <td class="tg-s6z2">{quality_reads}</td>
     <td class="tg-s6z2">{one_primer_reads}</td>
   </tr>"""
@@ -80,18 +80,18 @@ motif_summary = """
             <th class="tg-s6z2" colspan="5">Allele 1</th>
             <th class="tg-s6z2" colspan="5">Allele 2</th>
             <th class="tg-s6z2" rowspan="3">Overall<br>confidence</th>
-            <th class="tg-s6z2" colspan="2">Errors (100 reads)</th>
+            <th class="tg-s6z2" colspan="2">Errors per read</th>
             <th class="tg-s6z2" colspan="2">Reads</th>
         </tr>
         <tr>
             <td class="tg-smaller" rowspan="2">prediction</td>
             <td class="tg-smaller" rowspan="2">confidence</td>
             <td class="tg-smaller" rowspan="2">reads</td>
-            <td class="tg-smaller" colspan="2">Errors (100 reads)</td>
+            <td class="tg-smaller" colspan="2">Errors per read</td>
             <td class="tg-smaller" rowspan="2">prediction</td>
             <td class="tg-smaller" rowspan="2">confidence</td>
             <td class="tg-smaller" rowspan="2">reads</td>
-            <td class="tg-smaller" colspan="2">Errors (100 reads)</td>
+            <td class="tg-smaller" colspan="2">Errors per read</td>
             <td class="tg-smaller" rowspan="2">indel</td>
             <td class="tg-smaller" rowspan="2">mismatch</td>
             <td class="tg-smaller" rowspan="2">full</td>
@@ -130,7 +130,7 @@ motif_summary_static = """
             <th class="tg-s6z2" colspan="5">Allele 1</th>
             <th class="tg-s6z2" colspan="5">Allele 2</th>
             <th class="tg-s6z2" rowspan="3">Overall<br>confidence</th>
-            <th class="tg-s6z2" colspan="2">Errors (100 reads)</th>
+            <th class="tg-s6z2" colspan="2">Errors per read</th>
             <th class="tg-s6z2" colspan="2">Reads</th>
 
         </tr>
@@ -138,11 +138,11 @@ motif_summary_static = """
             <td class="tg-s6z2" rowspan="2">prediction</td>
             <td class="tg-s6z2" rowspan="2">confidence</td>
             <td class="tg-s6z2" rowspan="2">reads</td>
-            <td class="tg-s6z2" colspan="2">Errors (100 reads)</td>
+            <td class="tg-s6z2" colspan="2">Errors per read</td>
             <td class="tg-s6z2" rowspan="2">prediction</td>
             <td class="tg-s6z2" rowspan="2">confidence</td>
             <td class="tg-s6z2" rowspan="2">reads</td>
-            <td class="tg-s6z2" colspan="2">Errors (100 reads)</td>
+            <td class="tg-s6z2" colspan="2">Errors per read</td>
             <td class="tg-s6z2" rowspan="2">indel</td>
             <td class="tg-s6z2" rowspan="2">mismatch</td>
             <td class="tg-s6z2" rowspan="2">full</td>
@@ -346,15 +346,16 @@ def highlight_subpart(seq: str, highlight: int | list[int]) -> tuple[str, str]:
     return ''.join(split), ''.join(str_part)
 
 
-def float_to_str(c: float | str, percents: bool = False) -> str:
+def float_to_str(c: float | str, percents: bool = False, decimals: int = 1) -> str:
     """
     Convert float confidence to string.
     :param c: float/str - confidence
     :param percents: bool - whether to output as a percents or not
+    :param decimals: int - how many decimals to round to
     :return: str - converted to string
     """
     if isinstance(c, float):
-        return f'{c * 100: .1f}%' if percents else f'{c: .1f}'
+        return f'{c * 100: .{decimals}f}%' if percents else f'{c: .{decimals}f}'
     return c
 
 
@@ -384,9 +385,9 @@ def generate_row(sequence: str, result: pd.Series, postfilter: PostFilter) -> st
     updated_result = {'conf_allele1': float_to_str(result['conf_allele1'], percents=True),
                       'conf_allele2': float_to_str(result['conf_allele2'], percents=True),
                       'confidence': float_to_str(result['confidence'], percents=True), 'motif_nomenclature': smaller_seq,
-                      'indels_p100': float_to_str(result['indels_p100']), 'mismatches_p100': float_to_str(result['mismatches_p100']),
-                      'indels_p100_a1': float_to_str(result['indels_p100_a1']), 'mismatches_p100_a1': float_to_str(result['mismatches_p100_a1']),
-                      'indels_p100_a2': float_to_str(result['indels_p100_a2']), 'mismatches_p100_a2': float_to_str(result['mismatches_p100_a2'])}
+                      'indels': float_to_str(result['indels'], decimals=2), 'mismatches': float_to_str(result['mismatches'], decimals=2),
+                      'indels_a1': float_to_str(result['indels_a1'], decimals=2), 'mismatches_a1': float_to_str(result['mismatches_a1'], decimals=2),
+                      'indels_a2': float_to_str(result['indels_a2'], decimals=2), 'mismatches_a2': float_to_str(result['mismatches_a2'], decimals=2)}
     return row_string.format(**{**result, **updated_result})
 
 
@@ -490,8 +491,8 @@ def generate_alignment(motif: str, alignment_file: str, motif_id: str, display_t
     try:
         with gzip.open(alignment_file, 'rt') if alignment_file.endswith('.gz') else open(alignment_file) as f:
             string = f.read()
-        debug = string.find('#')
+        string = string[:string.find('#')]
 
-        return align_vis.format(fasta=string[:debug], name=motif, motif_id=motif_id, display_text=display_text)
+        return align_vis.format(fasta=string, name=motif, motif_id=motif_id, display_text=display_text)
     except (IOError, TypeError, AttributeError):
         return ''

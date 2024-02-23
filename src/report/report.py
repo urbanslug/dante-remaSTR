@@ -54,7 +54,7 @@ def write_annotation_pairs(out_file: str, annotation_pairs: list[annotation.Anno
 
 
 def write_alignment(out_file: str, annotations: list[annotation.Annotation], index_rep: int, allele: int = None, index_rep2: int = None,
-                    allele2: int = None, zip_it: bool = True) -> None:
+                    allele2: int = None, zip_it: bool = True, cutoff_after: int = None) -> None:
     """
     Creates a multi-alignment of all annotations into output text file
     :param out_file: str - alignment filename
@@ -64,13 +64,20 @@ def write_alignment(out_file: str, annotations: list[annotation.Annotation], ind
     :param index_rep2: int - index of second repetition module of a motif
     :param allele2: int/None - which allele2 to print only, if None print all of them
     :param zip_it: bool - whether to gzip the resulting file
+    :param cutoff_after: int - how many bases to keep outside the annotated motif (None for keep all)
     """
+    # select annotations
     if allele is not None:
         if allele2 is not None and index_rep2 is not None:
             annotations = [a for a in annotations if a.module_repetitions[index_rep] == allele and a.module_repetitions[index_rep2] == allele2]
         else:
             annotations = [a for a in annotations if a.module_repetitions[index_rep] == allele]
 
+    # apply cutoff
+    if cutoff_after is not None:
+        annotations = [a.get_shortened_annotation(cutoff_after) for a in annotations]
+
+    # setup alignments
     alignments = [''] * len(annotations)
     align_inds = np.zeros(len(annotations), dtype=int)
     states = []
@@ -425,8 +432,7 @@ def write_histogram_image(out_prefix: str, annotations: list[annotation.Annotati
 
 def write_all(quality_annotations: list[annotation.Annotation], filt_primer: list[annotation.Annotation],
               filtered_annotations: list[annotation.Annotation], motif_dir: str, motif_class: Motif, module_number: int,
-              second_module_number: int = None,
-              zip_it: bool = True) -> None:
+              second_module_number: int = None, zip_it: bool = True, cutoff_alignments: int = None) -> None:
     """
     Write all output files: quality annotations, one-primer annotations, filtered annotations, statistics, repetitions + images.
     :param quality_annotations: list(Annotation) - list of blue annotations
@@ -437,6 +443,7 @@ def write_all(quality_annotations: list[annotation.Annotation], filt_primer: lis
     :param module_number: int - index of first studied repetition in modules
     :param second_module_number: int - index of second studied repetition in modules (optional)
     :param zip_it: bool - whether to gzip the resulting file
+    :param cutoff_alignments: int - how many bases to keep beyond annotated modules in alignments
     :return: None
     """
     # create dir if not exists
@@ -449,8 +456,10 @@ def write_all(quality_annotations: list[annotation.Annotation], filt_primer: lis
     write_annotations(f'{motif_dir}/annotations_{suffix}.txt', quality_annotations, zip_it=zip_it)
     write_annotations(f'{motif_dir}/filtered_{suffix}.txt', filtered_annotations, zip_it=zip_it)
     write_annotations(f'{motif_dir}/filtered_primer_{suffix}.txt', filt_primer, zip_it=zip_it)
-    write_alignment(f'{motif_dir}/alignment_{suffix}.fasta', quality_annotations, module_number, index_rep2=second_module_number, zip_it=zip_it)
-    write_alignment(f'{motif_dir}/alignment_filtered_{suffix}.fasta', filt_primer, module_number, index_rep2=second_module_number, zip_it=zip_it)
+    write_alignment(f'{motif_dir}/alignment_{suffix}.fasta', quality_annotations, module_number,
+                    index_rep2=second_module_number, zip_it=zip_it, cutoff_after=cutoff_alignments)
+    write_alignment(f'{motif_dir}/alignment_filtered_{suffix}.fasta', filt_primer, module_number,
+                    index_rep2=second_module_number, zip_it=zip_it, cutoff_after=cutoff_alignments)
 
     # write histogram image
     if second_module_number is not None:
@@ -557,9 +566,9 @@ def write_report(motifs: list[Motif], result_table: pd.DataFrame, post_filter: P
                          'conf_allele2': 'Allele 2 confidence', 'reads_a2': 'Allele 2 reads', 'quality_reads': 'Reads (full)',
                          'one_primer_reads': 'Reads (partial)', 'conf_background_all': 'Both Background prob.',
                          'conf_background': 'One Background prob.', 'conf_extended_all': 'Background Expanded prob.',
-                         'conf_extended': 'One Expanded prob.', 'indels_p100': 'Indels per 100 reads', 'mismatches_p100': 'Mismatches per 100 reads',
-                         'indels_p100_a1': 'Allele 1 indels', 'mismatches_p100_a1': 'Allele 1 mismatches', 'indels_p100_a2': 'Allele 2 indels',
-                         'mismatches_p100_a2': 'Allele 2 mismatches'}
+                         'conf_extended': 'One Expanded prob.', 'indels': 'Indels per read', 'mismatches': 'Mismatches per read',
+                         'indels_a1': 'Allele 1 indels', 'mismatches_a1': 'Allele 1 mismatches', 'indels_a2': 'Allele 2 indels',
+                         'mismatches_a2': 'Allele 2 mismatches'}
     result_table = result_table[columns_to_rename.keys()]
 
     # merge all_profiles:
