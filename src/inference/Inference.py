@@ -12,7 +12,9 @@ import matplotlib.patheffects as patheffects
 import plotly.graph_objects as go
 
 from src.annotation import Annotation
+from src.report.html_templates import float_to_str
 
+type ConfidenceType = tuple[float, float, float | str, float, float, float, float]
 
 def combine_distribs(deletes, inserts):
     """
@@ -21,22 +23,18 @@ def combine_distribs(deletes, inserts):
     :param inserts: ndarray - insert distribution
     :return: ndarray - combined array of the same length
     """
-
     # how much to fill?
     to_fill = sum(deletes == 0.0) + 1
     while to_fill < len(inserts) and inserts[to_fill] > 0.0001:
         to_fill += 1
 
     # create the end array
-    len_del = len(deletes)
     end_distr = np.zeros_like(deletes, dtype=float)
 
     # fill it!
     for i, a in enumerate(inserts[:to_fill]):
-        # print i,a,(deletes*a)[:len_del-i]
-        end_distr[i:] += (deletes * a)[:len_del - i]
+        end_distr[i:] += (deletes * a)[:len(deletes) - i]
 
-    # print("end_distr", end_distr[:3], deletes[:3], inserts[:3])
     return end_distr
 
 
@@ -133,7 +131,6 @@ def generate_models(min_rep: int, max_rep: int, multiple_backgrounds: bool = Tru
     :param multiple_backgrounds: bool - whether to generate all background states
     :return: generator of allele pairs (numbers or 'E' or 'B')
     """
-
     for model_index1 in range(min_rep, max_rep):
         for model_index2 in range(model_index1, max_rep):
             yield model_index1, model_index2
@@ -143,6 +140,20 @@ def generate_models(min_rep: int, max_rep: int, multiple_backgrounds: bool = Tru
 
     yield 'B', 'B'
     yield 'E', 'E'
+
+
+def generate_models_one_allele(min_rep: int, max_rep: int) -> typing.Iterator[typing.Tuple[int | str, int | str]]:
+    """
+    Generate all pairs of alleles (models for generation of reads).
+    :param min_rep: int - minimal number of repetitions
+    :param max_rep: int - maximal number of repetitions
+    :return: generator of allele pairs (numbers or 'E' or 'B'), 'X' for non-existing allele
+    """
+    for model_index1 in range(min_rep, max_rep):
+        yield model_index1, 'X'
+
+    yield 'B', 'X'
+    yield 'E', 'X'
 
 
 class Inference:
@@ -338,25 +349,20 @@ class Inference:
             return self.likelihood_rl(rl) * partial_likelihood / float(number_of_options)
 
     @functools.lru_cache()
-    def likelihood_read(self, observed: int, rl: int, model_index1: int, model_index2: int, closed: bool = True) -> float:
+    def likelihood_read(self, observed: int, rl: int, model_index1: int, model_index2: int = None, closed: bool = True) -> float:
         """
         Compute likelihood of generation of a read from either of those models.
         :param observed: int - observed allele count
         :param rl: int - read length
         :param model_index1: char/int - model index for left allele
-        :param model_index2: char/int - model index for right allele
+        :param model_index2: char/int - model index for right allele or None if mono-allelic
         :param closed: bool - if the read is closed - i.e. both primers are there
         :return: float - likelihood of this read generation
         """
-        model_i = self.models[model_index1]
-        model_j = self.models[model_index2]
-
-        model_prob_i = self.model_probabilities[model_index1]
-        model_prob_j = self.model_probabilities[model_index2]
-
         # TODO: tuto podla mna nemoze byt len tak +, chyba tam korelacia modelov, ale v ramci zjednodusenia asi ok
-        allele1_likelihood = model_prob_i * self.likelihood_read_allele(model_i, observed, rl, closed)
-        allele2_likelihood = model_prob_j * self.likelihood_read_allele(model_j, observed, rl, closed)
+        allele1_likelihood = self.model_probabilities[model_index1] * self.likelihood_read_allele(self.models[model_index1], observed, rl, closed)
+        allele2_likelihood = 0.0 if model_index2 is None else self.model_probabilities[model_index2] * self.likelihood_read_allele(
+            self.models[model_index2], observed, rl, closed)
         p_bckg = self.p_bckg_closed if closed else self.p_bckg_open
         bckgrnd_likelihood = p_bckg * self.likelihood_read_allele(self.models['B'], observed, rl, closed)
 
@@ -376,7 +382,7 @@ class Inference:
         return allele1_likelihood + allele2_likelihood + bckgrnd_likelihood  # - alleles_intersection
 
     def infer(self, annotations: list[Annotation], filt_annotations: list[Annotation], index_rep: int,
-              verbose: bool = True) -> dict[tuple[int, int]: float]:
+              verbose: bool = True, monoallelic: bool = False) -> dict[tuple[int | str, int | str]: float]:
         """
         Does all the inference, computes for which 2 combination of alleles are these annotations and parameters the best.
         argmax_{G1, G2} P(G1, G2 | AL, COV, RL) ~ P(AL, COV, RL | G1, G2) * P(G1, G2) = prod_{read_i} P(al_i, cov_i, rl_i | G1, G2) * P(G1, G2)
@@ -389,6 +395,7 @@ class Inference:
         :param filt_annotations: list(Annotation) - open annotated reads (only one primer set)
         :param index_rep: int - index of a repetition
         :param verbose: bool - print more stuff?
+        :param monoallelic: bool - do we have a mono-allelic motif (i.e. chrX/chrY and male sample?)
         :return: dict(tuple(int, int):float) - directory of model indices to their likelihood
         """
         # generate closed observed and read_length arrays
@@ -425,25 +432,17 @@ class Inference:
 
         # go through every model and evaluate:
         evaluated_models = {}
-        for m1, m2 in generate_models(min_rep, max_rep, multiple_backgrounds=True):
-
-            evaluated_models[(m1, m2)] = 0
-
-            if verbose:
-                print('model', m1, m2)
-
+        for m1, m2 in generate_models_one_allele(min_rep, max_rep) if monoallelic else generate_models(min_rep, max_rep, multiple_backgrounds=True):
+            evaluated_models[(m1, m2)] = 0.0
             # go through every read
             for obs, rl, closed in zip(observed_arr, rl_arr, closed_arr):
-                lh = self.likelihood_read(obs, rl, m1, m2, closed=closed)
+                lh = self.likelihood_read(obs, rl, m1, None if m2 == 'X' else m2, closed=closed)
                 # TODO weighted sum according to the closeness/openness of reads?
                 evaluated_models[(m1, m2)] += np.log(lh)
 
-            if verbose:
-                print('model', m1, m2, 'log-likelihood', evaluated_models[(m1, m2)])
-
         return evaluated_models
 
-    def print_pcolor(self, lh_dict: dict[tuple[int, int]: float], display_file: str | None,
+    def print_pcolor(self, lh_dict: dict[tuple[int | str, int | str]: float], display_file: str | None,
                      name: str, lognorm: bool = True) -> tuple[np.array, tuple[int, int], tuple[int | str, int | str]]:
         """
         Get maximum likelihood option and alternatively print it to image file.
@@ -454,9 +453,13 @@ class Inference:
         :return: tuple(int, int) - option with the highest likelihood
         """
         # convert to a numpy array:
+        monoallelic = False
         lh_array = np.zeros((self.max_rep, self.max_rep + 1))
         for (k1, k2), v in lh_dict.items():
-            if k2 == 'B' or k1 == 'E' or isinstance(k1, int) and isinstance(k2, int) and k2 < k1:  # B is the smallest, E is the largest!
+            if k2 == 'X':  # if we have mono-allelic
+                k2 = k1
+                monoallelic = True
+            if k2 == 'B' or k1 == 'E' or (isinstance(k1, int) and isinstance(k2, int) and k2 < k1):  # B is the smallest, E is the largest!
                 k1, k2 = k2, k1
             if k1 == 'B':
                 k1 = 0
@@ -582,16 +585,20 @@ class Inference:
         else:
             best_sym = tuple(map(lambda x: 'E' if x == self.max_rep else 'B' if x == 0 else x, best))
 
+        # if mono-allelic return 'X' as second allele symbol
+        if monoallelic:
+            best_sym = (best_sym[0], 'X')
+
         return lh_array, best, best_sym
 
-    def get_confidence(self, lh_array: np.ndarray, predicted: tuple[int, int]) -> tuple[float, float, float, float, float, float, float]:
+    def get_confidence(self, lh_array: np.ndarray, predicted: tuple[int, int], monoallelic: bool = False) -> ConfidenceType:
         """
         Get confidence of a prediction.
         :param lh_array: 2D-ndarray - log likelihoods of the prediction
         :param predicted: tuple(int, int) - predicted alleles
-        :return: tuple(float, float, float) - prediction confidence of all, first, and second allele(s)
+        :param monoallelic: bool - do we have a mono-allelic motif (i.e. chrX/chrY and male sample?)
+        :return: ConfidenceType - prediction confidence of all, first, and second allele(s), background and expanded states
         """
-
         # get confidence
         lh_corr_array = lh_array - np.max(lh_array)
         lh_sum = np.sum(np.exp(lh_corr_array))
@@ -614,28 +621,29 @@ class Inference:
         confidence_exp = np.exp(lh_corr_array[0, self.max_rep]) / lh_sum
         confidence_exp_all = np.sum(np.exp(lh_corr_array[:, self.max_rep])) / lh_sum
 
+        if monoallelic:
+            confidence2 = '---'
+
         return confidence, confidence1, confidence2, confidence_back, confidence_back_all, confidence_exp, confidence_exp_all
 
     @staticmethod
-    def write_output(file_desc: str | typing.TextIO, predicted: tuple[int | str, int | str],
-                     conf: tuple[float, float, float, float, float, float, float], name: str | int):
+    def write_output(file_desc: str | typing.TextIO, predicted: tuple[int | str, int | str], conf: ConfidenceType, name: str | int):
         """
         Write result of one prediction.
         :param file_desc: file descriptor - where to write to
         :param predicted: tuple(int/char, int/char) - predicted alleles
-        :param conf: tuple(float, float, float) - confidence of prediction (whole, 1st allele, 2nd allele)
+        :param conf: ConfidenceType - confidence of prediction (whole, 1st allele, 2nd allele, background and expanded alleles)
         :param name: str/int - name/number of the sample
         :return: None
         """
-
         def write_output_fd(f, predicted, conf, name):
-            print('Predicted alleles for %s: (confidence = %5.1f%%)' % (str(name), conf[0] * 100.0), file=f)
-            print('\t%3s (confidence = %5.1f%%)' % (str(predicted[0]), conf[1] * 100.0), file=f)
-            print('\t%3s (confidence = %5.1f%%)' % (str(predicted[1]), conf[2] * 100.0), file=f)
-            print('B   B  %7.3f%%' % (conf[3] * 100.0), file=f)
-            print('all B  %7.3f%%' % (conf[4] * 100.0), file=f)
-            print('B   E  %7.3f%%' % (conf[5] * 100.0), file=f)
-            print('all E  %7.3f%%' % (conf[6] * 100.0), file=f)
+            print(f'Predicted alleles for {name}: (confidence = {float_to_str(conf[1], percents=True)})', file=f)
+            print(f'\t{str(predicted[0]):3s} (confidence = {float_to_str(conf[1], percents=True)})', file=f)
+            print(f'\t{str(predicted[1]):3s} (confidence = {float_to_str(conf[2], percents=True)})', file=f)
+            print(f'B   B   {float_to_str(conf[3], percents=True)}', file=f)
+            print(f'all B   {float_to_str(conf[4], percents=True)}', file=f)
+            print(f'B   E   {float_to_str(conf[5], percents=True)}', file=f)
+            print(f'all E   {float_to_str(conf[6], percents=True)}', file=f)
 
         if type(file_desc) is str:
             with open(file_desc, 'w') as f:
@@ -644,7 +652,7 @@ class Inference:
             write_output_fd(file_desc, predicted, conf, name)
 
     def genotype(self, annotations: list[Annotation], filt_annotations: list[Annotation], index_rep: int, file_pcolor: str | None,
-                 file_output: str | None, name: str) -> tuple[tuple[str | int, str | int], tuple[float, float, float, float, float, float, float]]:
+                 file_output: str | None, name: str, monoallelic: bool = False) -> tuple[tuple[str | int, str | int], ConfidenceType]:
         """
         Genotype based on all annotations - infer likelihoods, print pcolor and write output
         :param annotations: list(Annotation) - good (blue) annotations
@@ -654,21 +662,21 @@ class Inference:
         :param file_pcolor: str - file prefix for a pcolor image
         :param file_output: str - file for genotyping output
         :param name: str - name of the sample
+        :param monoallelic: bool - do we have a mono-allelic motif (i.e. chrX/chrY and male sample?)
         :return: tuple - predicted symbols and confidences
         """
-
         # if we do not have any good annotations, then quit
         if len(annotations) == 0 and len(filt_annotations) == 0:
             return ('B', 'B'), (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 
         # infer likelihoods
-        lh_dict = self.infer(annotations, filt_annotations, index_rep, verbose=False)
+        lh_dict = self.infer(annotations, filt_annotations, index_rep, verbose=False, monoallelic=monoallelic)
 
         # print pcolor image
         lh_array, predicted, predicted_sym = self.print_pcolor(lh_dict, file_pcolor, name)
 
         # get confidence of our prediction
-        confidence = self.get_confidence(lh_array, predicted)
+        confidence = self.get_confidence(lh_array, predicted, monoallelic)
 
         # write output
         if file_output is not None:

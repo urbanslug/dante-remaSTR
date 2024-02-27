@@ -1,6 +1,5 @@
 import argparse
 import base64
-import enum
 import glob
 import json
 import os
@@ -13,7 +12,7 @@ import matplotlib.pyplot as plt
 
 from src.inference import load_phasing
 from src.report.html_templates import float_to_str
-from src.report.report import read_all_call
+from src.report.report import read_all_call, ChromEnum
 
 
 def load_arguments() -> argparse.Namespace:
@@ -220,12 +219,6 @@ def to_sample_name(sample_id: int | str, samples: list[str]) -> str:
     assert False, sample_id
 
 
-class ChromEnum(enum.Enum):
-    X = 'X'
-    Y = 'Y'
-    NORM = 'NORM'
-
-
 def check_genotypes(mother_genotypes: tuple[str, str], father_genotypes: tuple[str, str], child_genotypes: tuple[str, str], son: bool,
                     chrom: ChromEnum = ChromEnum.NORM) -> bool:
     """
@@ -239,12 +232,12 @@ def check_genotypes(mother_genotypes: tuple[str, str], father_genotypes: tuple[s
     """
     # chrX is inherited from mother for sons and the genotype should be homozygous
     if son and chrom == ChromEnum.X:
-        child_genotype = list(set([item for item in child_genotypes if item not in ('B', 'E')]))
+        child_genotype = list(set([item for item in child_genotypes if item not in ('B', 'E', 'X')]))
         return len(child_genotype) == 0 or (len(child_genotype) == 1 and child_genotype[0] in mother_genotypes)
 
     # chrY is inherited from father for sons and the genotype should be homozygous
     if son and chrom == ChromEnum.Y:
-        child_genotype = list(set([item for item in child_genotypes if item not in ('B', 'E')]))
+        child_genotype = list(set([item for item in child_genotypes if item not in ('B', 'E', 'X')]))
         return len(child_genotype) == 0 or (len(child_genotype) == 1 and child_genotype[0] in father_genotypes)
 
     # there should be no calls for chrY motifs in daughters

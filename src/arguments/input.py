@@ -72,6 +72,7 @@ def load_arguments() -> argparse.Namespace:
         options.add_argument('--progress', type=int, help='Print progress each number of motifs. Use 0 for no progress. Default=1000', default=1000)
         options.add_argument('--cutoff-alignments', type=int, help='How many bases to keep beyond annotated part. '
                                                                    'Provide negative (or huge number) for no cutoff. Default=20', default=20)
+        options.add_argument('--male', action='store_true', help='Indicate that the sample is male. Process motifs from chrX/chrY as mono-allelic.')
 
         args = parser.parse_args()
 

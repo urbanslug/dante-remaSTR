@@ -41,7 +41,7 @@ if __name__ == '__main__':
     for alignment in glob.glob(f'{args.input_dir}/*/*/alignments.html'):
         name = alignment.split('/')[-3]
         motif = alignment.split('/')[-2].replace('(', '').replace(')', '').replace(' ', '_')
-        alignment = alignment.replace('(', '\(').replace(')', '\)').replace(' ', '\ ')
+        alignment = alignment.replace('(', r'\(').replace(')', r'\)').replace(' ', r'\ ')
 
         os.makedirs(os.path.join(args.output_dir, name), exist_ok=True)
 

@@ -161,7 +161,8 @@ def process_group(args: argparse.Namespace, df: pd.DataFrame, motif_str: str) ->
         file_output = f'{motif_dir}/allcall_{module_number}.txt' if args.verbose else None
         inference_class = inference.Inference(read_distribution, args.param_file, str_rep=args.min_rep_cnt, minl_primer1=args.min_flank_len,
                                               minl_primer2=args.min_flank_len, minl_str=args.min_rep_len)
-        predicted, confidence = inference_class.genotype(qual_annot, primer_annot, module_number, file_pcolor, file_output, motif_str)
+        monoallelic = args.male and report.chrom_from_string(motif_class.chrom) in [report.ChromEnum.X, report.ChromEnum.Y]
+        predicted, confidence = inference_class.genotype(qual_annot, primer_annot, module_number, file_pcolor, file_output, motif_str, monoallelic)
 
         # get number of precise alignments for each allele
         a1 = int(predicted[0]) if isinstance(predicted[0], int) else None
@@ -169,7 +170,6 @@ def process_group(args: argparse.Namespace, df: pd.DataFrame, motif_str: str) ->
 
         # write the alignments
         if confidence is not None and args.verbose:
-            conf, c1, c2, _, _, _, _ = confidence
             if a1 is not None and a1 > 0:
                 report.write_alignment(f'{motif_dir}/alignment_{module_number}_a{a1}.fasta', qual_annot, module_number, a1,
                                        zip_it=args.gzip_outputs, cutoff_after=args.cutoff_alignments)
@@ -339,7 +339,7 @@ if __name__ == '__main__':
         all_motifs, rl_df = consume_iterator((process_group(*inputs) for inputs in all_inputs))
 
     #  write the dataframe to stdout
-    report.log_str(f'Writing results to stdout. ({datetime.now():%Y-%m-%d %H:%M:%S})')
+    report.log_str(f'Writing output (stdout): {datetime.now():%Y-%m-%d %H:%M:%S}')
     rl_df.to_csv(sys.stdout, sep='\t')
 
     # generate report and output files for the whole run

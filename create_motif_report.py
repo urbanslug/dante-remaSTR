@@ -163,9 +163,9 @@ def generate_row(motif_name: str, a1: str, c1: str, a2: str, c2: str, c: str, re
                              motif_conf=c, reads_blue=reads_blue, reads_grey=reads_grey)
 
 
-# Convert extracted numbers from table to ints and set background and expanded alleles to 0
+# Convert extracted numbers from table to ints
 def parse_alleles(num: str) -> str | int:
-    if num == 'B' or num == 'E':
+    if num == 'B' or num == 'E' or num == 'X':
         return num
     elif num == '---' or '/' in num or '|' in num:
         return -1
@@ -355,7 +355,7 @@ def create_reports(arg_list: argparse.Namespace):
         try:
             a2_max = max(x for x in a2 if isinstance(x, int))
         except ValueError:
-            a2_max = 0
+            a2_max = a1_max
 
         arr = np.zeros((a1_max + 2, a2_max + 2), dtype=int)
 
@@ -368,7 +368,7 @@ def create_reports(arg_list: argparse.Namespace):
                 pass
             else:
                 al1 = 0 if a1[i] == 'B' else -1 if a1[i] == 'E' else int(a1[i])
-                al2 = 0 if a2[i] == 'B' else -1 if a2[i] == 'E' else int(a2[i])
+                al2 = 0 if a2[i] == 'B' else -1 if a2[i] == 'E' else al1 if a2[i] == 'X' else int(a2[i])
                 if al1 == -1 and al2 == -1:  # special case when (E, E)
                     al1 = 0
                 arr[al1, al2] += 1

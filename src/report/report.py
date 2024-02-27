@@ -1,3 +1,4 @@
+import enum
 import os
 import re
 import shutil
@@ -20,6 +21,21 @@ from src.postfilter import PostFilter
 
 # max repetitions on the graph
 MAX_REPETITIONS = 40
+
+
+class ChromEnum(enum.Enum):
+    X = 'X'
+    Y = 'Y'
+    NORM = 'NORM'
+
+
+def chrom_from_string(chrom_str: str) -> ChromEnum:
+    """
+    Converts a string to a ChromEnum object.
+    :param chrom_str: str - the string to convert to a ChromEnum object
+    :return ChromEnum - enum object representing the chromosome
+    """
+    return ChromEnum.X if chrom_str in ['chrX', 'NC_000023'] else (ChromEnum.Y if chrom_str in ['chrY', 'NC_000024'] else ChromEnum.NORM)
 
 
 def write_annotations(out_file: str, annotations: list[annotation.Annotation], zip_it: bool = True) -> None:
@@ -500,7 +516,11 @@ def read_all_call(allcall_file: str) -> tuple[float, int | str, int | str, float
         """
         split = line.strip().split()
         num = split[0]
-        conf = float(split[-1].split('%')[0]) / 100
+        conf = split[-1].split('%')[0].split(')')[0]
+        try:
+            conf = float(conf) / 100
+        except ValueError:
+            pass
         try:
             num = int(num)
         except ValueError:
