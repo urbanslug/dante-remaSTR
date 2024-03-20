@@ -353,7 +353,7 @@ def create_reports(arg_list: argparse.Namespace):
             a1_max = 0
 
         try:
-            a2_max = max(x for x in a2 if isinstance(x, int))
+            a2_max = max(a1_max, max(x for x in a2 if isinstance(x, int)))
         except ValueError:
             a2_max = a1_max
 

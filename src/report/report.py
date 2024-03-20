@@ -470,6 +470,9 @@ def write_all(quality_annotations: list[annotation.Annotation], filt_primer: lis
 
     # write output files
     write_annotations(f'{motif_dir}/annotations_{suffix}.txt', quality_annotations, zip_it=zip_it)
+    if len(quality_annotations) and max([len(a.read_seq) for a in quality_annotations]) > 200:
+        write_annotations(f'{motif_dir}/annotations_{suffix}_short.txt', [a.get_shortened_annotation(cutoff_alignments) for a in quality_annotations],
+                          zip_it=zip_it)
     write_annotations(f'{motif_dir}/filtered_{suffix}.txt', filtered_annotations, zip_it=zip_it)
     write_annotations(f'{motif_dir}/filtered_primer_{suffix}.txt', filt_primer, zip_it=zip_it)
     write_alignment(f'{motif_dir}/alignment_{suffix}.fasta', quality_annotations, module_number,
