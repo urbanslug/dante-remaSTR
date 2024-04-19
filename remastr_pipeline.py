@@ -17,6 +17,8 @@ def load_arguments() -> argparse.Namespace:
     parser.add_argument('nomenclature_file', help='Path to nomenclature file')
     parser.add_argument('output_dir', help='Path to directory where the output will be stored. Default=<current_dir>/results', nargs='?',
                         default=None)
+    parser.add_argument('--skipbams', type=int, help='Skip some BAMs. Default=0', default=0)
+    parser.add_argument('--maxbams', type=int, help='Process maximally this number of BAMs. Default=all', default=None)
     parser.add_argument('--dante-repo', help='Path to Dante repository. Default=use this location', default=None)
     parser.add_argument('--reference-fasta', help='Path to reference fasta. Default=/data/genome/human/grch38_decoy/grch38_decoy.fa',
                         default='/data/genome/human/grch38_decoy/grch38_decoy.fa')
@@ -24,10 +26,25 @@ def load_arguments() -> argparse.Namespace:
                         default=None)
     parser.add_argument('--skip-subpath', action='store_true', help='Do not append sub-path to output as <nomenclature_name>/<sample_name>')
     parser.add_argument('--dante-args', '-a', help='Send these additional arguments to the dante_remastr call. Default=None', default='')
+    parser.add_argument('--remastr-args', '-r', help='Send these additional arguments to the remastr call. Default=None', default='')
     parser.add_argument('--use-old-defaults', '-d', action='store_true', help='Use old defaults for dante_remastr call')
     parser.add_argument('--visualize', '-v', action='store_true', help='Print all the outputs. Default is to print only the result table to stdout.')
     parser.add_argument('--skip-call', '-s', action='store_true', help='Skip the calling of scripts, just do a dry run.')
     parser.add_argument('--ignore-errors', '-e', action='store_true', help='Ignore errors and continue, otherwise end after first non 0 return code.')
+
+    # preprocessing
+    parser.add_argument('--flank-len', '-f', type=int, help='Flank length to include into HMM (remastr). Default=30', default=30)
+    parser.add_argument('--min-mapq', '-m', type=int, help='Minimal mapping quality to accept. Use 0 for no filter. Default=30', default=30)
+    parser.add_argument('--include-duplicates', action='store_true', help='Include marked duplicates. Duplication marking should be done before '
+                                                                          'the pipeline and it is not handled by the pipeline.')
+    parser.add_argument('--males', help='Male samples. Specify either sample names or sample serial numbers (1-based). Default=[]',
+                        nargs='+', default=[])
+
+    # converting bam file
+    parser.add_argument('--bam-conversion', help='Task to convert bam file before processing. for example stripping weird headers: '
+                                                 '"samtools reheader -c \'grep -v ^@RG\' {input} > {output}"', default=None)
+    parser.add_argument('--bam-temp-loc', help='Temporary location for bam files. Default=<home_dir>', default='~')
+    parser.add_argument('--additional-nomenclatures', help='More nomenclature files to process on the same BAM file.', nargs='*', default=[])
 
     args = parser.parse_args()
 
@@ -37,6 +54,8 @@ def load_arguments() -> argparse.Namespace:
         args.output_dir = f'{os.getcwd()}/results'
     if args.param_file is None:
         args.param_file = f'{args.dante_repo}/src/inference/training_input/miseq_params.params'
+    if args.maxbams is None:
+        args.maxbams = 10000000
 
     return args
 
@@ -64,37 +83,67 @@ if __name__ == '__main__':
 
     # select bam files
     bam_files = glob.glob(args.bam_files)
+    bam_files = [bam for bam in bam_files if os.path.basename(bam).count('.') == 1]
+    bam_files = sorted(bam_files)[args.skipbams:args.skipbams + args.maxbams]
 
     print(f'Working on {len(bam_files)} samples...')
-    print('conda activate remastr\n')
+    print('conda activate remastr')
 
-    nomenclature_name = os.path.basename(args.nomenclature_file).split('.')[0]
+    # gather nomenclatures
+    nomenclatures = [args.nomenclature_file] + args.additional_nomenclatures
+    nomenclature_names = [os.path.basename(nomenclature).split('.')[0] for nomenclature in nomenclatures]
 
     # go through the bam files
-    for bam_file in bam_files:
+    for i, bam_file in enumerate(bam_files):
         # build remastr call
         sample_name = os.path.basename(bam_file).split('.')[0]
-        output_dir = args.output_dir if args.skip_subpath else f'{args.output_dir}/{nomenclature_name}/{sample_name}'
-        remastr_call = (f'{args.dante_repo}/remastr/target/release/remastr -f {args.reference_fasta} -m {args.nomenclature_file} '
-                        f'-b {bam_file} -o {output_dir}/{sample_name}.tsv')
+        male_sample = str(i + 1) in args.males or sample_name in args.males
 
-        # build dante_remastr call (report)
-        additional_params = '--processes 24 --min-flank-len 5 --min-rep-len 6 --min-rep-cnt 2' if args.use_old_defaults else ''
-        additional_params += args.dante_args + (' -v' if args.visualize else '')
-        dante_call = (f'python {args.dante_repo}/dante_remastr.py --param-file {args.param_file} {additional_params} -o {output_dir} < '
-                      f'{output_dir}/{sample_name}.tsv > {output_dir}/{sample_name}_res.tsv')
+        print(f'\nSample {sample_name} ({i+1}/{len(bam_files)})')
 
-        # print and call commands
-        if not args.skip_call:
-            os.makedirs(output_dir, exist_ok=True)
-        run_command(remastr_call, not args.ignore_errors, args.skip_call)
-        run_command(dante_call, not args.ignore_errors, args.skip_call)
+        # recompute bam file:
+        temp_bam = None
+        recompute_call = None
+        if args.bam_conversion is not None:
+            temp_bam = f'{args.bam_temp_loc}/{sample_name}_temp_recomputed.bam'
+            recompute_call = args.bam_conversion.format(input=bam_file, output=temp_bam)
+            bam_file = temp_bam
+            if not os.path.exists(temp_bam):
+                run_command(recompute_call, not args.ignore_errors, args.skip_call)
+
+        # go through all nomenclature names
+        for nomenclature_file, nomenclature_name in zip(nomenclatures, nomenclature_names):
+            output_dir = args.output_dir if args.skip_subpath else f'{args.output_dir}/{nomenclature_name}/{sample_name}'
+
+            # TODO change back quality 0
+            remastr_params = '--flank 30 --quality 1' if args.use_old_defaults else (f'--flank {args.flank_len} --quality {args.min_mapq}' +
+                                                                                     (' -d' if not args.include_duplicates else ''))
+            remastr_params += ' ' + args.remastr_args
+            remastr_call = (f'{args.dante_repo}/remastr/target/release/remastr -f {args.reference_fasta} -m {nomenclature_file} '
+                            f'-b {bam_file} -o {output_dir}/{sample_name}.tsv {remastr_params}')
+
+            # build dante_remastr call (report)
+            additional_params = ' --processes 10 --min-flank-len 5 --min-rep-len 6 --min-rep-cnt 2 --max-rel-error 0.05' if args.use_old_defaults else ''
+            additional_params += ' ' + args.dante_args + (' -v' if args.visualize else '') + (' --male' if male_sample else '')
+            dante_call = (f'python {args.dante_repo}/dante_remastr.py --param-file {args.param_file}{additional_params} -o {output_dir} < '
+                          f'{output_dir}/{sample_name}.tsv > {output_dir}/{sample_name}_res.tsv')
+
+            # print and call commands
+            if not args.skip_call:
+                os.makedirs(output_dir, exist_ok=True)
+            run_command(remastr_call, not args.ignore_errors, args.skip_call)
+            run_command(dante_call, not args.ignore_errors, args.skip_call)
+
+        # remove temporary bam
+        if temp_bam is not None:
+            run_command(f'rm {temp_bam}*', not args.ignore_errors, args.skip_call)
 
     # gather results
-    output_dir = args.output_dir if args.skip_subpath else f'{args.output_dir}/{nomenclature_name}'
-    call_gather = f'python {args.dante_repo}/gather_result_files.py {output_dir}'
-    call_motif = f'python {args.dante_repo}/create_motif_report.py {output_dir}'
-    call_visual = f'python {args.dante_repo}/create_visual_report.py {output_dir}'
-    run_command(call_gather, not args.ignore_errors, args.skip_call)
-    run_command(call_motif, not args.ignore_errors, args.skip_call)
-    run_command(call_visual, not args.ignore_errors, args.skip_call)
+    for nomenclature_name in nomenclature_names:
+        output_dir = args.output_dir if args.skip_subpath else f'{args.output_dir}/{nomenclature_name}'
+        call_gather = f'python {args.dante_repo}/gather_result_files.py {output_dir}'
+        call_motif = f'python {args.dante_repo}/create_motif_report.py {output_dir}'
+        call_visual = f'python {args.dante_repo}/create_visual_report.py {output_dir}'
+        run_command(call_gather, not args.ignore_errors, args.skip_call)
+        run_command(call_motif, not args.ignore_errors, args.skip_call)
+        run_command(call_visual, not args.ignore_errors, args.skip_call)
