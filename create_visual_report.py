@@ -108,6 +108,18 @@ def df_to_html_table(df: pd.DataFrame) -> str:
                         width: 600px; 
                         height: auto;
                     }
+                    .sticky-left {
+                        position: sticky;
+                        left: 0;
+                        background-color: #ffffff;
+                        z-index: 10;
+                    }
+                    .sticky-top {
+                        position: sticky;
+                        top: 0;
+                        background-color: #ffffff;
+                        z-index: 10;
+                    }
                     </style>
             </head>
         <body>
@@ -115,14 +127,14 @@ def df_to_html_table(df: pd.DataFrame) -> str:
         '''
     # header
     html += '<tr>'
-    html += f'<th>Motif</th>'
+    html += f'<th class="sticky-top sticky-left" style="z-index: 11;">Motif</th>'
     for col in df.columns:
-        html += f'<th>{col}</th>'
+        html += f'<th class="sticky-top">{col}</th>'
     html += '</tr>\n'
     # rows
     for index, row in df.iterrows():
         html += '<tr>'
-        html += f'<td><strong>{index}</strong></td>\n'  # print row name in bold
+        html += f'<td class="sticky-left"><strong>{index}</strong></td>\n'  # print row name in bold
         for sample, cell in row.items():
             if str(cell).endswith(('.png', '.jpg', '.jpeg')) and os.path.exists(cell):
                 img_data = encode_image(cell)
