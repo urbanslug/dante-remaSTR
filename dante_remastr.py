@@ -1,4 +1,5 @@
 import argparse
+import csv
 import gzip
 import io
 import sys
@@ -16,6 +17,7 @@ import src.report as report
 import src.annotation as annotation
 from src.annotation.Motif import Motif
 from src.postfilter import PostFilter
+from src.filtering import has_good_quality, cut_low_quality
 
 
 def shorten_str(string: str, max_length: int = 40, ellipsis_str: str = '...') -> str:
@@ -108,13 +110,13 @@ def generate_result_line(motif_class: Motif, predicted: tuple[str, str], confide
             'repetition_index': module_number if second_module_number is None else f'{module_number}_{second_module_number}'}
 
 
-def process_group(args: argparse.Namespace, df: pd.DataFrame, motif_str: str) -> tuple[Motif, list[dict]]:
+def process_group(args: argparse.Namespace, df: pd.DataFrame, motif_str: str) -> tuple[Motif, list[dict], int, int]:
     """
     Process the group as pandas Dataframe. Return motif name if processed correctly or None otherwise.
     :param args: argparse.Namespace - namespace of program arguments
     :param df: pd.DataFrame - pandas DataFrame with information about annotated reads for a single motif to process
     :param motif_str: str - motif nomenclature
-    :return: Motif, list(dict) - motif, result lines
+    :return: Motif, list(dict), int - motif, result lines, input length, length of filtered intput
     """
     # build motif class
     name = None if 'name' not in df.columns or df.iloc[0]['name'] in ['None', ''] else df.iloc[0]['name']
@@ -122,6 +124,21 @@ def process_group(args: argparse.Namespace, df: pd.DataFrame, motif_str: str) ->
 
     # setup motif_directory
     motif_dir = f'{args.output_dir}/{motif_class.dir_name()}'
+
+    # filter/cut those with low quality
+    input_len = len(df)
+    if args.skip_quality_under > 0 and 'quality' in df.columns:
+        filtered_df = df[df.apply(lambda row: has_good_quality(row, args.skip_quality_under, 1, len(motif_class.get_modules()) - 2), axis=1)]
+        report.log_str(f'Kept {len(filtered_df):4d}/{len(df):4d} ({len(filtered_df) / len(df) * 100.0:5.1f}%) reads for {motif_class.dir_name()}')
+        df = filtered_df
+    if args.cut_quality_under > 0 and 'quality' in df.columns:
+        cut_df = df.apply(lambda row: cut_low_quality(row, args.cut_quality_under), axis=1)
+        kept_bases = cut_df['read'].str.len().sum()
+        all_bases = df['read'].str.len().sum()
+        report.log_str(f'Cut {all_bases - kept_bases:4d}/{all_bases:4d} ({(all_bases - kept_bases) / all_bases * 100.0:5.1f}%) bases for '
+                       f'{motif_class.dir_name()}')
+        df = cut_df
+    filtered_len = len(df)
 
     # create annotations from rows
     annotations = df.apply(
@@ -215,16 +232,16 @@ def process_group(args: argparse.Namespace, df: pd.DataFrame, motif_str: str) ->
     # try to get the overall nomenclature:
     if args.verbose:
         annotations = annotation.pairs_to_annotations_pick(annotation_pairs, None)
-        for module_number, _, _ in motif_class.get_repeating_modules():
+        for module_number, _, _ in repeating_modules:
             postfilter_class = PostFilter(args)
             annotations, _ = postfilter_class.get_filtered(annotations, module_number, both_primers=True)
         report.write_histogram_nomenclature(f'{motif_dir}/nomenclature.txt', annotations)
 
     # return motif name in case it was processed normally
-    return motif_class, result_lines
+    return motif_class, result_lines, input_len, filtered_len
 
 
-def process_group_tuple(x: tuple[argparse.Namespace, pd.DataFrame, str]) -> tuple[Motif, list[dict]]:
+def process_group_tuple(x: tuple[argparse.Namespace, pd.DataFrame, str]) -> tuple[Motif, list[dict], int, int]:
     """
     Wrapper for process_group() to use in parallelization (pool.imap).
     """
@@ -259,7 +276,7 @@ def generate_groups(input_stream: typing.TextIO, column_name: str = 'motif', chu
     current_group_data = pd.DataFrame()
 
     # read the output of remaSTR into annotations
-    for chunk in pd.read_csv(input_stream, sep='\t', chunksize=chunk_size, iterator=True):
+    for chunk in pd.read_csv(input_stream, sep='\t', chunksize=chunk_size, iterator=True, quoting=csv.QUOTE_NONE):
 
         # identify the unique groups in the chunk
         unique_groups = chunk[column_name].unique()
@@ -292,25 +309,29 @@ def generate_groups(input_stream: typing.TextIO, column_name: str = 'motif', chu
         yield current_group_data
 
 
-def consume_iterator(results_iterator: typing.Generator[tuple[Motif, list[dict]], any, None]) -> tuple[list[Motif], pd.DataFrame]:
+def consume_iterator(results_iterator: typing.Generator[tuple[Motif, list[dict], int, int], any, None]) -> tuple[list[Motif], pd.DataFrame, int, int]:
     """
     Consume iterator of results.
     :param results_iterator: generator - motif and its corresponding results of modules
-    :return: list[Motif], pd.DataFrame - motifs in list and table of all results
+    :return: list[Motif], pd.DataFrame, int - motifs in list and table of all results, input length
     """
     # consume iterator of results
     all_result_lines = []
     all_motifs = []
-    for i, (motif, rls) in enumerate(results_iterator):
+    all_input_len = 0
+    all_filtered_len = 0
+    for i, (motif, rls, input_l, filtered_l) in enumerate(results_iterator):
         # append data
         all_motifs.append(motif)
         all_result_lines.extend(rls)
+        all_input_len += input_l
+        all_filtered_len += filtered_l
 
         # report progress
         if args.progress > 0 and (i + 1) % args.progress == 0:
             report.log_str(f'Progress: {i + 1:10d} motifs done. ({datetime.now():%Y-%m-%d %H:%M:%S})')
 
-    return all_motifs, pd.DataFrame.from_dict(all_result_lines).sort_values(by=['motif_name'], kind='stable')
+    return all_motifs, pd.DataFrame.from_dict(all_result_lines).sort_values(by=['motif_name'], kind='stable'), all_input_len, all_filtered_len
 
 
 if __name__ == '__main__':
@@ -334,9 +355,12 @@ if __name__ == '__main__':
     # create iterator of results
     if args.processes > 1:
         with multiprocessing.Pool(args.processes) as pool:
-            all_motifs, rl_df = consume_iterator(pool.imap(process_group_tuple, all_inputs, chunksize=5))
+            all_motifs, rl_df, input_len, filtered_len = consume_iterator(pool.imap(process_group_tuple, all_inputs, chunksize=5))
     else:
-        all_motifs, rl_df = consume_iterator((process_group(*inputs) for inputs in all_inputs))
+        all_motifs, rl_df, input_len, filtered_len = consume_iterator((process_group(*inputs) for inputs in all_inputs))
+
+    # summary of the filtered reads
+    report.log_str(f'Kept {filtered_len:4d}/{input_len:4d} ({filtered_len / input_len * 100.0:5.1f}%) reads.')
 
     #  write the dataframe to stdout
     report.log_str(f'Writing output (stdout): {datetime.now():%Y-%m-%d %H:%M:%S}')

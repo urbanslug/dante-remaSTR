@@ -69,10 +69,17 @@ def load_arguments() -> argparse.Namespace:
                              help='Print all the outputs. Default is to print only the result table to stdout.')
         options.add_argument('--gzip-outputs', '-z', action='store_true', help='Store bigger outputs as gzipped files.')
         options.add_argument('--processes', '-p', type=positive_nonzero_int, help='Processes to use. Default=8', default=8)
-        options.add_argument('--progress', type=int, help='Print progress each number of motifs. Use 0 for no progress. Default=1000', default=1000)
-        options.add_argument('--cutoff-alignments', type=int, help='How many bases to keep beyond annotated part. '
-                                                                   'Provide negative (or huge number) for no cutoff. Default=20', default=20)
+        options.add_argument('--progress', type=positive_int, help='Print progress each number of motifs. Use 0 for no progress. Default=1000',
+                             default=1000)
+        options.add_argument('--cutoff-alignments', type=positive_int, default=20,
+                             help='How many bases to keep beyond annotated part. Provide negative (or huge number) for no cutoff. Default=20')
         options.add_argument('--male', action='store_true', help='Indicate that the sample is male. Process motifs from chrX/chrY as mono-allelic.')
+
+        debug = parser.add_argument_group('Debug')
+        debug.add_argument('--skip-quality-under', type=positive_int, default=0,
+                           help='Skip reads that have quality in the relevant place lower than this value. Default=0, so skip none.')
+        debug.add_argument('--cut-quality-under', type=positive_int, default=0,
+                           help='Cut parts of reads that have quality lower than this value. Default=0, so cut nothing.')
 
         args = parser.parse_args()
 

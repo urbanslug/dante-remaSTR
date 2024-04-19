@@ -474,7 +474,13 @@ def write_all(quality_annotations: list[annotation.Annotation], filt_primer: lis
         write_annotations(f'{motif_dir}/annotations_{suffix}_short.txt', [a.get_shortened_annotation(cutoff_alignments) for a in quality_annotations],
                           zip_it=zip_it)
     write_annotations(f'{motif_dir}/filtered_{suffix}.txt', filtered_annotations, zip_it=zip_it)
+    if len(filtered_annotations) and max([len(a.read_seq) for a in filtered_annotations]) > 200:
+        write_annotations(f'{motif_dir}/filtered_{suffix}_short.txt', [a.get_shortened_annotation(cutoff_alignments) for a in filtered_annotations],
+                          zip_it=zip_it)
     write_annotations(f'{motif_dir}/filtered_primer_{suffix}.txt', filt_primer, zip_it=zip_it)
+    if len(filt_primer) and max([len(a.read_seq) for a in filt_primer]) > 200:
+        write_annotations(f'{motif_dir}/filtered_primer_{suffix}_short.txt', [a.get_shortened_annotation(cutoff_alignments) for a in filt_primer],
+                          zip_it=zip_it)
     write_alignment(f'{motif_dir}/alignment_{suffix}.fasta', quality_annotations, module_number,
                     index_rep2=second_module_number, zip_it=zip_it, cutoff_after=cutoff_alignments)
     write_alignment(f'{motif_dir}/alignment_filtered_{suffix}.fasta', filt_primer, module_number,

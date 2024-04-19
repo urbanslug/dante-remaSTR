@@ -34,19 +34,26 @@ def create_report(args: argparse.Namespace) -> None:
     # find all motif directories in root directory
     tables = glob.glob(f'{args.input_path}/{args.table_name}')
 
+    print(f'Working on {len(tables)} tables')
+    if len(tables) == 0:
+        return
+
     # go through all tables and create one global
     global_table = pd.DataFrame()
     for table in tables:
-        # if we should skip the sample, skip it:
+        # extract names
         sample = table.split('/')[-2]
+        seq_tech = table.split('/')[-4]
+
+        # if we should skip the sample, skip it:
         if not re.match(args.sample_regex, sample):
+            print(f'Skipping sample {sample}, not matching regex {args.sample_regex}.')
             continue
 
         # read table
         df = pd.read_csv(table, sep='\t')
 
         # add sample/seq_tech columns
-        seq_tech = table.split('/')[-4]
         df['Sample'] = sample
         df['Sequencing Technology'] = seq_tech
 
