@@ -139,6 +139,8 @@ def process_group(args: argparse.Namespace, df: pd.DataFrame, motif_str: str) ->
                        f'{motif_class.dir_name()}')
         df = cut_df
     filtered_len = len(df)
+    if filtered_len == 0:
+        return motif_class, [], input_len, filtered_len
 
     # create annotations from rows
     annotations = df.apply(
@@ -321,11 +323,12 @@ def consume_iterator(results_iterator: typing.Generator[tuple[Motif, list[dict],
     all_input_len = 0
     all_filtered_len = 0
     for i, (motif, rls, input_l, filtered_l) in enumerate(results_iterator):
-        # append data
-        all_motifs.append(motif)
-        all_result_lines.extend(rls)
-        all_input_len += input_l
-        all_filtered_len += filtered_l
+        if filtered_l > 0:
+            # append data
+            all_motifs.append(motif)
+            all_result_lines.extend(rls)
+            all_input_len += input_l
+            all_filtered_len += filtered_l
 
         # report progress
         if args.progress > 0 and (i + 1) % args.progress == 0:
