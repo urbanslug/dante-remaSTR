@@ -111,7 +111,9 @@ motif_summary = """
 
 <script>
     $(document).ready( function () {{
-    $('#tg-{motif_id}').DataTable();
+    $('#tg-{motif_id}').DataTable({
+        scrollX: true
+    });
 }} );
 </script>
 <p><a href="#content">Back to content</a></p>

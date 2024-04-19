@@ -150,6 +150,17 @@
         // Show the current tab, and add an "active" class to the button that opened the tab
         document.getElementById(tabName).style.display = "block";
         evt.currentTarget.className += " active";
+
+        var tableName = `#tg-${tabName}`;
+        var table = $(tableName).DataTable({
+            scrollX: true,
+            retrieve: true,
+        });
+
+        // Adjust columns after showing the tab and ensuring the table is visible
+        setTimeout(function() {
+            table.columns.adjust().draw();
+        }, 0); // setTimeout with 0 delay helps in cases where the layout needs to stabilize
     }
 </script>
 </body>
