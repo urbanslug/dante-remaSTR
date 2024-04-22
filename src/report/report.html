@@ -27,13 +27,13 @@
             line-height: 1.5;
         }
 
-        .tg, .mtg {
+        .tg {
             border-collapse: collapse;
             border-spacing: 0;
             width: 100%;
         }
 
-        .tg td, .mtg td {
+        .tg td {
             padding: 7px 3px;
             border-style: solid;
             border-width: 1px;
@@ -41,7 +41,7 @@
             word-break: normal;
         }
 
-        .tg th, .mtg th {
+        .tg th {
             font-weight: normal;
             padding: 7px 3px;
             border-style: solid;
@@ -50,8 +50,12 @@
             word-break: normal;
         }
 
-        .tg .tg-s6z2, .mtg .mtg-s6z2 {
+        .tg .tg-s6z2 {
             text-align: center;
+        }
+
+        table.dataTable {
+            margin: 0;
         }
 
         .tg-smaller {
@@ -74,7 +78,7 @@
         }
 
         /* Style the buttons that are used to open the tab content */
-        .tab a {
+        .tablinks {
             display: block;
             background-color: inherit;
             color: black;
@@ -87,12 +91,12 @@
         }
 
         /* Change background color of buttons on hover */
-        .tab a:hover {
+        .tablinks:hover {
             background-color: #ddd;
         }
 
         /* Create an active/current "tab button" class */
-        .tab a.active {
+        .tablinks.active {
             background-color: #ccc;
         }
 

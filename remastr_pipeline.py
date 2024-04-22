@@ -30,6 +30,7 @@ def load_arguments() -> argparse.Namespace:
     parser.add_argument('--use-old-defaults', '-d', action='store_true', help='Use old defaults for dante_remastr call')
     parser.add_argument('--visualize', '-v', action='store_true', help='Print all the outputs. Default is to print only the result table to stdout.')
     parser.add_argument('--skip-call', '-s', action='store_true', help='Skip the calling of scripts, just do a dry run.')
+    parser.add_argument('--skip-remastr', action='store_true', help='Skip the calling of remastr, use only when recomputing results.')
     parser.add_argument('--ignore-errors', '-e', action='store_true', help='Ignore errors and continue, otherwise end after first non 0 return code.')
 
     # preprocessing
@@ -131,7 +132,7 @@ if __name__ == '__main__':
             # print and call commands
             if not args.skip_call:
                 os.makedirs(output_dir, exist_ok=True)
-            run_command(remastr_call, not args.ignore_errors, args.skip_call)
+            run_command(remastr_call, not args.ignore_errors, args.skip_call or args.skip_remastr)
             run_command(dante_call, not args.ignore_errors, args.skip_call)
 
         # remove temporary bam

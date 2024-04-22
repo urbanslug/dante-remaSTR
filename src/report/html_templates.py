@@ -7,10 +7,10 @@ import pandas as pd
 from src.postfilter import PostFilter
 
 contents = """
-<table class="mtg" id="content-tg">
+<table class="tg" id="content-tg">
     <thead>
         <tr>
-            <th class="mtg-s6z2">Motif</th>
+            <th class="tg-s6z2">Motif</th>
         </tr>
     </thead>
     <tbody>
@@ -28,7 +28,7 @@ make_datatable_string = """
 """
 
 content_string = """ <tr>
-    <td class="mtg-s6z2">
+    <td class="tg-s6z2">
         <a href="#{motif_name}" class="tablinks" onclick="openTab(event, '{motif_name}'); $('.{motif_name}').trigger('content-change');">{motif}</a>
     </td>
 </tr>"""
