@@ -171,42 +171,35 @@ alleles: {result}<br>
     <tr>
         <td colspan="1">
             <div class="hist pic100 {motif_id}" id="hist-{motif_name}"></div>
-            <script>
-                {{
-                    let hist_data = {motif_reps};
-                    $(document).ready( function() {{
-                        $('.{motif_id}').bind("content-change", function() {{
-                            if (document.getElementById('{motif_id}').style.display === 'block') {{
-                                Plotly.react('hist-{motif_name}', hist_data, {{}});
-                            }}
-                            else {{
-                                Plotly.react('hist-{motif_name}', {{}}, {{}});
-                            }}
-                        }})
-                    }})
-                }}
-            </script>
         </td>
         <td colspan="1">
             <div class="pcol pic100 {motif_id}" id="pcol-{motif_name}"></div>
-            <script>
-                {{
-                    let pcol_data = {motif_pcolor};
-                    $(document).ready( function() {{
-                        $('.{motif_id}').bind("content-change", function() {{
-                            if (document.getElementById('{motif_id}').style.display === 'block') {{
-                                Plotly.react('pcol-{motif_name}', pcol_data, {{}});
-                            }}
-                            else {{
-                                Plotly.react('pcol-{motif_name}', {{}}, {{}});
-                            }}
-                        }})
-                    }})
-                }}
-            </script>
         </td>
     </tr>
 </table>
+
+<script>
+    {{
+        let hist_data = {motif_reps};
+        let pcol_data = {motif_pcolor};
+        
+        let updateGraph = () => {{
+            if (document.getElementById('{motif_id}').style.display === 'block') {{
+                hist_data['layout'] = {{...hist_data['layout'], width: (window.innerWidth-50) * 0.6, height: (window.innerWidth-50) * 0.35,
+                    legend: {{...hist_data['layout']['legend'], x: 0.85, y: 0.85 }}}};
+                pcol_data['layout'] = {{...pcol_data['layout'], width: (window.innerWidth-50) * 0.4, height: (window.innerWidth-50) * 0.35}};
+                Plotly.react('hist-{motif_name}', hist_data);
+                Plotly.react('pcol-{motif_name}', pcol_data);
+            }}
+        }};
+        
+        $(document).ready(function() {{
+            $('.{motif_id}').bind("content-change", updateGraph);
+            window.addEventListener('resize', updateGraph, true);
+        }});
+    }}
+</script>
+
 <p><a href="{alignment}">Link to alignments</a></p>
 <p><a href="#content">Back to content</a></p>
 """
@@ -219,25 +212,29 @@ alleles: {result}<br>
 <table class="plots">
     <tr>
         <td colspan="1">
-            <div class="hist pic50 {motif_id}" id="hist2d-{motif_name}"></div>
-            <script>
-                {{
-                    let hist2d_data = {motif_reps};
-                    $(document).ready( function() {{
-                        $('.{motif_id}').bind("content-change", function() {{
-                            if (document.getElementById('{motif_id}').style.display === 'block') {{
-                                Plotly.react('hist2d-{motif_name}', hist2d_data, {{}});
-                            }}
-                            else {{
-                                Plotly.react('hist2d-{motif_name}', {{}}, {{}});
-                            }}
-                        }})
-                    }})
-                }}
-            </script>
+            <div class="hist {motif_id}" id="hist2d-{motif_name}"></div>
         </td>
     </tr>
 </table>
+
+<script>
+    {{
+        let hist_data = {motif_reps};
+        
+        let updateGraph = () => {{
+            if (document.getElementById('{motif_id}').style.display === 'block') {{
+                hist_data['layout'] = {{...hist_data['layout'], width: (window.innerWidth-50) * 0.5, height: (window.innerWidth-50) * 0.45}};
+                Plotly.react('hist2d-{motif_name}', hist_data);
+            }}
+        }};
+        
+        $(document).ready(function() {{
+            $('.{motif_id}').bind("content-change", updateGraph);
+            window.addEventListener('resize', updateGraph, true);
+        }});
+    }}
+</script>
+
 <p><a href="{alignment}">Link to alignments</a></p>
 <p><a href="#content">Back to content</a></p>
 """
@@ -251,18 +248,32 @@ alleles: {result}<br>
     <tr>
         <td colspan="1">
             <div class="hist pic100 {motif_id}" id="hist-{motif_name}"></div>
-            <script>
-                Plotly.react('hist-{motif_name}', {motif_reps}, {{}});
-            </script>
         </td>
         <td colspan="1">
             <div class="pcol pic100 {motif_id}" id="pcol-{motif_name}"></div>
-            <script>
-                Plotly.react('pcol-{motif_name}', {motif_pcolor}, {{}});
-            </script>
         </td>
     </tr>
 </table>
+
+<script>
+    {{
+        let hist_data = {motif_reps};
+        let pcol_data = {motif_pcolor};
+        
+        let updateGraph = () => {{
+            hist_data['layout'] = {{...hist_data['layout'], width: (window.innerWidth-50) * 0.6, height: (window.innerWidth-50) * 0.35,
+                legend: {{...hist_data['layout']['legend'], x: 0.85, y: 0.85 }}}};
+            pcol_data['layout'] = {{...pcol_data['layout'], width: (window.innerWidth-50) * 0.4, height: (window.innerWidth-50) * 0.35}};
+            Plotly.react('hist-{motif_name}', hist_data);
+            Plotly.react('pcol-{motif_name}', pcol_data);
+        }};
+        updateGraph();
+        $(document).ready(function() {{
+            window.addEventListener('resize', updateGraph, true);
+        }});
+    }}
+</script>
+
 <p><a href="{alignment}">Link to alignments</a></p>
 <p><a href="#content">Back to content</a></p>
 """
@@ -276,12 +287,25 @@ alleles: {result}<br>
     <tr>
         <td colspan="1">
             <div class="hist pic50 {motif_id}" id="hist2d-{motif_name}"></div>
-            <script>
-                Plotly.react('hist2d-{motif_name}', {motif_reps}, {{}});
-            </script>
         </td>
     </tr>
 </table>
+
+<script>
+    {{
+        let hist_data = {motif_reps};
+        
+        let updateGraph = () => {{
+            hist_data['layout'] = {{...hist_data['layout'], width: (window.innerWidth-50) * 0.5, height: (window.innerWidth-50) * 0.45}};
+            Plotly.react('hist2d-{motif_name}', hist_data);
+        }};
+        updateGraph();
+        $(document).ready(function() {{
+            window.addEventListener('resize', updateGraph, true);
+        }});
+    }}
+</script>
+
 <p><a href="#content">Back to content</a></p>
 """
 
