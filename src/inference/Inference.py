@@ -443,7 +443,7 @@ class Inference:
         return evaluated_models
 
     def print_pcolor(self, lh_dict: dict[tuple[int | str, int | str]: float], display_file: str | None,
-                     name: str, lognorm: bool = True) -> tuple[np.array, tuple[int, int], tuple[int | str, int | str]]:
+                     name: str, lognorm: bool = True) -> tuple[np.array, tuple[int, int]]:
         """
         Get maximum likelihood option and alternatively print it to image file.
         :param lh_dict: dict(tuple(int, int):float) - directory of model indices to their likelihood
@@ -453,12 +453,10 @@ class Inference:
         :return: tuple(int, int) - option with the highest likelihood
         """
         # convert to a numpy array:
-        monoallelic = False
         lh_array = np.zeros((self.max_rep, self.max_rep + 1))
         for (k1, k2), v in lh_dict.items():
             if k2 == 'X':  # if we have mono-allelic
                 k2 = k1
-                monoallelic = True
             if k2 == 'B' or k1 == 'E' or (isinstance(k1, int) and isinstance(k2, int) and k2 < k1):  # B is the smallest, E is the largest!
                 k1, k2 = k2, k1
             if k1 == 'B':
@@ -474,7 +472,7 @@ class Inference:
         # get minimal and maximal likelihood
         ind_good = (lh_array < 0.0) & (lh_array > -1e10) & (lh_array != np.nan)
         if len(lh_array[ind_good]) == 0:
-            return lh_array, (0, 0), ('B', 'B')
+            return lh_array, (0, 0)
         lh_array[~ind_good] = np.NINF
         z_min, z_max = min(lh_array[ind_good]), max(lh_array[ind_good])
 
@@ -577,9 +575,16 @@ class Inference:
 
         # output best option
         best = sorted(np.unravel_index(np.argmax(lh_array), lh_array.shape))
-        best = (int(best[0]), int(best[1]))
+        return lh_array, (int(best[0]), int(best[1]))
 
-        # and convert it to symbols
+    def convert_to_sym(self, best: tuple[int, int], monoallelic: bool) -> tuple[int | str, int | str]:
+        """
+        Convert numeric alleles to their symbolic representations.
+        :param best: (int, int) - numeric representation of alleles
+        :param monoallelic: bool - if this is monoallelic version
+        :return: (int|str, int|str) - symbolic representation of alleles
+        """
+        # convert it to symbols
         if best[0] == 0 and best[1] == self.max_rep:
             best_sym = ('E', 'E')
         else:
@@ -589,7 +594,7 @@ class Inference:
         if monoallelic:
             best_sym = (best_sym[0], 'X')
 
-        return lh_array, best, best_sym
+        return best_sym
 
     def get_confidence(self, lh_array: np.ndarray, predicted: tuple[int, int], monoallelic: bool = False) -> ConfidenceType:
         """
@@ -673,7 +678,14 @@ class Inference:
         lh_dict = self.infer(annotations, filt_annotations, index_rep, verbose=False, monoallelic=monoallelic)
 
         # print pcolor image
-        lh_array, predicted, predicted_sym = self.print_pcolor(lh_dict, file_pcolor, name)
+        lh_array, predicted = self.print_pcolor(lh_dict, file_pcolor, name)
+
+        # adjust for no spanning reads (should output Background)
+        if len(annotations) == 0:
+            predicted = (0, 0)
+
+        # convert numbers to symbols
+        predicted_sym = self.convert_to_sym(predicted, monoallelic)
 
         # get confidence of our prediction
         confidence = self.get_confidence(lh_array, predicted, monoallelic)

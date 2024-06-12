@@ -273,14 +273,12 @@ def create_reports(arg_list: argparse.Namespace):
             hist = cl.find(class_='hist').find_next('script').text
             pcol = cl.find(class_='pcol')
 
-            if pcol:
-                pcol = pcol.find_next('script').text
+            pcol = pcol.find_next('script').text if pcol else ''
 
             prev = cl.find_previous('p').find_all('u')
 
             if len(prev) > 1:
                 continue
-
             hist_data_re = re.match(r"[\w\W]+let hist_data = ({.+});[\w\W]+", hist)
             if hist_data_re is None:
                 continue
