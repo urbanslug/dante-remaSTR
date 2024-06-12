@@ -1,6 +1,7 @@
 import argparse
 import glob
 import os
+import re
 import subprocess
 
 
@@ -12,9 +13,11 @@ def load_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
                                      description='Python script to run the whole Dante REMASTR pipeline for several files')
 
-    # add arguments
+    # required
     parser.add_argument('bam_files', help='Glob path to bam file(s) that needs to be processed')
     parser.add_argument('nomenclature_file', help='Path to nomenclature file')
+
+    # additional args
     parser.add_argument('output_dir', help='Path to directory where the output will be stored. Default=<current_dir>/results', nargs='?',
                         default=None)
     parser.add_argument('--skipbams', type=int, help='Skip some BAMs. Default=0', default=0)
@@ -32,6 +35,9 @@ def load_arguments() -> argparse.Namespace:
     parser.add_argument('--skip-call', '-s', action='store_true', help='Skip the calling of scripts, just do a dry run.')
     parser.add_argument('--skip-remastr', action='store_true', help='Skip the calling of remastr, use only when recomputing results.')
     parser.add_argument('--ignore-errors', '-e', action='store_true', help='Ignore errors and continue, otherwise end after first non 0 return code.')
+    parser.add_argument('--additional-bams', help='More glob paths to bam file(s) to process.', nargs='*', default=[])
+    parser.add_argument('--regex-bam', help='Regex for basename of bam files for finer control. Default=\'^[^.]+\\.[^.]+$\' (all with one dot)',
+                        default=r'^[^.]+\.[^.]+$')
 
     # preprocessing
     parser.add_argument('--flank-len', '-f', type=int, help='Flank length to include into HMM (remastr). Default=30', default=30)
@@ -83,8 +89,11 @@ if __name__ == '__main__':
     os.makedirs(args.output_dir, exist_ok=True)
 
     # select bam files
-    bam_files = glob.glob(args.bam_files)
-    bam_files = [bam for bam in bam_files if os.path.basename(bam).count('.') == 1]
+    bam_paths = [args.bam_files] + args.additional_bams
+    bam_files = []
+    for bam_path in bam_paths:
+        bam_files.extend(glob.glob(bam_path))
+    bam_files = [bam for bam in bam_files if re.match(args.regex_bam, os.path.basename(bam))]
     bam_files = sorted(bam_files)[args.skipbams:args.skipbams + args.maxbams]
 
     print(f'Working on {len(bam_files)} samples...')
@@ -106,11 +115,11 @@ if __name__ == '__main__':
         temp_bam = None
         recompute_call = None
         if args.bam_conversion is not None:
-            temp_bam = f'{args.bam_temp_loc}/{sample_name}_temp_recomputed.bam'
+            temp_bam = f'{os.path.expanduser(args.bam_temp_loc)}/{sample_name}_temp_recomputed.bam'
             recompute_call = args.bam_conversion.format(input=bam_file, output=temp_bam)
             bam_file = temp_bam
             if not os.path.exists(temp_bam):
-                run_command(recompute_call, not args.ignore_errors, args.skip_call)
+                run_command(recompute_call, not args.ignore_errors, args.skip_call or args.skip_remastr)
 
         # go through all nomenclature names
         for nomenclature_file, nomenclature_name in zip(nomenclatures, nomenclature_names):
@@ -137,7 +146,7 @@ if __name__ == '__main__':
 
         # remove temporary bam
         if temp_bam is not None:
-            run_command(f'rm {temp_bam}*', not args.ignore_errors, args.skip_call)
+            run_command(f'rm {temp_bam}*', not args.ignore_errors, args.skip_call or args.skip_remastr)
 
     # gather results
     for nomenclature_name in nomenclature_names:
