@@ -125,8 +125,8 @@ if __name__ == '__main__':
         for nomenclature_file, nomenclature_name in zip(nomenclatures, nomenclature_names):
             output_dir = args.output_dir if args.skip_subpath else f'{args.output_dir}/{nomenclature_name}/{sample_name}'
 
-            # TODO change back quality 0
-            remastr_params = '--flank 30 --quality 1' if args.use_old_defaults else (f'--flank {args.flank_len} --quality {args.min_mapq}' +
+            # build remastr call
+            remastr_params = '--flank 30 --quality 0' if args.use_old_defaults else (f'--flank {args.flank_len} --quality {args.min_mapq}' +
                                                                                      (' -d' if not args.include_duplicates else ''))
             remastr_params += ' ' + args.remastr_args
             remastr_call = (f'{args.dante_repo}/remastr/target/release/remastr -f {args.reference_fasta} -m {nomenclature_file} '
