@@ -64,6 +64,9 @@ class Annotation:
         self.module_repetitions = self.__get_module_repetitions()
         self.module_sequences = self.__get_module_sequences()
 
+        # get left flank length
+        self.left_flank_len = self.__get_left_flank()
+
     def __str__(self) -> str:
         """
         Return the annotation.
@@ -97,6 +100,16 @@ class Annotation:
         """
         # Count the module states
         return tuple(self.states.count(chr(ord('0') + i)) for i in range(self.n_modules))
+
+    def __get_left_flank(self) -> int:
+        """
+        Get length of a left flank.
+        :return: int - number of bases of left flank before module '0' (usually module '0' is still left flank)
+        """
+        for i, state in enumerate(self.states):
+            if state != '-':
+                return i
+        return len(self.states)
 
     def __get_module_repetitions(self) -> tuple[int, ...]:
         """

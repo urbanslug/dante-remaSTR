@@ -336,7 +336,7 @@ align_vis = """
                 conserv: false,
                 metaIdentity: true,
                 overviewbox: true,
-                seqlogo: true
+                seqlogo: {seq_logo}
             }},
             seqs: seqs,
             colorscheme: {{"scheme": "nucleotide"}},
@@ -480,7 +480,7 @@ def generate_motifb64(sequence: str, result: pd.Series, repetition: str, pcolor:
         reps = open(repetition, 'r').read()
         align_html = generate_alignment(motif_clean, alignment, motif_clean.split('_')[0])
         filt_align_html = generate_alignment(motif_clean + '_filtered', filtered_alignment, motif_clean.split('_')[0],
-                                             'Partial reads alignment visualization')
+                                             'Partial reads alignment visualization', seq_logo=False)
         # select template
         motif_template = motif_templates['static' if static else 'dynamic']['no-pcol' if pcolor is None else 'pcol']
 
@@ -500,13 +500,15 @@ def generate_motifb64(sequence: str, result: pd.Series, repetition: str, pcolor:
                 (motif, ''))
 
 
-def generate_alignment(motif: str, alignment_file: str, motif_id: str, display_text: str = 'Click to toggle alignment visualization') -> str:
+def generate_alignment(motif: str, alignment_file: str, motif_id: str, display_text: str = 'Click to toggle alignment visualization',
+                       seq_logo: bool = True) -> str:
     """
     Generate HTML code for the fancy alignment.
     :param motif: str - name of the motif
     :param alignment_file: str - filename of the alignment file
     :param motif_id: str - motif identification
     :param display_text: str - string to display when the alignment is hidden
+    :param seq_logo: bool - display sequence logo?
     :return: str - code of the fancy alignment
     """
     if alignment_file is None:
@@ -517,6 +519,6 @@ def generate_alignment(motif: str, alignment_file: str, motif_id: str, display_t
             string = f.read()
         string = string[:string.find('#')]
 
-        return align_vis.format(fasta=string, name=motif, motif_id=motif_id, display_text=display_text)
+        return align_vis.format(fasta=string, name=motif, motif_id=motif_id, display_text=display_text, seq_logo='true' if seq_logo else 'false')
     except (IOError, TypeError, AttributeError):
         return ''
