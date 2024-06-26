@@ -70,7 +70,8 @@ def write_annotation_pairs(out_file: str, annotation_pairs: list[annotation.Anno
 
 
 def write_alignment(out_file: str, annotations: list[annotation.Annotation], index_rep: int, allele: int = None, index_rep2: int = None,
-                    allele2: int = None, zip_it: bool = True, cutoff_after: int = None) -> None:
+                    allele2: int = None, zip_it: bool = True, cutoff_after: int = None, right_align: bool = False) -> None:
+    # TODO this needs complete rework
     """
     Creates a multi-alignment of all annotations into output text file
     :param out_file: str - alignment filename
@@ -80,6 +81,7 @@ def write_alignment(out_file: str, annotations: list[annotation.Annotation], ind
     :param index_rep2: int - index of second repetition module of a motif
     :param allele2: int/None - which allele2 to print only, if None print all of them
     :param zip_it: bool - whether to gzip the resulting file
+    :param right_align: bool - whether we deal with right alignment file
     :param cutoff_after: int - how many bases to keep outside the annotated motif (None for keep all)
     """
     # select annotations
@@ -129,14 +131,15 @@ def write_alignment(out_file: str, annotations: list[annotation.Annotation], ind
 
     # sort according to motif count:
     left_flank = np.array([-(ann.module_bases[0] + ann.left_flank_len) for ann in annotations])
+    left_flank_exist = np.array([-(ann.module_repetitions[0]) if not right_align else 0 for ann in annotations])
     if index_rep2 is not None:
         # sorting first with 1st allele then with second
-        reps1 = np.array([-ann.module_repetitions[index_rep] for ann in annotations])
-        reps2 = np.array([-ann.module_repetitions[index_rep2] for ann in annotations])
-        sort_inds = np.lexsort((reps1, reps2, left_flank))  # sort by first allele, then by second, then by left flank
+        reps1 = np.array([-ann.module_bases[index_rep] for ann in annotations])
+        reps2 = np.array([-ann.module_bases[index_rep2] for ann in annotations])
+        sort_inds = np.lexsort((left_flank, reps2, reps1, left_flank_exist))  # sort by existence of left flank, first allele, second, left flank len.
     else:
-        reps = np.array([-ann.module_repetitions[index_rep] for ann in annotations])
-        sort_inds = np.lexsort((reps, left_flank))
+        reps = np.array([-ann.module_bases[index_rep] for ann in annotations])
+        sort_inds = np.lexsort((left_flank, reps, left_flank_exist))
     annotations = np.array(annotations)[sort_inds]
     alignments = list(np.array(alignments)[sort_inds])
 
@@ -198,13 +201,13 @@ def write_alignment(out_file: str, annotations: list[annotation.Annotation], ind
     start1, end1 = get_range('1')
     first_zero_idx = len(alignments)
     for i in range(len(alignments)):
-        if start0 != -1 and start1 != -1 and alignments[i][start0:end0].count('_') == end0 - start0:
+        if start1 != -1 and (start0 == -1 or alignments[i][start0:end0].count('_') == end0 - start0 or right_align):
             first_zero_idx = min(first_zero_idx, i)
             alignments[i] = move_right(alignments[i], start1, end1)
 
     # add empty line if we have some alignments without left flank
     annot_names = [annot.read_id for annot in annotations]
-    if first_zero_idx != len(alignments):
+    if first_zero_idx != len(alignments) and not right_align:
         alignments = alignments[:first_zero_idx] + ['_' * len(alignments[0])] + alignments[first_zero_idx:]
         annot_names = annot_names[:first_zero_idx] + ['empty_line'] + annot_names[first_zero_idx:]
 
@@ -526,6 +529,10 @@ def write_all(quality_annotations: list[annotation.Annotation], filt_primer: lis
                     index_rep2=second_module_number, zip_it=zip_it, cutoff_after=cutoff_alignments)
     write_alignment(f'{motif_dir}/alignment_filtered_{suffix}.fasta', filt_primer, module_number,
                     index_rep2=second_module_number, zip_it=zip_it, cutoff_after=cutoff_alignments)
+    write_alignment(f'{motif_dir}/alignment_filtered_left_{suffix}.fasta', [a for a in filt_primer if a.module_bases[0] > 0], module_number,
+                    index_rep2=second_module_number, zip_it=zip_it, cutoff_after=cutoff_alignments)
+    write_alignment(f'{motif_dir}/alignment_filtered_right_{suffix}.fasta', [a for a in filt_primer if a.module_bases[-1] > 0], module_number,
+                    index_rep2=second_module_number, zip_it=zip_it, cutoff_after=cutoff_alignments, right_align=True)
 
     # write histogram image
     if second_module_number is not None:
@@ -667,6 +674,8 @@ def write_report(motifs: list[Motif], result_table: pd.DataFrame, post_filter: P
                 pcol_file = find_file(f'{report_dir}/{motif.dir_name()}/pcolor_{suffix}.json')
                 align_file = find_file(f'{report_dir}/{motif.dir_name()}/alignment_{suffix}.fasta', include_gzip=True)
                 filt_align_file = find_file(f'{report_dir}/{motif.dir_name()}/alignment_filtered_{suffix}.fasta', include_gzip=True)
+                filt_left_file = find_file(f'{report_dir}/{motif.dir_name()}/alignment_filtered_left_{suffix}.fasta', include_gzip=True)
+                filt_right_file = find_file(f'{report_dir}/{motif.dir_name()}/alignment_filtered_right_{suffix}.fasta', include_gzip=True)
 
                 # generate rows of tables and images
                 row = report.html_templates.generate_row(seq, result, post_filter)
@@ -674,7 +683,8 @@ def write_report(motifs: list[Motif], result_table: pd.DataFrame, post_filter: P
                 rows_static.append(row)
 
                 # add the tables
-                mc, m, a = report.html_templates.generate_motifb64(seq, result, rep_file, pcol_file, align_file, filt_align_file, post_filter)
+                mc, m, a = report.html_templates.generate_motifb64(seq, result, rep_file, pcol_file, align_file, filt_align_file, filt_left_file,
+                                                                   filt_right_file, post_filter)
                 if motif.name in mcs:
                     ms[motif.name].append(m)
                     alignments[motif.dir_name()][1].append(a[1])
@@ -684,8 +694,8 @@ def write_report(motifs: list[Motif], result_table: pd.DataFrame, post_filter: P
                     alignments[motif.dir_name()] = (a[0], [a[1]])
 
                 # and static tables
-                mc, m, a = report.html_templates.generate_motifb64(seq, result, rep_file, pcol_file, align_file, filt_align_file, post_filter,
-                                                                   static=True)
+                mc, m, a = report.html_templates.generate_motifb64(seq, result, rep_file, pcol_file, align_file, filt_align_file, filt_left_file,
+                                                                   filt_right_file, post_filter, static=True)
                 if mc not in mcs_static:
                     mcs_static.append(mc)
                 ms_static.append(m)

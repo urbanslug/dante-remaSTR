@@ -429,7 +429,8 @@ def get_alignment_name(alignment_file: str, allele: int) -> str:
 
 
 def generate_motifb64(sequence: str, result: pd.Series, repetition: str, pcolor: str | None, alignment: str | None, filtered_alignment: str | None,
-                      postfilter: PostFilter, static: bool = False) -> tuple[str, str, tuple[str, str]]:
+                      filtered_left_alignment: str | None, filtered_right_alignment: str | None, postfilter: PostFilter,
+                      static: bool = False) -> tuple[str, str, tuple[str, str]]:
     """
     Generate part of a html report for each motif.
     :param sequence: str - motif sequence
@@ -437,6 +438,8 @@ def generate_motifb64(sequence: str, result: pd.Series, repetition: str, pcolor:
     :param pcolor: str - filename of pcolor figures
     :param alignment: str/None - filename of alignment file
     :param filtered_alignment: str/None - filename of filtered alignment file
+    :param filtered_left_alignment: str/None - filename of filtered left alignment file
+    :param filtered_right_alignment: str/None - filename of filtered right alignment file
     :param postfilter: PostFilter - postfilter arguments
     :param static: bool - generate static code?
     :return: (str, str) - content and main part of the html report for motifs
@@ -478,9 +481,13 @@ def generate_motifb64(sequence: str, result: pd.Series, repetition: str, pcolor:
 
     if repetition is not None:
         reps = open(repetition, 'r').read()
-        align_html = generate_alignment(motif_clean, alignment, motif_clean.split('_')[0])
+        align_html = generate_alignment(motif_clean, alignment, motif_clean.split('_')[0], 'Spanning reads alignment visualization')
         filt_align_html = generate_alignment(motif_clean + '_filtered', filtered_alignment, motif_clean.split('_')[0],
                                              'Partial reads alignment visualization', seq_logo=False)
+        left_align_html = generate_alignment(motif_clean + '_filtered_left', filtered_left_alignment, motif_clean.split('_')[0],
+                                             'Left flank reads alignment visualization')
+        right_align_html = generate_alignment(motif_clean + '_filtered_right', filtered_right_alignment, motif_clean.split('_')[0],
+                                               'Right flank reads alignment visualization')
         # select template
         motif_template = motif_templates['static' if static else 'dynamic']['no-pcol' if pcolor is None else 'pcol']
 
@@ -492,7 +499,8 @@ def generate_motifb64(sequence: str, result: pd.Series, repetition: str, pcolor:
                 motif_template.format(post_bases=postfilter.min_rep_len, post_reps=postfilter.min_rep_cnt, motif_name=motif_clean_id,
                                       motif_id=motif_clean.rsplit('_', 1)[0], motif=motif, motif_reps=reps, result=result, motif_pcolor=pcol,
                                       alignment=f'{motif_name.replace(" ", "%20")}/alignments.html', sequence=sequence, errors=errors),
-                (motif, alignment_string.format(sequence=sequence, alignment=align_html + align_html_a1 + align_html_a2 + filt_align_html)))
+                (motif, alignment_string.format(sequence=sequence, alignment=align_html + align_html_a1 + align_html_a2 +
+                                                                             filt_align_html + left_align_html + right_align_html)))
     else:
         return (content_string_empty.format(motif_name=motif_clean.rsplit('_', 1)[0], motif=motif),
                 motif_string_empty.format(post_bases=postfilter.min_rep_len, post_reps=postfilter.min_rep_cnt,
