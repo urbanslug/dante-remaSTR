@@ -165,6 +165,12 @@ motif_summary_static = """
 motif_stringb64 = """
 <h2 id="data-{motif_name}">{motif}</h2>
 <p>{sequence}</p>
+Nomenclatures:<br>
+<table class="nomtg">
+    <tbody>
+        {nomenclatures}
+    </tbody>
+</table>
 postfilter: bases {post_bases} , repetitions {post_reps} , max. errors {errors}<br>
 alleles: {result}<br>
 <table class="plots">
@@ -207,6 +213,12 @@ alleles: {result}<br>
 motif_stringb64_reponly = """
 <h2 id="data-{motif_name}">{motif}</h2>
 <p>{sequence}</p>
+Nomenclatures:<br>
+<table class="nomtg">
+    <tbody>
+        {nomenclatures}
+    </tbody>
+</table>
 postfilter: bases {post_bases} , repetitions {post_reps} , max. errors {errors}<br>
 alleles: {result}<br>
 <table class="plots">
@@ -242,6 +254,12 @@ alleles: {result}<br>
 motif_stringb64_static = """
 <h2 id="{motif_name}">{motif}</h2>
 <p>{sequence}</p>
+Nomenclatures:<br>
+<table class="nomtg">
+    <tbody>
+        {nomenclatures}
+    </tbody>
+</table>
 postfilter: bases {post_bases} , repetitions {post_reps} , max. errors {errors}<br>
 alleles: {result}<br>
 <table class="plots">
@@ -281,6 +299,12 @@ alleles: {result}<br>
 motif_stringb64_reponly_static = """
 <h2 id="{motif_name}">{motif}</h2>
 <p>{sequence}</p>
+Nomenclatures:<br>
+<table class="nomtg">
+    <tbody>
+        {nomenclatures}
+    </tbody>
+</table>
 postfilter: bases {post_bases} , repetitions {post_reps} , max. errors {errors}<br>
 alleles: {result}<br>
 <table class="plots">
@@ -429,8 +453,8 @@ def get_alignment_name(alignment_file: str, allele: int) -> str:
 
 
 def generate_motifb64(sequence: str, result: pd.Series, repetition: str, pcolor: str | None, alignment: str | None, filtered_alignment: str | None,
-                      filtered_left_alignment: str | None, filtered_right_alignment: str | None, postfilter: PostFilter,
-                      static: bool = False) -> tuple[str, str, tuple[str, str]]:
+                      filtered_left_alignment: str | None, filtered_right_alignment: str | None, nomenclature_lines: list[str],
+                      postfilter: PostFilter, static: bool = False) -> tuple[str, str, tuple[str, str]]:
     """
     Generate part of a html report for each motif.
     :param sequence: str - motif sequence
@@ -440,6 +464,7 @@ def generate_motifb64(sequence: str, result: pd.Series, repetition: str, pcolor:
     :param filtered_alignment: str/None - filename of filtered alignment file
     :param filtered_left_alignment: str/None - filename of filtered left alignment file
     :param filtered_right_alignment: str/None - filename of filtered right alignment file
+    :param nomenclature_lines: list[str] - list of nomenclature strings
     :param postfilter: PostFilter - postfilter arguments
     :param static: bool - generate static code?
     :return: (str, str) - content and main part of the html report for motifs
@@ -487,7 +512,8 @@ def generate_motifb64(sequence: str, result: pd.Series, repetition: str, pcolor:
         left_align_html = generate_alignment(motif_clean + '_filtered_left', filtered_left_alignment, motif_clean.split('_')[0],
                                              'Left flank reads alignment visualization')
         right_align_html = generate_alignment(motif_clean + '_filtered_right', filtered_right_alignment, motif_clean.split('_')[0],
-                                               'Right flank reads alignment visualization')
+                                              'Right flank reads alignment visualization')
+
         # select template
         motif_template = motif_templates['static' if static else 'dynamic']['no-pcol' if pcolor is None else 'pcol']
 
@@ -498,7 +524,8 @@ def generate_motifb64(sequence: str, result: pd.Series, repetition: str, pcolor:
         return (content_string.format(motif_name=motif_clean.rsplit('_', 1)[0], motif=motif),
                 motif_template.format(post_bases=postfilter.min_rep_len, post_reps=postfilter.min_rep_cnt, motif_name=motif_clean_id,
                                       motif_id=motif_clean.rsplit('_', 1)[0], motif=motif, motif_reps=reps, result=result, motif_pcolor=pcol,
-                                      alignment=f'{motif_name.replace(" ", "%20")}/alignments.html', sequence=sequence, errors=errors),
+                                      alignment=f'{motif_name.replace(" ", "%20")}/alignments.html', sequence=sequence, errors=errors,
+                                      nomenclatures='\n'.join(nomenclature_lines)),
                 (motif, alignment_string.format(sequence=sequence, alignment=align_html + align_html_a1 + align_html_a2 +
                                                                              filt_align_html + left_align_html + right_align_html)))
     else:

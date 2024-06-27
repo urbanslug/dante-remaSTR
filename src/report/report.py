@@ -14,7 +14,7 @@ import pandas as pd
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-from src import annotation, inference
+from src import annotation
 from src import report
 from src.annotation.Motif import Motif
 from src.postfilter import PostFilter
@@ -626,14 +626,44 @@ def find_file(filename: str, include_gzip: bool = False) -> typing.Optional[str]
     return None
 
 
-def write_report(motifs: list[Motif], result_table: pd.DataFrame, post_filter: PostFilter, report_dir: str, nomenclature: int = 5) -> None:
+def generate_nomenclatures(filename: str, motif: Motif, nomenclature_limit: int) -> list[str]:
+    """
+    Generate nomenclature string lines from nomenclature file. Maximally generate nomenclature_limit lines.
+    :param filename: str - file name of the nomenclature file
+    :param motif: Motif - motif class
+    :param nomenclature_limit: int - limit how many nomenclatures to generate
+    :return: list[str] - array of nomenclature lines
+    """
+    if not os.path.exists(filename):
+        return []
+
+    with open(filename, 'r') as noms:
+        lines = []
+        for line in noms:
+            if line == '' or line is None:
+                break
+
+            line_split = line.split('\t')
+            motif_parts = [f'<td>{s}</td>' for s in line_split[1:]]
+            ref = f'{motif.chrom}:g.{motif.start}_{motif.end}'
+            nom_row = report.html_templates.nomenclature_string.format(count=line_split[0] + 'x', ref=ref, parts='\n    '.join(motif_parts))
+            lines.append(nom_row)
+
+            # end?
+            if len(lines) >= nomenclature_limit:
+                break
+
+    return lines
+
+
+def write_report(motifs: list[Motif], result_table: pd.DataFrame, post_filter: PostFilter, report_dir: str, nomenclature_limit: int = 5) -> None:
     """
     Generate and write a report.
     :param motifs: list[Motif] - list of motifs to write results
     :param result_table: pd.DataFrame - table of results
     :param post_filter: PostFilter - post-filter arguments
     :param report_dir: str - dir name for reports
-    :param nomenclature: int - number of lines from nomenclature.txt to print
+    :param nomenclature_limit: int - number of lines from nomenclature.txt to print
     :return: None
     """
     # tsv file with table:
@@ -676,6 +706,7 @@ def write_report(motifs: list[Motif], result_table: pd.DataFrame, post_filter: P
                 filt_align_file = find_file(f'{report_dir}/{motif.dir_name()}/alignment_filtered_{suffix}.fasta', include_gzip=True)
                 filt_left_file = find_file(f'{report_dir}/{motif.dir_name()}/alignment_filtered_left_{suffix}.fasta', include_gzip=True)
                 filt_right_file = find_file(f'{report_dir}/{motif.dir_name()}/alignment_filtered_right_{suffix}.fasta', include_gzip=True)
+                nomenclature_lines = generate_nomenclatures(f'{report_dir}/{motif.dir_name()}/nomenclatures_{suffix}.txt', motif, nomenclature_limit)
 
                 # generate rows of tables and images
                 row = report.html_templates.generate_row(seq, result, post_filter)
@@ -684,7 +715,7 @@ def write_report(motifs: list[Motif], result_table: pd.DataFrame, post_filter: P
 
                 # add the tables
                 mc, m, a = report.html_templates.generate_motifb64(seq, result, rep_file, pcol_file, align_file, filt_align_file, filt_left_file,
-                                                                   filt_right_file, post_filter)
+                                                                   filt_right_file, nomenclature_lines, post_filter)
                 if motif.name in mcs:
                     ms[motif.name].append(m)
                     alignments[motif.dir_name()][1].append(a[1])
@@ -695,7 +726,7 @@ def write_report(motifs: list[Motif], result_table: pd.DataFrame, post_filter: P
 
                 # and static tables
                 mc, m, a = report.html_templates.generate_motifb64(seq, result, rep_file, pcol_file, align_file, filt_align_file, filt_left_file,
-                                                                   filt_right_file, post_filter, static=True)
+                                                                   filt_right_file, nomenclature_lines, post_filter, static=True)
                 if mc not in mcs_static:
                     mcs_static.append(mc)
                 ms_static.append(m)
@@ -726,31 +757,17 @@ def write_report(motifs: list[Motif], result_table: pd.DataFrame, post_filter: P
         contents_table = report.html_templates.contents.format(table='\n'.join(sorted(mcs.values())))
         template = custom_format(template, motifs_content=contents_table + '\n' + report.html_templates.make_datatable_string)
 
+        # generate content for each motif
         for motif in sorted(motifs, key=lambda x: x.name):
             motif_clean = re.sub(r'[^\w_]', '', motif.name.replace('/', '_'))
-
-            with open(f'{report_dir}/{motif.dir_name()}/nomenclature.txt', 'r') as noms:
-                lines = []
-                for line in noms:
-                    if line == '' or line is None:
-                        break
-
-                    line_split = line.split('\t')
-                    motif_parts = [f'<td>{s}</td>' for s in line_split[1:]]
-                    ref = f'{motif.chrom}:g.{motif.start}_{motif.end}'
-                    nom_row = report.html_templates.nomenclature_string.format(count=line_split[0] + 'x', ref=ref, parts='\n    '.join(motif_parts))
-                    lines.append(nom_row)
-
-                    # end?
-                    if len(lines) >= nomenclature:
-                        break
-
+            nomenclature_lines = generate_nomenclatures(f'{report_dir}/{motif.dir_name()}/nomenclature.txt', motif, nomenclature_limit)
             tabs.append(report.html_templates.motif_summary.format(motif_id=motif_clean,
-                                                                   nomenclatures='\n'.join(lines), table='\n'.join(rows[motif.name]),
+                                                                   nomenclatures='\n'.join(nomenclature_lines), table='\n'.join(rows[motif.name]),
                                                                    motifs='\n'.join(ms[motif.name])))
 
         f.write(custom_format(template, table='', motifs='\n'.join(tabs)))
 
+    # save the static report file
     with open(f'{report_dir}/report_static.html', 'w') as f:
         contents_table = report.html_templates.contents.format(table='\n'.join(mcs_static))
         table = report.html_templates.motif_summary_static.format(table='\n'.join(rows_static))
@@ -758,6 +775,7 @@ def write_report(motifs: list[Motif], result_table: pd.DataFrame, post_filter: P
         f.write(custom_format(template_static, motifs_content=contents_table,
                               table=table, motifs='\n'.join(ms_static)))
 
+    # write alignments as html files
     for motif_dir_name in alignments.keys():
         template_alignments = open(f'{script_dir}/alignments.html', 'r').read()
         template_alignments = custom_format(template_alignments, sample=motif_dir_name, motif_desc=alignments[motif_dir_name][0])

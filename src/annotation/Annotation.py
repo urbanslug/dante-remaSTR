@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Optional
 
 from src.annotation import Motif
@@ -341,6 +342,27 @@ class Annotation:
                 return primer1 and primer2, self.module_repetitions[index_str]
         return None
 
+    @staticmethod
+    def find_with_regex(read_sequence: str, motif_sequence: str, search_pos: int = 0) -> int:
+        """
+        Find the first occurrence of a motif sequence in the read sequence using regular expressions.
+        :param read_sequence: The sequence to search in.
+        :param motif_sequence: The motif sequence (as a regex) to search for.
+        :param search_pos: The position to start the search from.
+        :return: int - The start position of the first occurrence of the motif sequence. Returns -1 if not found.
+        """
+        # convert motif sequence to regex
+        motif_regex = ''.join(base_mapping[char] for char in motif_sequence)
+
+        # compile the regular expression pattern
+        pattern = re.compile(motif_regex)
+
+        # search for the pattern in the read sequence starting from search_pos
+        match = pattern.search(read_sequence, search_pos)
+
+        # return the start position if a match is found, else return -1
+        return match.start() if match else -1
+
     def get_nomenclature(self, index_rep: int = None, index_rep2: int = None, include_flanking: bool = True) -> str:
         """
         Get HGVS nomenclature.
@@ -371,27 +393,39 @@ class Annotation:
             else:
                 reps = 0
                 search_pos = 0
+                found_rep_seq = ''
                 while True:
-                    search_found = read_sequence.find(motif_sequence, search_pos)
+                    search_found = self.find_with_regex(read_sequence, motif_sequence, search_pos)
                     if search_found == search_pos:
-                        # regular continuation
-                        reps += 1
-                        search_pos = search_found + len(motif_sequence)
+                        # setup current rep. sequence
+                        if reps == 0:
+                            found_rep_seq = read_sequence[search_found:search_found + len(motif_sequence)]
+
+                        if read_sequence[search_found:search_found + len(motif_sequence)] == found_rep_seq:
+                            # regular continuation
+                            reps += 1
+                        else:
+                            # interruption, but in line with searched motif
+                            nomenclature += f'{found_rep_seq}[{reps}]'
+                            found_rep_seq = read_sequence[search_found:search_found + len(motif_sequence)]
+                            reps = 1
                     elif search_found == -1:
                         # the end, we did not find any other STRs
                         if reps > 0:
-                            nomenclature += f'{motif_sequence}[{reps}]'
+                            nomenclature += f'{found_rep_seq}[{reps}]'
                         if len(read_sequence[search_pos:]) > 0:
                             nomenclature += f'{read_sequence[search_pos:]}[1]'
                         break
                     else:
                         # some interruption
                         if reps > 0:
-                            nomenclature += f'{motif_sequence}[{reps}]'
+                            nomenclature += f'{found_rep_seq}[{reps}]'
                         if len(read_sequence[search_pos:search_found]) > 0:
                             nomenclature += f'{read_sequence[search_pos:search_found]}[1]'
+                        found_rep_seq = read_sequence[search_found:search_found + len(motif_sequence)]
                         reps = 1
-                        search_pos = search_found + len(motif_sequence)
+                    # update search pos and iterate
+                    search_pos = search_found + len(motif_sequence)
             nomenclatures.append(nomenclature)
 
         return '\t'.join(nomenclatures)
