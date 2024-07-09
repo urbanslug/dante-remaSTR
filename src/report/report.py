@@ -409,24 +409,43 @@ def write_histogram_image(out_prefix: str, annotations: list[annotation.Annotati
     repetitions = sorted_repetitions(annotations)
     repetitions_filt = sorted_repetitions(filt_annot)
 
+    plot_histogram_image(out_prefix, [(r[index_rep], c) for r, c in repetitions], [(r[index_rep], c) for r, c in repetitions_filt])
+
+
+def plot_histogram_image(out_prefix: str, spanning_counts: list[tuple[int, int]], filtered_counts: list[tuple[int, int]],
+                         inread_counts: list[tuple[int, int]] = None) -> None:
+    """
+    Generates separate graph image for each module
+    :param out_prefix: Output file prefix
+    :param spanning_counts: list of spanning counts (repetition, number of reads)
+    :param filtered_counts: list of flanking counts (repetition, number of reads)
+    :param inread_counts: list of inread counts (repetition, number of reads)
+    """
+    # empty inread array
+    if inread_counts is None:
+        inread_counts = []
+
     # adjust variables
     width = 0.9
     plt.figure(figsize=(20, 8))
-    xm = max([r[index_rep] for r, _ in repetitions] + [MAX_REPETITIONS])
-    if repetitions_filt:
-        xm = max([r[index_rep] for r, _ in repetitions_filt] + [xm])
+    xm = max([r for r, c in spanning_counts] + [r for r, c in filtered_counts] + [r for r, c in inread_counts] + [MAX_REPETITIONS])
     dist = [0] * (xm + 1)
-    dist_filt = [0] * (xm + 1)
 
     # set data
-    for r, c in repetitions:
-        dist[r[index_rep]] += c
-        dist_filt[r[index_rep]] += c
-    for r, c in repetitions_filt:
-        dist_filt[r[index_rep]] += c
+    for r, c in spanning_counts:
+        dist[r] += c
+    dist_filt = dist.copy()
+    for r, c in filtered_counts:
+        dist_filt[r] += c
+    dist_inread = dist_filt.copy()
+    for r, c in inread_counts:
+        dist_inread[r] += c
 
     # create barplots
-    rects_filt = plt.bar(np.arange(xm + 1), dist_filt, width, color='grey', alpha=0.4)
+    rects_inread = [None] * len(dist)
+    if len(inread_counts) > 0:
+        rects_inread = plt.bar(np.arange(xm + 1), dist_inread, width, color='orange', alpha=0.4)
+    rects_filt = plt.bar(np.arange(xm + 1), dist_filt, width, color='lightgrey')
     rects = plt.bar(np.arange(xm + 1), dist, width)
     plt.xticks(np.arange(1, xm + 1))
     plt.ylabel('Counts')
@@ -435,15 +454,15 @@ def write_histogram_image(out_prefix: str, annotations: list[annotation.Annotati
     plt.xlim((0, xm + 1))
 
     # label numbers
-    for rect, rect_filt in zip(rects, rects_filt):
-        height = rect.get_height()
-        height_filt = rect_filt.get_height()
-
-        if height > 0:
-            plt.text(rect.get_x() + rect.get_width() / 2., height + max_y / 100.0, '%d' % int(height), ha='center', va='bottom')
-        if height_filt != height:
-            plt.text(rect_filt.get_x() + rect_filt.get_width() / 2., height_filt + max_y / 100.0, '%d' % int(height_filt - height), ha='center',
-                     va='bottom', color='grey')
+    for rect, rect_filt, rect_inread in zip(rects, rects_filt, rects_inread):
+        if rect.get_height() > 0:
+            plt.text(rect.get_x() + rect.get_width() / 2., rect.get_height() + max_y / 100.0, '%d' % int(rect.get_height()), ha='center', va='bottom')
+        if rect_filt.get_height() != rect.get_height():
+            plt.text(rect_filt.get_x() + rect_filt.get_width() / 2., rect_filt.get_height() + max_y / 100.0,
+                     '%d' % int(rect_filt.get_height() - rect.get_height()), ha='center', va='bottom', color='grey')
+        if rect_inread is not None and rect_inread.get_height() != rect_filt.get_height():
+            plt.text(rect_inread.get_x() + rect_inread.get_width() / 2., rect_inread.get_height() + max_y / 100.0,
+                     '%d' % int(rect_inread.get_height() - rect_filt.get_height()), ha='center', va='bottom', color='orange')
 
     # output it
     plt.savefig(out_prefix + '.pdf')
@@ -451,26 +470,15 @@ def write_histogram_image(out_prefix: str, annotations: list[annotation.Annotati
     plt.close()
 
     # ----- PLOTLY HISTOGRAM -----
-    def parse_labels(_dist_filt, _dist):
-        if _dist_filt == 0:
-            return ''
-        elif _dist_filt != 0 and _dist == 0:
-            return str(_dist_filt)
-        elif _dist_filt != 0 and _dist != 0:
-            if _dist_filt > _dist:
-                return str(_dist_filt - _dist)
-            else:
-                return ''
-        else:
-            return str(_dist_filt)
-
-    dist_text = ["" if d == 0 else str(d) for d in dist]
-    dist_filt_text = [parse_labels(df, d) for df, d in zip(dist_filt, dist)]
+    dist_text = ['' if d == 0 else str(d) for d in dist]
+    dist_filt_text = ['' if df - d == 0 else str(df - d) for df, d in zip(dist_filt, dist)]
+    dist_inread_text = ['' if di - df == 0 else str(di - df) for di, df in zip(dist_inread, dist_filt)]
 
     fig = go.Figure()
-    fig.add_bar(y=dist_filt, text=dist_filt_text, name='Partial reads',
-                marker_color='rgb(204, 204, 204)', textfont_color='rgb(204, 204, 204)')
-    fig.add_bar(y=dist, text=dist_text, marker_color='#636EFA', name='Full reads ')
+    if len(inread_counts) > 0:
+        fig.add_bar(y=dist_inread, text=dist_inread_text, name='Inread reads', marker_color='#FF6600', textfont_color='#FF6600')
+    fig.add_bar(y=dist_filt, text=dist_filt_text, name='Partial reads', marker_color='#CCCCCC', textfont_color='#CCCCCC')
+    fig.add_bar(y=dist, text=dist_text, name='Full reads', marker_color='#636EFA', textfont_color='#636EFA')
 
     fig.update_traces(textposition='outside', texttemplate='%{text}', hovertemplate='%{text}', textfont_size=7)
     fig.update_layout(width=800, height=450,
