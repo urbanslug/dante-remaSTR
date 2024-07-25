@@ -70,6 +70,7 @@ html_template = """
 
 hist_template = """
 <h2 id="{motif_name}">{motif_name}</h2>
+alleles: {allele_info}<br>
 <div class="" id="hist-{motif_name}"></div>
 <script>
     {{
@@ -161,7 +162,8 @@ if __name__ == '__main__':
     body = table.drop('FigFile', axis=1).to_html(classes='tg')
     for i, row in table.iterrows():
         motif_reps = open(f'{row["FigFile"]}.json').read()
-        histogram = hist_template.format(motif_name=i, motif_reps=motif_reps)
+        allele_info = f'{row["Allele 1"]} / {row["Allele 2"]} ({row["Allele 1 Interval"]} / {row["Allele 2 Interval"]})'
+        histogram = hist_template.format(motif_name=i, motif_reps=motif_reps, allele_info=allele_info)
         body += '\n' + histogram
 
     # write into a html file
