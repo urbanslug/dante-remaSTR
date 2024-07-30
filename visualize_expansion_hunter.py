@@ -1,4 +1,5 @@
 import argparse
+from datetime import datetime
 import json
 import os
 import pandas as pd
@@ -130,6 +131,9 @@ if __name__ == '__main__':
     # load arguments
     args = load_arguments()
 
+    # print status
+    print(f'Visualizing {args.input_json} ... ({datetime.now():%Y-%m-%d %H:%M:%S})')
+
     # read the json:
     with open(args.input_json) as f:
         data_eh = json.load(f)
@@ -141,8 +145,13 @@ if __name__ == '__main__':
             motif_clean = var_key.replace('/', '_').replace('+', '_').replace(' ', '_')
             table.at[motif_clean, 'AlleleCount'] = value['AlleleCount']
             table.at[motif_clean, 'Coverage'] = value['Coverage']
-            genotypes = var_value['Genotype'].split('/')
-            genotypes_intervals = var_value['GenotypeConfidenceInterval'].split('/')
+            try:
+                genotypes = var_value['Genotype'].split('/')
+                genotypes_intervals = var_value['GenotypeConfidenceInterval'].split('/')
+            except KeyError:
+                genotypes = ['0', '0']
+                genotypes_intervals = ['0-700', '0-700']
+                print('Error in:', args.input_json, key, value)
             table.at[motif_clean, 'Allele 1'] = genotypes[0]
             table.at[motif_clean, 'Allele 2'] = genotypes[1]
             table.at[motif_clean, 'Allele 1 Interval'] = genotypes_intervals[0]
@@ -156,7 +165,7 @@ if __name__ == '__main__':
             inrepeat_reads = convert_to_array(var_value['CountsOfInrepeatReads'])
             spanning_reads = convert_to_array(var_value['CountsOfSpanningReads'])
             plot_histogram_image(f'{args.output_dir}/{motif_clean}', spanning_reads, flanking_reads, inrepeat_reads)
-            print(f'{motif_clean} done')
+            # print(f'{motif_clean} done')
 
     # plot table and all the result histograms
     body = table.drop('FigFile', axis=1).to_html(classes='tg')
@@ -169,3 +178,6 @@ if __name__ == '__main__':
     # write into a html file
     with open(f'{args.output_dir}/report.html', 'wt') as f:
         print(html_template.format(body=body), file=f)
+
+    # write into a tsv table
+    table.drop('FigFile', axis=1).to_csv(f'{args.output_dir}/results.tsv', sep='\t')

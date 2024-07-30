@@ -33,6 +33,7 @@ def load_arguments() -> argparse.Namespace:
     parser.add_argument('--output-name', '-n', help='Name of the file in the output directory. Default=\'all_visual.html\'',
                         default='all_visual.html')
     parser.add_argument('--sample-regex', '-r', help='Regex for sample name. Default=\'.*\' (all samples)', default='.*')
+    parser.add_argument('--expansion-hunter', '-e', action='store_true', help='Process data from visualize_expansion_hunter.py tool')
 
     ancestors.add_argument('--mother', '-m',
                            help='Name of the sample for mother or 1-based number of the sample lexicographically. Default=1st sample', default=1)
@@ -261,7 +262,7 @@ def check_genotypes(mother_genotypes: tuple[str, str], father_genotypes: tuple[s
             (child_genotypes[0] in father_genotypes + ('B', 'E') and child_genotypes[1] in mother_genotypes + ('B', 'E')))
 
 
-def create_report(args: argparse.Namespace) -> None:
+def create_report_dante(args: argparse.Namespace) -> None:
     # create output directory
     os.makedirs(args.output_dir, exist_ok=True)
 
@@ -374,6 +375,39 @@ def create_report(args: argparse.Namespace) -> None:
         f.write(df_to_html_table(table))
 
 
+def create_report_expansion_hunter(args: argparse.Namespace) -> None:
+    # create output directory
+    os.makedirs(args.output_dir, exist_ok=True)
+
+    # find all motif directories in root directory
+    possible_paths = glob.glob(f'{args.input_dir}/*/results.tsv')
+    samples = set([path.split('/')[-2] for path in possible_paths])
+    samples = sorted([sample for sample in samples if re.match(args.sample_regex, sample)])
+
+    # read all result tables
+    pd_tables = {sample: pd.read_csv(f'{args.input_dir}/{sample}/results.tsv', sep='\t', index_col=0) for sample in samples}
+    motifs = list(list(pd_tables.values())[0].index)
+
+    # fill the table
+    table = pd.DataFrame()
+    for motif in motifs:
+        for sample in samples:
+            # row from table
+            row = pd_tables[sample].loc[motif]
+
+            # fill table:
+            table.at[motif, sample] = f'{os.path.realpath(args.input_dir)}/{sample}/{motif}.png'
+            table.at[motif + ' result', sample] = (f'Alleles: {row["Allele 1"]} / {row["Allele 2"]} '
+                                                   f'({row["Allele 1 Interval"]} / {row["Allele 2 Interval"]})')
+
+    # create a html file
+    with open(f'{args.output_dir}/{args.output_name}', 'w') as f:
+        f.write(df_to_html_table(table))
+
+
 if __name__ == '__main__':
     args = load_arguments()
-    create_report(args)
+    if args.expansion_hunter:
+        create_report_expansion_hunter(args)
+    else:
+        create_report_dante(args)
