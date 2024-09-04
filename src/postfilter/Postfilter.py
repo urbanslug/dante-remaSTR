@@ -42,7 +42,9 @@ class PostFilter:
         has_repetitions = (ann.module_bases[module_number] >= self.min_rep_len and
                            ann.module_repetitions[module_number] >= self.min_rep_cnt)
 
-        return is_right and has_primers and has_less_errors and has_flanks and has_repetitions
+        seq, reps = ann.motif.get_modules()[module_number]
+
+        return is_right and has_primers and has_less_errors and has_flanks and (has_repetitions or reps == 1)
 
     def get_filtered_list(self, annotations: list[Annotation], module_number: list[int],
                           both_primers: list[bool] = None) -> tuple[list[Annotation], list[Annotation]]:

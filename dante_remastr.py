@@ -160,13 +160,13 @@ def process_group(args: argparse.Namespace, df: pd.DataFrame, motif_str: str) ->
     # create report for each repeating module
     result_lines = []
     repeating_modules = motif_class.get_repeating_modules()
+    postfilter_class = PostFilter(args)
     for i, (module_number, _, _) in enumerate(repeating_modules):
 
         # pick annotations from pairs if needed
         annotations = annotation.pairs_to_annotations_pick(annotation_pairs, module_number)
 
         # setup post filtering - no primers, insufficient quality, ...
-        postfilter_class = PostFilter(args)
         qual_annot, filt_annot = postfilter_class.get_filtered(annotations, module_number, both_primers=True)
         primer_annot, filt_annot = postfilter_class.get_filtered(filt_annot, module_number, both_primers=False)
 
@@ -231,11 +231,24 @@ def process_group(args: argparse.Namespace, df: pd.DataFrame, motif_str: str) ->
             generate_result_line(motif_class, predicted, confidence, len(qual_annot), len(primer_annot), len(filt_annot), module_number,
                                  qual_annot=qual_annot))
 
+    # generate nomenclatures for all modules:
+    for i, (seq, reps) in enumerate(motif_class.get_modules()):
+        # write files if needed
+        if args.verbose and reps == 1:
+            # pick annotations from pairs if needed
+            annotations = annotation.pairs_to_annotations_pick(annotation_pairs, i)
+
+            # setup post filtering - no primers, insufficient quality, ...
+            qual_annot, _ = postfilter_class.get_filtered(annotations, i, both_primers=True)
+
+            # gather and write nomenclatures
+            if len(qual_annot) > 0:
+                report.write_histogram_nomenclature(f'{motif_dir}/nomenclatures_{i}.txt', qual_annot, index_rep=i)
+
     # try to get the overall nomenclature:
     if args.verbose:
         annotations = annotation.pairs_to_annotations_pick(annotation_pairs, None)
         for module_number, _, _ in repeating_modules:
-            postfilter_class = PostFilter(args)
             annotations, _ = postfilter_class.get_filtered(annotations, module_number, both_primers=True)
         report.write_histogram_nomenclature(f'{motif_dir}/nomenclature.txt', annotations)
 
