@@ -47,14 +47,22 @@ def errors_per_read(errors: list[tuple[int, int, int]], relative: bool = False) 
 
     if relative:
         mean_length = np.mean([length for _, _, length in errors])
-        return (np.mean([indels / float(length) for indels, _, length in errors]) * mean_length,
-                np.mean([mismatches / float(length) for _, mismatches, length in errors]) * mean_length)
+        return (
+            float(np.mean([indels / float(length) for indels, _, length in errors]) * mean_length),
+            float(np.mean([mismatches / float(length) for _, mismatches, length in errors]) * mean_length)
+        )
     else:
-        return np.mean([indels for indels, _, _ in errors]), np.mean([mismatches for _, mismatches, _ in errors])
+        return (
+            float(np.mean([indels for indels, _, _ in errors])),
+            float(np.mean([mismatches for _, mismatches, _ in errors]))
+        )
 
 
-def generate_result_line(motif_class: Motif, predicted: tuple[str, str], confidence: tuple[float | str, ...], qual_num: int, primer_num: int,
-                         filt_num: int, module_number: int, qual_annot: list[annotation.Annotation] = None, second_module_number: int = None) -> dict:
+def generate_result_line(
+    motif_class: Motif, predicted: tuple[str, str], confidence: tuple[float | str, ...], qual_num: int,
+    primer_num: int, filt_num: int, module_number: int, qual_annot: list[annotation.Annotation] | None = None,
+    second_module_number: int | None = None
+) -> dict:
     """
     Generate result line from the template string.
     :param motif_class: Motif - motif class
@@ -75,6 +83,14 @@ def generate_result_line(motif_class: Motif, predicted: tuple[str, str], confide
         _, end = motif_class.get_location_subpart(second_module_number)
         motif_seq = ','.join([motif_class.module_str(i) for i in range(module_number, second_module_number + 1)])
 
+    reads_a1: int | str
+    reads_a2: int | str
+    indels_rel: float | str
+    indels_rel1: float | str
+    indels_rel2: float | str
+    mismatches_rel: float | str
+    mismatches_rel1: float | str
+    mismatches_rel2: float | str
     # get info about errors and number of reads from quality annotations if provided
     reads_a1 = reads_a2 = '---'
     indels_rel = mismatches_rel = '---'
@@ -99,22 +115,27 @@ def generate_result_line(motif_class: Motif, predicted: tuple[str, str], confide
         indels_rel2, mismatches_rel2 = errors_per_read(errors_a2, relative=True)
 
     # return dictionary
-    return {'motif_name': motif_class.name, 'motif_nomenclature': motif_class.motif, 'motif_sequence': motif_seq, 'chromosome': motif_class.chrom,
-            'start': start, 'end': end, 'allele1': predicted[0], 'allele2': predicted[1], 'confidence': confidence[0], 'conf_allele1': confidence[1],
-            'conf_allele2': confidence[2], 'reads_a1': reads_a1, 'reads_a2': reads_a2, 'indels': indels_rel, 'mismatches': mismatches_rel,
-            'indels_a1': indels_rel1, 'indels_a2': indels_rel2, 'mismatches_a1': mismatches_rel1, 'mismatches_a2': mismatches_rel2,
-            'quality_reads': qual_num, 'one_primer_reads': primer_num, 'filtered_reads': filt_num,
-            'conf_background': confidence[3] if len(confidence) > 3 else '---',
-            'conf_background_all': confidence[4] if len(confidence) > 4 else '---',
-            'conf_extended': confidence[5] if len(confidence) > 5 else '---', 'conf_extended_all': confidence[6] if len(confidence) > 6 else '---',
-            'repetition_index': module_number if second_module_number is None else f'{module_number}_{second_module_number}'}
+    return {
+        'motif_name': motif_class.name, 'motif_nomenclature': motif_class.motif, 'motif_sequence': motif_seq,
+        'chromosome': motif_class.chrom, 'start': start, 'end': end, 'allele1': predicted[0],
+        'allele2': predicted[1], 'confidence': confidence[0], 'conf_allele1': confidence[1],
+        'conf_allele2': confidence[2], 'reads_a1': reads_a1, 'reads_a2': reads_a2, 'indels': indels_rel,
+        'mismatches': mismatches_rel, 'indels_a1': indels_rel1, 'indels_a2': indels_rel2,
+        'mismatches_a1': mismatches_rel1, 'mismatches_a2': mismatches_rel2, 'quality_reads': qual_num,
+        'one_primer_reads': primer_num, 'filtered_reads': filt_num,
+        'conf_background': confidence[3] if len(confidence) > 3 else '---',
+        'conf_background_all': confidence[4] if len(confidence) > 4 else '---',
+        'conf_extended': confidence[5] if len(confidence) > 5 else '---',
+        'conf_extended_all': confidence[6] if len(confidence) > 6 else '---',
+        'repetition_index': module_number if second_module_number is None else f'{module_number}_{second_module_number}'
+    }
 
 
 def process_group(args: argparse.Namespace, df: pd.DataFrame, motif_str: str) -> tuple[Motif, list[dict], int, int]:
     """
     Process the group as pandas Dataframe. Return motif name if processed correctly or None otherwise.
     :param args: argparse.Namespace - namespace of program arguments
-    :param df: pd.DataFrame - pandas DataFrame with information about annotated reads for a single motif to process
+    :param df: pd.DataFrame - contains information about annotated reads for a single motif to process
     :param motif_str: str - motif nomenclature
     :return: Motif, list(dict), int - motif, result lines, input length, length of filtered intput
     """
@@ -143,9 +164,10 @@ def process_group(args: argparse.Namespace, df: pd.DataFrame, motif_str: str) ->
         return motif_class, [], input_len, filtered_len
 
     # create annotations from rows
-    annotations = df.apply(
-        lambda row: annotation.Annotation(row['read_id'], row['mate_order'], row['read'], row['reference'], row['modules'],
-                                          row['log_likelihood'], motif_class), axis=1)
+    annotations = df.apply(lambda row: annotation.Annotation(
+        row['read_id'], row['mate_order'], row['read'], row['reference'], row['modules'],
+        row['log_likelihood'], motif_class
+    ), axis=1)
 
     # create annotation pairs from annotations
     annotation_pairs = annotation.annotations_to_pairs(annotations)
@@ -178,8 +200,10 @@ def process_group(args: argparse.Namespace, df: pd.DataFrame, motif_str: str) ->
         # run inference - this takes most of the time (for no --verbose)
         file_pcolor = f'{motif_dir}/pcolor_{module_number}' if args.verbose else None
         file_output = f'{motif_dir}/allcall_{module_number}.txt' if args.verbose else None
-        inference_class = inference.Inference(read_distribution, args.param_file, str_rep=args.min_rep_cnt, minl_primer1=args.min_flank_len,
-                                              minl_primer2=args.min_flank_len, minl_str=args.min_rep_len)
+        inference_class = inference.Inference(
+            read_distribution, args.param_file, str_rep=args.min_rep_cnt, minl_primer1=args.min_flank_len,
+            minl_primer2=args.min_flank_len, minl_str=args.min_rep_len
+        )
         monoallelic = args.male and report.chrom_from_string(motif_class.chrom) in [report.ChromEnum.X, report.ChromEnum.Y]
         predicted, confidence = inference_class.genotype(qual_annot, primer_annot, module_number, file_pcolor, file_output, motif_str, monoallelic)
 
@@ -271,7 +295,7 @@ def generate_groups_gzipped(input_stream: typing.TextIO, column_name: str = 'mot
     :param chunk_size: int - chunk size for table processing
     :return: Iterator[pd.DataFrame] - sub-parts of the input table
     """
-    with gzip.GzipFile(fileobj=input_stream.buffer, mode='r') as gz_file:  # type: typing.IO[bytes]
+    with gzip.GzipFile(fileobj=input_stream.buffer, mode='r') as gz_file:
         # convert to text stream
         text_stream = io.TextIOWrapper(gz_file)
 
@@ -324,15 +348,17 @@ def generate_groups(input_stream: typing.TextIO, column_name: str = 'motif', chu
         yield current_group_data
 
 
-def consume_iterator(results_iterator: typing.Generator[tuple[Motif, list[dict], int, int], any, None]) -> tuple[list[Motif], pd.DataFrame, int, int]:
+def consume_iterator(
+    results_iterator: typing.Iterable[tuple[Motif, list[dict], int, int]]
+) -> tuple[list[Motif], pd.DataFrame, int, int]:
     """
     Consume iterator of results.
     :param results_iterator: generator - motif and its corresponding results of modules
     :return: list[Motif], pd.DataFrame, int - motifs in list and table of all results, input length
     """
     # consume iterator of results
-    all_result_lines = []
     all_motifs = []
+    all_result_lines = []
     all_input_len = 0
     all_filtered_len = 0
     for i, (motif, rls, input_l, filtered_l) in enumerate(results_iterator):
@@ -364,16 +390,34 @@ if __name__ == '__main__':
 
     # process the input
     motif_column_name = 'motif'
-    groups_iterator = generate_groups_gzipped(sys.stdin, motif_column_name) if args.input_gzipped else generate_groups(sys.stdin, motif_column_name)
-    groups_iterator = itertools.islice(groups_iterator, args.start_motif, args.start_motif + args.max_motifs if args.max_motifs is not None else None)
-    all_inputs = ((args, motif_table, motif_table[motif_column_name].iloc[0]) for motif_table in groups_iterator)
+    if args.input_gzipped:
+        groups_iterator = generate_groups_gzipped(sys.stdin, motif_column_name)
+    else:
+        groups_iterator = generate_groups(sys.stdin, motif_column_name)
+
+    stop_motif = args.start_motif + args.max_motifs if args.max_motifs is not None else None
+    groups_iterator = itertools.islice(groups_iterator, args.start_motif, stop_motif)
 
     # create iterator of results
+    all_motifs: list[Motif]
+    rl_df: pd.DataFrame
+    input_len: int
+    filtered_len: int
+
+    output: tuple[list[Motif], pd.DataFrame, int, int]
+
+    all_inputs = ((args, motif_table, motif_table[motif_column_name].iloc[0]) for motif_table in groups_iterator)
+
+    iterator: typing.Iterable
     if args.processes > 1:
         with multiprocessing.Pool(args.processes) as pool:
-            all_motifs, rl_df, input_len, filtered_len = consume_iterator(pool.imap(process_group_tuple, all_inputs, chunksize=5))
+            iterator = pool.imap(process_group_tuple, all_inputs, chunksize=5)
+            output = consume_iterator(iterator)
     else:
-        all_motifs, rl_df, input_len, filtered_len = consume_iterator((process_group(*inputs) for inputs in all_inputs))
+        iterator = (process_group_tuple(inputs) for inputs in all_inputs)
+        output = consume_iterator(iterator)
+
+    all_motifs, rl_df, input_len, filtered_len = output
 
     # summary of the filtered reads
     report.log_str(f'Kept {filtered_len:4d}/{input_len:4d} ({filtered_len / input_len * 100.0:5.1f}%) reads.')

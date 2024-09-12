@@ -14,7 +14,7 @@ class Motif:
     :ivar motif: motif nomenclature
     """
 
-    def __init__(self, motif: str, name: str = None):
+    def __init__(self, motif: str, name: str | None = None):
         """
         Initialize a Motif object.
         :param motif: The motif string in the format "chrom:start_end[A][B]..."
