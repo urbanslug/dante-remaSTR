@@ -60,7 +60,10 @@ def load_arguments() -> argparse.Namespace:
         options.add_argument('--max-motifs', type=positive_nonzero_int, help='Maximal number of motifs to load. Default: All', default=None)
         options.add_argument('--nomenclatures', '-n', type=positive_int, help='Number of nomenclature strings to add to reports. Default=5',
                              default=5)
-        options.add_argument('--output-dir', '-o', type=str, help='Output destination (directory). Default=current location', default=None)
+        options.add_argument(
+            '--output-dir', '-o', type=str, default="dante_out",
+            help='Output destination (directory). Default=./dante_out/'
+        )
         options.add_argument('--param-file', type=nonempty_file, help='Parameter file for inference of alleles. Default=MiSeq parameters',
                              default=None)
         options.add_argument('--deduplicate', '-d', action='store_true', help='Turn on the deduplication of reads.')
