@@ -388,7 +388,7 @@ def normalize_ref_alt(ref: str, alt: str) -> tuple[str, str]:
     return (ref[:len(ref) - suffix], alt[:len(alt) - suffix])
 
 
-def create_vcf_line(
+def make_vcf_line(
     chrom: str, pos: str, unit: str, ref_copies: str, alt_copies: str, genotype: str,
     lines: list[str]
 ):
@@ -399,19 +399,15 @@ def create_vcf_line(
 
     ref_seq = unit * int(ref_copies)
     if alt_copies == "B":
-        pass
-        # TODO:
-        # info = f"REF={ref_copies};RU={unit}"
-        # lines.append("{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format(
-        #     chrom, pos, ".", ref_seq, "<BG>", ".", "PASS", info, "GT", genotype
-        # ))
+        info = f"REF={ref_copies};RU={unit};BG;END={pos}"
+        lines.append("{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format(
+            chrom, pos, ".", ref_seq, "<BG>", ".", "PASS", info, "GT", genotype
+        ))
     elif alt_copies == "E":
-        pass
-        # TODO:
-        # info = f"REF={ref_copies};RU={unit}"
-        # lines.append("{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format(
-        #     chrom, pos, ".", ref_seq, "<EXP>", ".", "PASS", info, "GT", genotype
-        # ))
+        info = f"REF={ref_copies};RU={unit};EXP;END={pos}"
+        lines.append("{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format(
+            chrom, pos, ".", ref_seq[0], "<EXP>", ".", "PASS", info, "GT", genotype
+        ))
     else:
         alt_seq = unit * int(alt_copies)
 
@@ -428,17 +424,20 @@ def create_vcf_line(
 def write_vcf(df: pd.DataFrame, out: str) -> None:
     lines = []
     lines.append('##fileformat=VCFv4.1\n')
+    lines.append('##ALT=<ID=BG,Description="Background">\n')
+    lines.append('##ALT=<ID=EXP,Description="Expansion of unknown (large) size">\n')
     lines.append('##FILTER=<ID=PASS,Description="All filters passed">\n')
+    lines.append('##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">\n')
+    lines.append('##INFO=<ID=END,Number=1,Type=Integer,Description="End position of the variant">\n')
+    lines.append('##INFO=<ID=BG,Number=0,Type=Flag,Description="Background variant">\n')
+    lines.append('##INFO=<ID=EXP,Number=0,Type=Flag,Description="Expansion variant">\n')
     lines.append('##INFO=<ID=REF,Number=1,Type=Integer,Description="Reference copy number">\n')
     lines.append('##INFO=<ID=RU,Number=1,Type=String,Description="Repeat unit in the reference orientation">\n')
-    lines.append('##INFO=<ID=SVTYPE,Number=1,Type=String,Description="Type of structural variant">\n')
     lines.append('##INFO=<ID=SVLEN,Number=1,Type=Integer,Description="Alternate length - Reference length">\n')
-    lines.append('##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">\n')
-    lines.append('##ALT=<ID=EXP,Description="Expansion of unknown (large) size">\n')
-    lines.append('##ALT=<ID=BG,Description="Background">\n')
+    lines.append('##INFO=<ID=SVTYPE,Number=1,Type=String,Description="Type of structural variant">\n')
     lines.append('#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tsample\n')
 
-    records = []
+    records: list[str] = []
     for i, row in df.iterrows():
         m1 = re.match(r"([A-Z]+)\[([0-9]+)\]", row["motif_sequence"])
         if m1 is None:
@@ -449,10 +448,10 @@ def write_vcf(df: pd.DataFrame, out: str) -> None:
         allele2 = str(row["allele2"])
 
         if allele1 == allele2:
-            create_vcf_line(row["chromosome"], row["start"], unit, copies, str(row["allele1"]), "1/1", records)
+            make_vcf_line(row["chromosome"], row["start"], unit, copies, str(row["allele1"]), "1/1", records)
         else:
-            create_vcf_line(row["chromosome"], row["start"], unit, copies, str(row["allele1"]), "1/.", records)
-            create_vcf_line(row["chromosome"], row["start"], unit, copies, str(row["allele2"]), "./1", records)
+            make_vcf_line(row["chromosome"], row["start"], unit, copies, str(row["allele1"]), "1/.", records)
+            make_vcf_line(row["chromosome"], row["start"], unit, copies, str(row["allele2"]), "./1", records)
 
     records.sort(key=lambda x: chr_and_pos(x))
     with open(f"{out}/variants.vcf", "w") as f:
@@ -496,13 +495,6 @@ if __name__ == '__main__':
     groups_iterator = itertools.islice(groups_iterator, args.start_motif, stop_motif)
 
     # create iterator of results
-    all_motifs: list[Motif]
-    rl_df: pd.DataFrame
-    input_len: int
-    filtered_len: int
-
-    output: tuple[list[Motif], pd.DataFrame, int, int]
-
     all_inputs = ((args, motif_table, motif_table[motif_column_name].iloc[0]) for motif_table in groups_iterator)
 
     iterator: typing.Iterable
