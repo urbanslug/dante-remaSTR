@@ -6,6 +6,7 @@ import sys
 import typing
 import itertools
 import multiprocessing
+import re
 from datetime import datetime
 
 import numpy as np
@@ -47,14 +48,22 @@ def errors_per_read(errors: list[tuple[int, int, int]], relative: bool = False) 
 
     if relative:
         mean_length = np.mean([length for _, _, length in errors])
-        return (np.mean([indels / float(length) for indels, _, length in errors]) * mean_length,
-                np.mean([mismatches / float(length) for _, mismatches, length in errors]) * mean_length)
+        return (
+            float(np.mean([indels / float(length) for indels, _, length in errors]) * mean_length),
+            float(np.mean([mismatches / float(length) for _, mismatches, length in errors]) * mean_length)
+        )
     else:
-        return np.mean([indels for indels, _, _ in errors]), np.mean([mismatches for _, mismatches, _ in errors])
+        return (
+            float(np.mean([indels for indels, _, _ in errors])),
+            float(np.mean([mismatches for _, mismatches, _ in errors]))
+        )
 
 
-def generate_result_line(motif_class: Motif, predicted: tuple[str, str], confidence: tuple[float | str, ...], qual_num: int, primer_num: int,
-                         filt_num: int, module_number: int, qual_annot: list[annotation.Annotation] = None, second_module_number: int = None) -> dict:
+def generate_result_line(
+    motif_class: Motif, predicted: tuple[str, str], confidence: tuple[float | str, ...], qual_num: int,
+    primer_num: int, filt_num: int, module_number: int, qual_annot: list[annotation.Annotation] | None = None,
+    second_module_number: int | None = None
+) -> dict:
     """
     Generate result line from the template string.
     :param motif_class: Motif - motif class
@@ -75,6 +84,14 @@ def generate_result_line(motif_class: Motif, predicted: tuple[str, str], confide
         _, end = motif_class.get_location_subpart(second_module_number)
         motif_seq = ','.join([motif_class.module_str(i) for i in range(module_number, second_module_number + 1)])
 
+    reads_a1: int | str
+    reads_a2: int | str
+    indels_rel: float | str
+    indels_rel1: float | str
+    indels_rel2: float | str
+    mismatches_rel: float | str
+    mismatches_rel1: float | str
+    mismatches_rel2: float | str
     # get info about errors and number of reads from quality annotations if provided
     reads_a1 = reads_a2 = '---'
     indels_rel = mismatches_rel = '---'
@@ -99,22 +116,27 @@ def generate_result_line(motif_class: Motif, predicted: tuple[str, str], confide
         indels_rel2, mismatches_rel2 = errors_per_read(errors_a2, relative=True)
 
     # return dictionary
-    return {'motif_name': motif_class.name, 'motif_nomenclature': motif_class.motif, 'motif_sequence': motif_seq, 'chromosome': motif_class.chrom,
-            'start': start, 'end': end, 'allele1': predicted[0], 'allele2': predicted[1], 'confidence': confidence[0], 'conf_allele1': confidence[1],
-            'conf_allele2': confidence[2], 'reads_a1': reads_a1, 'reads_a2': reads_a2, 'indels': indels_rel, 'mismatches': mismatches_rel,
-            'indels_a1': indels_rel1, 'indels_a2': indels_rel2, 'mismatches_a1': mismatches_rel1, 'mismatches_a2': mismatches_rel2,
-            'quality_reads': qual_num, 'one_primer_reads': primer_num, 'filtered_reads': filt_num,
-            'conf_background': confidence[3] if len(confidence) > 3 else '---',
-            'conf_background_all': confidence[4] if len(confidence) > 4 else '---',
-            'conf_extended': confidence[5] if len(confidence) > 5 else '---', 'conf_extended_all': confidence[6] if len(confidence) > 6 else '---',
-            'repetition_index': module_number if second_module_number is None else f'{module_number}_{second_module_number}'}
+    return {
+        'motif_name': motif_class.name, 'motif_nomenclature': motif_class.motif, 'motif_sequence': motif_seq,
+        'chromosome': motif_class.chrom, 'start': start, 'end': end, 'allele1': predicted[0],
+        'allele2': predicted[1], 'confidence': confidence[0], 'conf_allele1': confidence[1],
+        'conf_allele2': confidence[2], 'reads_a1': reads_a1, 'reads_a2': reads_a2, 'indels': indels_rel,
+        'mismatches': mismatches_rel, 'indels_a1': indels_rel1, 'indels_a2': indels_rel2,
+        'mismatches_a1': mismatches_rel1, 'mismatches_a2': mismatches_rel2, 'quality_reads': qual_num,
+        'one_primer_reads': primer_num, 'filtered_reads': filt_num,
+        'conf_background': confidence[3] if len(confidence) > 3 else '---',
+        'conf_background_all': confidence[4] if len(confidence) > 4 else '---',
+        'conf_extended': confidence[5] if len(confidence) > 5 else '---',
+        'conf_extended_all': confidence[6] if len(confidence) > 6 else '---',
+        'repetition_index': module_number if second_module_number is None else f'{module_number}_{second_module_number}'
+    }
 
 
 def process_group(args: argparse.Namespace, df: pd.DataFrame, motif_str: str) -> tuple[Motif, list[dict], int, int]:
     """
     Process the group as pandas Dataframe. Return motif name if processed correctly or None otherwise.
     :param args: argparse.Namespace - namespace of program arguments
-    :param df: pd.DataFrame - pandas DataFrame with information about annotated reads for a single motif to process
+    :param df: pd.DataFrame - contains information about annotated reads for a single motif to process
     :param motif_str: str - motif nomenclature
     :return: Motif, list(dict), int - motif, result lines, input length, length of filtered intput
     """
@@ -143,9 +165,10 @@ def process_group(args: argparse.Namespace, df: pd.DataFrame, motif_str: str) ->
         return motif_class, [], input_len, filtered_len
 
     # create annotations from rows
-    annotations = df.apply(
-        lambda row: annotation.Annotation(row['read_id'], row['mate_order'], row['read'], row['reference'], row['modules'],
-                                          row['log_likelihood'], motif_class), axis=1)
+    annotations = df.apply(lambda row: annotation.Annotation(
+        row['read_id'], row['mate_order'], row['read'], row['reference'], row['modules'],
+        row['log_likelihood'], motif_class
+    ), axis=1)
 
     # create annotation pairs from annotations
     annotation_pairs = annotation.annotations_to_pairs(annotations)
@@ -178,8 +201,10 @@ def process_group(args: argparse.Namespace, df: pd.DataFrame, motif_str: str) ->
         # run inference - this takes most of the time (for no --verbose)
         file_pcolor = f'{motif_dir}/pcolor_{module_number}' if args.verbose else None
         file_output = f'{motif_dir}/allcall_{module_number}.txt' if args.verbose else None
-        inference_class = inference.Inference(read_distribution, args.param_file, str_rep=args.min_rep_cnt, minl_primer1=args.min_flank_len,
-                                              minl_primer2=args.min_flank_len, minl_str=args.min_rep_len)
+        inference_class = inference.Inference(
+            read_distribution, args.param_file, str_rep=args.min_rep_cnt, minl_primer1=args.min_flank_len,
+            minl_primer2=args.min_flank_len, minl_str=args.min_rep_len
+        )
         monoallelic = args.male and report.chrom_from_string(motif_class.chrom) in [report.ChromEnum.X, report.ChromEnum.Y]
         predicted, confidence = inference_class.genotype(qual_annot, primer_annot, module_number, file_pcolor, file_output, motif_str, monoallelic)
 
@@ -271,7 +296,7 @@ def generate_groups_gzipped(input_stream: typing.TextIO, column_name: str = 'mot
     :param chunk_size: int - chunk size for table processing
     :return: Iterator[pd.DataFrame] - sub-parts of the input table
     """
-    with gzip.GzipFile(fileobj=input_stream.buffer, mode='r') as gz_file:  # type: typing.IO[bytes]
+    with gzip.GzipFile(fileobj=input_stream.buffer, mode='r') as gz_file:
         # convert to text stream
         text_stream = io.TextIOWrapper(gz_file)
 
@@ -324,15 +349,17 @@ def generate_groups(input_stream: typing.TextIO, column_name: str = 'motif', chu
         yield current_group_data
 
 
-def consume_iterator(results_iterator: typing.Generator[tuple[Motif, list[dict], int, int], any, None]) -> tuple[list[Motif], pd.DataFrame, int, int]:
+def consume_iterator(
+    results_iterator: typing.Iterable[tuple[Motif, list[dict], int, int]]
+) -> tuple[list[Motif], pd.DataFrame, int, int]:
     """
     Consume iterator of results.
     :param results_iterator: generator - motif and its corresponding results of modules
     :return: list[Motif], pd.DataFrame, int - motifs in list and table of all results, input length
     """
     # consume iterator of results
-    all_result_lines = []
     all_motifs = []
+    all_result_lines = []
     all_input_len = 0
     all_filtered_len = 0
     for i, (motif, rls, input_l, filtered_l) in enumerate(results_iterator):
@@ -350,6 +377,101 @@ def consume_iterator(results_iterator: typing.Generator[tuple[Motif, list[dict],
     return all_motifs, pd.DataFrame.from_dict(all_result_lines).sort_values(by=['motif_name'], kind='stable'), all_input_len, all_filtered_len
 
 
+def normalize_ref_alt(ref: str, alt: str) -> tuple[str, str]:
+    suffix = 0
+    it = zip(reversed(ref), reversed(alt))
+    for _ in range(min(len(ref), len(alt)) - 1):
+        (a, b) = next(it)
+        if a == b:
+            suffix += 1
+
+    return (ref[:len(ref) - suffix], alt[:len(alt) - suffix])
+
+
+def make_vcf_line(
+    chrom: str, pos: str, unit: str, ref_copies: str, alt_copies: str, genotype: str,
+    lines: list[str]
+):
+    if ref_copies == alt_copies:
+        return  # they are the same, there is no variant
+    if "|" in alt_copies:
+        return  # skip over phased variants, TODO: later
+
+    ref_seq = unit * int(ref_copies)
+    if alt_copies == "B":
+        info = f"REF={ref_copies};RU={unit};BG;END={pos}"
+        lines.append("{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format(
+            chrom, pos, ".", ref_seq, "<BG>", ".", "PASS", info, "GT", genotype
+        ))
+    elif alt_copies == "E":
+        info = f"REF={ref_copies};RU={unit};EXP;END={pos}"
+        lines.append("{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format(
+            chrom, pos, ".", ref_seq[0], "<EXP>", ".", "PASS", info, "GT", genotype
+        ))
+    else:
+        alt_seq = unit * int(alt_copies)
+
+        svlen = len(alt_seq) - len(ref_seq)
+        svtype = "INS" if svlen > 0 else "DEL"
+        (ref_seq, alt_seq) = normalize_ref_alt(ref_seq, alt_seq)
+
+        info = f"REF={ref_copies};RU={unit};SVLEN={svlen};SVTYPE={svtype}"
+        lines.append("{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format(
+            chrom, pos, ".", ref_seq, alt_seq, ".", "PASS", info, "GT", genotype
+        ))
+
+
+def write_vcf(df: pd.DataFrame, out: str) -> None:
+    lines = []
+    lines.append('##fileformat=VCFv4.1\n')
+    lines.append('##ALT=<ID=BG,Description="Background">\n')
+    lines.append('##ALT=<ID=EXP,Description="Expansion of unknown (large) size">\n')
+    lines.append('##FILTER=<ID=PASS,Description="All filters passed">\n')
+    lines.append('##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">\n')
+    lines.append('##INFO=<ID=END,Number=1,Type=Integer,Description="End position of the variant">\n')
+    lines.append('##INFO=<ID=BG,Number=0,Type=Flag,Description="Background variant">\n')
+    lines.append('##INFO=<ID=EXP,Number=0,Type=Flag,Description="Expansion variant">\n')
+    lines.append('##INFO=<ID=REF,Number=1,Type=Integer,Description="Reference copy number">\n')
+    lines.append('##INFO=<ID=RU,Number=1,Type=String,Description="Repeat unit in the reference orientation">\n')
+    lines.append('##INFO=<ID=SVLEN,Number=1,Type=Integer,Description="Alternate length - Reference length">\n')
+    lines.append('##INFO=<ID=SVTYPE,Number=1,Type=String,Description="Type of structural variant">\n')
+    lines.append('#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tsample\n')
+
+    records: list[str] = []
+    for i, row in df.iterrows():
+        m1 = re.match(r"([A-Z]+)\[([0-9]+)\]", row["motif_sequence"])
+        if m1 is None:
+            print(f"{row['motif_sequence']} returned None")
+            continue
+        unit, copies = m1.groups()
+        allele1 = str(row["allele1"])
+        allele2 = str(row["allele2"])
+
+        if allele1 == allele2:
+            make_vcf_line(row["chromosome"], row["start"], unit, copies, str(row["allele1"]), "1/1", records)
+        else:
+            make_vcf_line(row["chromosome"], row["start"], unit, copies, str(row["allele1"]), "1/.", records)
+            make_vcf_line(row["chromosome"], row["start"], unit, copies, str(row["allele2"]), "./1", records)
+
+    records.sort(key=lambda x: chr_and_pos(x))
+    with open(f"{out}/variants.vcf", "w") as f:
+        f.writelines(lines + records)
+
+
+def chr_and_pos(line: str) -> tuple[int, int]:
+    m1 = re.match(r"(chr[0-9XY]+)\t([0-9]+)\t.*", line)
+    if m1 is None:
+        raise ValueError(f"got {line}")
+    chrom, pos = m1.groups()
+    chrom2: int = {
+        "chr1":  1,  "chr2":  2,  "chr3":  3,  "chr4":  4,  "chr5": 5,   "chr6": 6,
+        "chr7":  7,  "chr8":  8,  "chr9":  9,  "chr10": 10, "chr11": 11, "chr12": 12,
+        "chr13": 13, "chr14": 14, "chr15": 15, "chr16": 16, "chr17": 17, "chr18": 18,
+        "chr19": 19, "chr20": 20, "chr21": 21, "chr22": 22, "chrX": 23,  "chrY": 24
+    }[chrom]
+    return (chrom2, int(pos))
+
+
 if __name__ == '__main__':
     # save the time of the start
     start_time = datetime.now()
@@ -364,23 +486,36 @@ if __name__ == '__main__':
 
     # process the input
     motif_column_name = 'motif'
-    groups_iterator = generate_groups_gzipped(sys.stdin, motif_column_name) if args.input_gzipped else generate_groups(sys.stdin, motif_column_name)
-    groups_iterator = itertools.islice(groups_iterator, args.start_motif, args.start_motif + args.max_motifs if args.max_motifs is not None else None)
-    all_inputs = ((args, motif_table, motif_table[motif_column_name].iloc[0]) for motif_table in groups_iterator)
+    if args.input_gzipped:
+        groups_iterator = generate_groups_gzipped(sys.stdin, motif_column_name)
+    else:
+        groups_iterator = generate_groups(sys.stdin, motif_column_name)
+
+    stop_motif = args.start_motif + args.max_motifs if args.max_motifs is not None else None
+    groups_iterator = itertools.islice(groups_iterator, args.start_motif, stop_motif)
 
     # create iterator of results
+    all_inputs = ((args, motif_table, motif_table[motif_column_name].iloc[0]) for motif_table in groups_iterator)
+
+    iterator: typing.Iterable
     if args.processes > 1:
         with multiprocessing.Pool(args.processes) as pool:
-            all_motifs, rl_df, input_len, filtered_len = consume_iterator(pool.imap(process_group_tuple, all_inputs, chunksize=5))
+            iterator = pool.imap(process_group_tuple, all_inputs, chunksize=5)
+            output = consume_iterator(iterator)
     else:
-        all_motifs, rl_df, input_len, filtered_len = consume_iterator((process_group(*inputs) for inputs in all_inputs))
+        iterator = (process_group_tuple(inputs) for inputs in all_inputs)
+        output = consume_iterator(iterator)
+
+    all_motifs, rl_df, input_len, filtered_len = output
 
     # summary of the filtered reads
     report.log_str(f'Kept {filtered_len:4d}/{input_len:4d} ({filtered_len / input_len * 100.0:5.1f}%) reads.')
 
     #  write the dataframe to stdout
-    report.log_str(f'Writing output (stdout): {datetime.now():%Y-%m-%d %H:%M:%S}')
-    rl_df.to_csv(sys.stdout, sep='\t')
+    out_file = args.output_dir + "/variants.tsv"
+    report.log_str(f'Writing output to {out_file}: {datetime.now():%Y-%m-%d %H:%M:%S}')
+    rl_df.to_csv(out_file, sep='\t')
+    write_vcf(rl_df, args.output_dir)
 
     # generate report and output files for the whole run
     if args.verbose:

@@ -101,8 +101,9 @@ def load_arguments() -> argparse.Namespace:
 
     # add arguments
     parser.add_argument('input_json', help='Path to input JSON file')
-    parser.add_argument('output_dir', help='Path to directory where outputs will be stored. Default=<working_dir>', nargs='?',
-                        default=None)
+    parser.add_argument(
+        'output_dir', help='Path to directory where outputs will be stored. Default=<working_dir>', nargs='?', default='eh_viz'
+    )
 
     # parse arguments
     args = parser.parse_args()

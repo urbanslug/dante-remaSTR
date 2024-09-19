@@ -14,7 +14,7 @@ import plotly.graph_objects as go
 from src.annotation import Annotation
 from src.report.html_templates import float_to_str
 
-type ConfidenceType = tuple[float, float, float | str, float, float, float, float]
+# type ConfidenceType = tuple[float, float, float | str, float, float, float, float]
 
 def combine_distribs(deletes, inserts):
     """
@@ -596,13 +596,13 @@ class Inference:
 
         return best_sym
 
-    def get_confidence(self, lh_array: np.ndarray, predicted: tuple[int, int], monoallelic: bool = False) -> ConfidenceType:
+    def get_confidence(self, lh_array: np.ndarray, predicted: tuple[int, int], monoallelic: bool = False) -> tuple[float, float, float | str, float, float, float, float]:
         """
         Get confidence of a prediction.
         :param lh_array: 2D-ndarray - log likelihoods of the prediction
         :param predicted: tuple(int, int) - predicted alleles
         :param monoallelic: bool - do we have a mono-allelic motif (i.e. chrX/chrY and male sample?)
-        :return: ConfidenceType - prediction confidence of all, first, and second allele(s), background and expanded states
+        :return: tuple[float, float, float | str, float, float, float, float] - prediction confidence of all, first, and second allele(s), background and expanded states
         """
         # get confidence
         lh_corr_array = lh_array - np.max(lh_array)
@@ -632,12 +632,12 @@ class Inference:
         return confidence, confidence1, confidence2, confidence_back, confidence_back_all, confidence_exp, confidence_exp_all
 
     @staticmethod
-    def write_output(file_desc: str | typing.TextIO, predicted: tuple[int | str, int | str], conf: ConfidenceType, name: str | int):
+    def write_output(file_desc: str | typing.TextIO, predicted: tuple[int | str, int | str], conf: tuple[float, float, float | str, float, float, float, float], name: str | int):
         """
         Write result of one prediction.
         :param file_desc: file descriptor - where to write to
         :param predicted: tuple(int/char, int/char) - predicted alleles
-        :param conf: ConfidenceType - confidence of prediction (whole, 1st allele, 2nd allele, background and expanded alleles)
+        :param conf: tuple[float, float, float | str, float, float, float, float] - confidence of prediction (whole, 1st allele, 2nd allele, background and expanded alleles)
         :param name: str/int - name/number of the sample
         :return: None
         """
@@ -657,7 +657,7 @@ class Inference:
             write_output_fd(file_desc, predicted, conf, name)
 
     def genotype(self, annotations: list[Annotation], filt_annotations: list[Annotation], index_rep: int, file_pcolor: str | None,
-                 file_output: str | None, name: str, monoallelic: bool = False) -> tuple[tuple[str | int, str | int], ConfidenceType]:
+                 file_output: str | None, name: str, monoallelic: bool = False) -> tuple[tuple[str | int, str | int], tuple[float, float, float | str, float, float, float, float]]:
         """
         Genotype based on all annotations - infer likelihoods, print pcolor and write output
         :param annotations: list(Annotation) - good (blue) annotations
