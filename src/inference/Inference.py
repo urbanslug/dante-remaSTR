@@ -165,8 +165,10 @@ class Inference:
     DEFAULT_MODEL_PARAMS = (0.00716322, 0.000105087, 0.0210812, 0.0001648)
     DEFAULT_FIT_FUNCTION = 'linear'
 
-    def __init__(self, read_distribution, params_file, str_rep=3, minl_primer1=5, minl_primer2=5, minl_str=5, p_bckg_closed=None,
-                 p_bckg_open=None, p_expanded=None):
+    def __init__(
+        self, read_distribution, params_file, str_rep=3, minl_primer1=5, minl_primer2=5, minl_str=5,
+        p_bckg_closed=None, p_bckg_open=None, p_expanded=None
+    ):
         """
         Initialization of the Inference class + setup of all models and their probabilities.
         :param read_distribution: ndarray(int) - read distribution

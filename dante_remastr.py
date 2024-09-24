@@ -134,26 +134,23 @@ def generate_result_line(
 
 # this has mixed functionality - it does prediction and it does writing
 def create_report(
-    annotation_pairs,
-    module_number,
-    postfilter_class,
-    motif_dir,
-    motif_class,
-    motif_str,
-    read_distribution,
-    result_lines,
-    prev_module,
+    annotation_pairs: list,
+    module_number: int | None,
+    postfilter_class: PostFilter,
+    motif_class: Motif,
+    motif_dir: str,
+    motif_str: str,
+    read_distribution: np.ndarray[int],
+    result_lines: list,
+    prev_module: tuple[int, str, int],
 ):
     # pick annotations from pairs if needed
-    annotations = annotation.pairs_to_annotations_pick(annotation_pairs, module_number)
+    # annotations: list[Annotation] = annotation.pairs_to_annotations_pick(annotation_pairs, module_number)
+    annotations: list = annotation.pairs_to_annotations_pick(annotation_pairs, module_number)
 
     # setup post filtering - no primers, insufficient quality, ...
-    qual_annot, filt_annot = postfilter_class.get_filtered(
-        annotations, module_number, both_primers=True
-    )
-    primer_annot, filt_annot = postfilter_class.get_filtered(
-        filt_annot, module_number, both_primers=False
-    )
+    qual_annot, filt_annot = postfilter_class.get_filtered(annotations, module_number, both_primers=True)
+    primer_annot, filt_annot = postfilter_class.get_filtered(filt_annot, module_number, both_primers=False)
 
     # write files if needed
     if args.verbose:
@@ -163,34 +160,39 @@ def create_report(
         )
 
     # run inference - this takes most of the time (for no --verbose)
-    file_pcolor = f'{motif_dir}/pcolor_{module_number}' if args.verbose else None
-    file_output = f'{motif_dir}/allcall_{module_number}.txt' if args.verbose else None
     inference_class = inference.Inference(
         read_distribution, args.param_file, str_rep=args.min_rep_cnt, minl_primer1=args.min_flank_len,
         minl_primer2=args.min_flank_len, minl_str=args.min_rep_len
     )
+
+    file_pcolor, file_output = None, None
+    if args.verbose:
+        file_pcolor = f'{motif_dir}/pcolor_{module_number}'
+        file_output = f'{motif_dir}/allcall_{module_number}.txt'
+
     monoallelic = args.male and report.chrom_from_string(motif_class.chrom) in [report.ChromEnum.X, report.ChromEnum.Y]
     predicted, confidence = inference_class.genotype(
         qual_annot, primer_annot, module_number, file_pcolor, file_output, motif_str, monoallelic
     )
 
-    # get number of precise alignments for each allele
-    a1 = int(predicted[0]) if isinstance(predicted[0], int) else None
-    a2 = int(predicted[1]) if isinstance(predicted[1], int) else None
-
     # write the alignments
-    if confidence is not None and args.verbose:
-        if a1 is not None and a1 > 0:
-            report.write_alignment(
-                f'{motif_dir}/alignment_{module_number}_a{a1}.fasta', qual_annot, module_number, a1,
-                zip_it=args.gzip_outputs, cutoff_after=args.cutoff_alignments
-            )
-        if a2 is not None and a2 != a1 and a2 != 0:
-            report.write_alignment(
-                f'{motif_dir}/alignment_{module_number}_a{a2}.fasta', qual_annot,
-                module_number, a2, zip_it=args.gzip_outputs,
-                cutoff_after=args.cutoff_alignments
-            )
+    if args.verbose:
+        if confidence is not None:
+            # get number of precise alignments for each allele
+            a1 = int(predicted[0]) if isinstance(predicted[0], int) else None
+            a2 = int(predicted[1]) if isinstance(predicted[1], int) else None
+
+            if a1 is not None and a1 > 0:
+                report.write_alignment(
+                    f'{motif_dir}/alignment_{module_number}_a{a1}.fasta', qual_annot, module_number, a1,
+                    zip_it=args.gzip_outputs, cutoff_after=args.cutoff_alignments
+                )
+            if a2 is not None and a2 != a1 and a2 != 0:
+                report.write_alignment(
+                    f'{motif_dir}/alignment_{module_number}_a{a2}.fasta', qual_annot,
+                    module_number, a2, zip_it=args.gzip_outputs,
+                    cutoff_after=args.cutoff_alignments
+                )
 
     # infer phasing (if we are not on the first repeating module)
     if prev_module is not None:
