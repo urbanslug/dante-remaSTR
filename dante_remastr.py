@@ -133,7 +133,7 @@ def generate_result_line(
 
 
 # this has mixed functionality - it does prediction and it does writing
-def create_report(
+def too_complex_function_inferring_and_creating_reports(
     annotation_pairs: list,
     module_number: int | None,
     postfilter_class: PostFilter,
@@ -263,27 +263,36 @@ def process_group(
 
     # filter/cut those with low quality
     input_len = len(df)
+    # TODO: extract to function?
     if args.skip_quality_under > 0 and 'quality' in df.columns:
-        filtered_df = df[df.apply(lambda row: has_good_quality(row, args.skip_quality_under, 1, len(motif_class.get_modules()) - 2), axis=1)]
-        report.log_str(f'Kept {len(filtered_df):4d}/{len(df):4d} ({len(filtered_df) / len(df) * 100.0:5.1f}%) reads for {motif_class.dir_name()}')
+        filtered_df = df[df.apply(
+            lambda row: has_good_quality(row, args.skip_quality_under, 1, len(motif_class.get_modules()) - 2),
+            axis=1
+        )]
+        report.log_str("Kept {:4d}/{:4d} ({:5.1f}%) reads for {}".format(
+            len(filtered_df), len(df), len(filtered_df) / len(df) * 100.0, motif_class.dir_name()
+        ))
         df = filtered_df
+    # TODO: extract to function?
     if args.cut_quality_under > 0 and 'quality' in df.columns:
         cut_df = df.apply(lambda row: cut_low_quality(row, args.cut_quality_under), axis=1)
         kept_bases = cut_df['read'].str.len().sum()
         all_bases = df['read'].str.len().sum()
-        report.log_str(
-            f'Cut {all_bases - kept_bases:4d}/{all_bases:4d} ({(all_bases - kept_bases) / all_bases * 100.0:5.1f}%) bases for '
-            f'{motif_class.dir_name()}'
-        )
+        report.log_str("Cut {:4d}/{:4d} ({:5.1f}%) bases for {}".format(
+            (all_bases - kept_bases), all_bases, ((all_bases - kept_bases) / all_bases * 100.0),
+            motif_class.dir_name()
+        ))
         df = cut_df
+
     filtered_len = len(df)
     if filtered_len == 0:
+        # TODO: maybe it would be nice to warn user?
         return motif_class, [], input_len, filtered_len
 
     # create annotations from rows
     annotations = df.apply(lambda row: annotation.Annotation(
-        row['read_id'], row['mate_order'], row['read'], row['reference'], row['modules'],
-        row['log_likelihood'], motif_class
+        row['read_id'], row['mate_order'], row['read'], row['reference'],
+        row['modules'], row['log_likelihood'], motif_class
     ), axis=1)
 
     # create annotation pairs from annotations
@@ -302,31 +311,30 @@ def process_group(
     postfilter_class = PostFilter(args)
     for i, (module_number, _, _) in enumerate(repeating_modules):
         prev_module = None if i == 0 else repeating_modules[i - 1]
-        create_report(
+        too_complex_function_inferring_and_creating_reports(
             annotation_pairs=annotation_pairs, module_number=module_number,
             postfilter_class=postfilter_class, motif_dir=motif_dir,
             motif_class=motif_class, read_distribution=read_distribution,
             motif_str=motif_str, result_lines=result_lines, prev_module=prev_module
         )
 
-    # generate nomenclatures for all modules:
-    for i, (seq, reps) in enumerate(motif_class.get_modules()):
-        # write files if needed
-        if args.verbose and reps == 1:
-            # pick annotations from pairs if needed
-            annotations = annotation.pairs_to_annotations_pick(annotation_pairs, i)
-
-            # setup post filtering - no primers, insufficient quality, ...
-            qual_annot, _ = postfilter_class.get_filtered(annotations, i, both_primers=True)
-
-            # gather and write nomenclatures
-            if len(qual_annot) > 0:
-                report.write_histogram_nomenclature(
-                    f'{motif_dir}/nomenclatures_{i}.txt', qual_annot, index_rep=i
-                )
-
-    # try to get the overall nomenclature:
     if args.verbose:
+        # generate nomenclatures for all modules:
+        for i, (seq, reps) in enumerate(motif_class.get_modules()):
+            # write files if needed
+            if reps == 1:
+                # pick annotations from pairs if needed
+                annotations = annotation.pairs_to_annotations_pick(annotation_pairs, i)
+
+                # setup post filtering - no primers, insufficient quality, ...
+                qual_annot, _ = postfilter_class.get_filtered(annotations, i, both_primers=True)
+
+                # gather and write nomenclatures
+                if len(qual_annot) > 0:
+                    report.write_histogram_nomenclature(
+                        f'{motif_dir}/nomenclatures_{i}.txt', qual_annot, index_rep=i
+                    )
+        # try to get the overall nomenclature:
         annotations = annotation.pairs_to_annotations_pick(annotation_pairs, None)
         for module_number, _, _ in repeating_modules:
             annotations, _ = postfilter_class.get_filtered(annotations, module_number, both_primers=True)
