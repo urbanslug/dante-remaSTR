@@ -1,16 +1,17 @@
+from datetime import datetime
+from typing import TextIO, Iterable, Iterator
 import argparse
 import csv
 import gzip
 import io
-import sys
-import typing
 import itertools
 import multiprocessing
 import re
-from datetime import datetime
+import sys
 
 import numpy as np
 import pandas as pd
+import numpy.typing as npt
 
 import src.inference as inference
 import src.arguments as arguments
@@ -60,7 +61,7 @@ def errors_per_read(errors: list[tuple[int, int, int]], relative: bool = False) 
 
 
 def generate_result_line(
-    motif_class: Motif, predicted: tuple[str, str], confidence: tuple[float | str, ...], qual_num: int,
+    motif_class: Motif, predicted: tuple[str | int, str | int], confidence: tuple[float | str, ...], qual_num: int,
     primer_num: int, filt_num: int, module_number: int, qual_annot: list[annotation.Annotation] | None = None,
     second_module_number: int | None = None
 ) -> dict:
@@ -135,14 +136,14 @@ def generate_result_line(
 # this has mixed functionality - it does prediction and it does writing
 def too_complex_function_inferring_and_creating_reports(
     annotation_pairs: list,
-    module_number: int | None,
+    module_number: int,
     postfilter_class: PostFilter,
     motif_class: Motif,
     motif_dir: str,
     motif_str: str,
-    read_distribution: np.ndarray[int],
+    read_distribution: npt.NDArray[np.int64],
     result_lines: list,
-    prev_module: tuple[int, str, int],
+    prev_module: tuple[int, str, int] | None,
 ):
     # pick annotations from pairs if needed
     # annotations: list[Annotation] = annotation.pairs_to_annotations_pick(annotation_pairs, module_number)
@@ -171,6 +172,7 @@ def too_complex_function_inferring_and_creating_reports(
         file_output = f'{motif_dir}/allcall_{module_number}.txt'
 
     monoallelic = args.male and report.chrom_from_string(motif_class.chrom) in [report.ChromEnum.X, report.ChromEnum.Y]
+    predicted: tuple[str | int, str | int]
     predicted, confidence = inference_class.genotype(
         qual_annot, primer_annot, module_number, file_pcolor, file_output, motif_str, monoallelic
     )
@@ -252,7 +254,7 @@ def process_group(
     :param args: argparse.Namespace - namespace of program arguments
     :param df: pd.DataFrame - contains information about annotated reads for a single motif to process
     :param motif_str: str - motif nomenclature
-    :return: Motif, list(dict), int - motif, result lines, input length, length of filtered intput
+    :return: Motif, list(dict), int, int - motif, result lines, input length, length of filtered intput
     """
     # build motif class
     name = None if 'name' not in df.columns or df.iloc[0]['name'] in ['None', ''] else df.iloc[0]['name']
@@ -275,7 +277,11 @@ def process_group(
         df = filtered_df
     # TODO: extract to function?
     if args.cut_quality_under > 0 and 'quality' in df.columns:
-        cut_df = df.apply(lambda row: cut_low_quality(row, args.cut_quality_under), axis=1)
+        cut_df: pd.DataFrame = df.apply(
+            lambda row: cut_low_quality(row, args.cut_quality_under),
+            result_type="expand",  # forcing DataFrame output, instead of Series
+            axis=1
+        )
         kept_bases = cut_df['read'].str.len().sum()
         all_bases = df['read'].str.len().sum()
         report.log_str("Cut {:4d}/{:4d} ({:5.1f}%) bases for {}".format(
@@ -290,6 +296,7 @@ def process_group(
         return motif_class, [], input_len, filtered_len
 
     # create annotations from rows
+    # TODO: fix types
     annotations = df.apply(lambda row: annotation.Annotation(
         row['read_id'], row['mate_order'], row['read'], row['reference'],
         row['modules'], row['log_likelihood'], motif_class
@@ -306,7 +313,7 @@ def process_group(
     read_distribution = np.bincount([len(ann.read_seq) for ann in annotations], minlength=100)
 
     # create report for each repeating module
-    result_lines = []
+    result_lines: list[dict] = []
     repeating_modules = motif_class.get_repeating_modules()
     postfilter_class = PostFilter(args)
     for i, (module_number, _, _) in enumerate(repeating_modules):
@@ -351,7 +358,7 @@ def process_group_tuple(x: tuple[argparse.Namespace, pd.DataFrame, str]) -> tupl
     return process_group(x[0], x[1], x[2])
 
 
-def generate_groups_gzipped(input_stream: typing.TextIO, column_name: str = 'motif', chunk_size: int = 1000000) -> typing.Iterator[pd.DataFrame]:
+def generate_groups_gzipped(input_stream: TextIO, column_name: str = 'motif', chunk_size: int = 1000000) -> Iterator[pd.DataFrame]:
     """
     Generate sub-parts of the input table according to "column_name". Able to process even large files. Gzipped version
     :param input_stream: TextIO - input stream
@@ -367,7 +374,7 @@ def generate_groups_gzipped(input_stream: typing.TextIO, column_name: str = 'mot
             yield g
 
 
-def generate_groups(input_stream: typing.TextIO, column_name: str = 'motif', chunk_size: int = 1000000) -> typing.Iterator[pd.DataFrame]:
+def generate_groups(input_stream: TextIO, column_name: str = 'motif', chunk_size: int = 1000000) -> Iterator[pd.DataFrame]:
     """
     Generate sub-parts of the input table according to "column_name". Able to process even large files.
     :param input_stream: TextIO - input stream
@@ -413,7 +420,7 @@ def generate_groups(input_stream: typing.TextIO, column_name: str = 'motif', chu
 
 
 def consume_iterator(
-    results_iterator: typing.Iterable[tuple[Motif, list[dict], int, int]]
+    results_iterator: Iterable[tuple[Motif, list[dict], int, int]]
 ) -> tuple[list[Motif], pd.DataFrame, int, int]:
     """
     Consume iterator of results.
@@ -536,10 +543,7 @@ def chr_and_pos(line: str) -> tuple[int, int]:
 
 
 if __name__ == '__main__':
-    # save the time of the start
     start_time = datetime.now()
-
-    # load arguments
     args = arguments.load_arguments()
 
     # initialize logging module
@@ -560,7 +564,7 @@ if __name__ == '__main__':
     # create iterator of results
     all_inputs = ((args, motif_table, motif_table[motif_column_name].iloc[0]) for motif_table in groups_iterator)
 
-    iterator: typing.Iterable
+    iterator: Iterable
     if args.processes > 1:
         with multiprocessing.Pool(args.processes) as pool:
             iterator = pool.imap(process_group_tuple, all_inputs, chunksize=5)
