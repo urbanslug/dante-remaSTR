@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import TextIO, Iterable, Iterator
+from typing import TextIO, Iterable, Iterator, Any
 import argparse
 import csv
 import gzip
@@ -36,7 +36,9 @@ def shorten_str(string: str, max_length: int = 40, ellipsis_str: str = '...') ->
         return string
 
 
-def errors_per_read(errors: list[tuple[int, int, int]], relative: bool = False) -> tuple[float | str, float | str]:
+def errors_per_read(
+    errors: list[tuple[int, int, int]], relative: bool = False
+) -> tuple[float | str, float | str]:
     """
     Count number of errors per read. Relative per length or absolute number.
     :param errors: list[tuple[int, int, int]] - indels, mismatches and length of module
@@ -61,8 +63,9 @@ def errors_per_read(errors: list[tuple[int, int, int]], relative: bool = False) 
 
 
 def generate_result_line(
-    motif_class: Motif, predicted: tuple[str | int, str | int], confidence: tuple[float | str, ...], qual_num: int,
-    primer_num: int, filt_num: int, module_number: int, qual_annot: list[annotation.Annotation] | None = None,
+    motif_class: Motif, predicted: tuple[str | int, str | int], confidence: tuple[float | str, ...],
+    qual_num: int, primer_num: int, filt_num: int, module_number: int,
+    qual_annot: list[annotation.Annotation] | None = None,
     second_module_number: int | None = None
 ) -> dict:
     """
@@ -83,7 +86,9 @@ def generate_result_line(
     motif_seq = motif_class.module_str(module_number)
     if second_module_number is not None:
         _, end = motif_class.get_location_subpart(second_module_number)
-        motif_seq = ','.join([motif_class.module_str(i) for i in range(module_number, second_module_number + 1)])
+        motif_seq = ','.join(
+            [motif_class.module_str(i) for i in range(module_number, second_module_number + 1)]
+        )
 
     reads_a1: int | str
     reads_a2: int | str
@@ -102,13 +107,19 @@ def generate_result_line(
         # get info about number of reads
         a1 = int(predicted[0]) if isinstance(predicted[0], int) else None
         a2 = int(predicted[1]) if isinstance(predicted[1], int) else None
-        reads_a1 = 0 if a1 is None else len([a for a in qual_annot if a.module_repetitions[module_number] == a1])
-        reads_a2 = 0 if a2 is None else len([a for a in qual_annot if a.module_repetitions[module_number] == a2])
+        reads_a1 = 0 if a1 is None else len(
+            [a for a in qual_annot if a.module_repetitions[module_number] == a1]
+        )
+        reads_a2 = 0 if a2 is None else len(
+            [a for a in qual_annot if a.module_repetitions[module_number] == a2]
+        )
 
         # get info about errors
         errors = [a.get_module_errors(module_number) for a in qual_annot]
-        errors_a1 = [a.get_module_errors(module_number) for a in qual_annot if a.module_repetitions[module_number] == a1]
-        errors_a2 = [a.get_module_errors(module_number) for a in qual_annot if a.module_repetitions[module_number] == a2]
+        errors_a1 = [a.get_module_errors(module_number) for a in qual_annot
+                     if a.module_repetitions[module_number] == a1]
+        errors_a2 = [a.get_module_errors(module_number) for a in qual_annot
+                     if a.module_repetitions[module_number] == a2]
         assert len([l for i, m, l in errors if l == 0]) == 0
 
         # extract error metrics
@@ -129,7 +140,9 @@ def generate_result_line(
         'conf_background_all': confidence[4] if len(confidence) > 4 else '---',
         'conf_extended': confidence[5] if len(confidence) > 5 else '---',
         'conf_extended_all': confidence[6] if len(confidence) > 6 else '---',
-        'repetition_index': module_number if second_module_number is None else f'{module_number}_{second_module_number}'
+        'repetition_index': module_number
+        if second_module_number is None
+        else f'{module_number}_{second_module_number}'
     }
 
 
@@ -144,106 +157,108 @@ def too_complex_function_inferring_and_creating_reports(
     read_distribution: npt.NDArray[np.int64],
     result_lines: list,
     prev_module: tuple[int, str, int] | None,
+    args: argparse.Namespace,
+    file_pcolor: str | None,
+    file_output: str | None
 ):
+    monoallelic1 = args.male and report.chrom_from_string(motif_class.chrom) in [
+        report.ChromEnum.X, report.ChromEnum.Y
+    ]
+
     # pick annotations from pairs if needed
-    # annotations: list[Annotation] = annotation.pairs_to_annotations_pick(annotation_pairs, module_number)
-    annotations: list = annotation.pairs_to_annotations_pick(annotation_pairs, module_number)
+    annotations1: list[annotation.Annotation]
+    annotations1: list = annotation.pairs_to_annotations_pick(annotation_pairs, module_number)
 
     # setup post filtering - no primers, insufficient quality, ...
-    qual_annot, filt_annot = postfilter_class.get_filtered(annotations, module_number, both_primers=True)
-    primer_annot, filt_annot = postfilter_class.get_filtered(filt_annot, module_number, both_primers=False)
+    qual_annot1, filt_annot1 = postfilter_class.get_filtered(annotations1, module_number, both_primers=True)
+    primer_annot1, filt_annot2 = postfilter_class.get_filtered(filt_annot1, module_number, both_primers=False)
 
-    # write files if needed
-    if args.verbose:
-        report.write_all(
-            qual_annot, primer_annot, filt_annot, motif_dir, motif_class, module_number,
-            zip_it=args.gzip_outputs, cutoff_alignments=args.cutoff_alignments
-        )
-
+    # why is this a class?
     # run inference - this takes most of the time (for no --verbose)
-    inference_class = inference.Inference(
-        read_distribution, args.param_file, str_rep=args.min_rep_cnt, minl_primer1=args.min_flank_len,
-        minl_primer2=args.min_flank_len, minl_str=args.min_rep_len
+    inference_class1 = inference.Inference(
+        read_distribution, args.param_file, str_rep=args.min_rep_cnt,
+        minl_primer1=args.min_flank_len, minl_primer2=args.min_flank_len,
+        minl_str=args.min_rep_len
     )
 
-    file_pcolor, file_output = None, None
-    if args.verbose:
-        file_pcolor = f'{motif_dir}/pcolor_{module_number}'
-        file_output = f'{motif_dir}/allcall_{module_number}.txt'
-
-    monoallelic = args.male and report.chrom_from_string(motif_class.chrom) in [report.ChromEnum.X, report.ChromEnum.Y]
-    predicted: tuple[str | int, str | int]
-    predicted, confidence = inference_class.genotype(
-        qual_annot, primer_annot, module_number, file_pcolor, file_output, motif_str, monoallelic
+    predicted1, confidence1 = inference_class1.genotype(
+        qual_annot1, primer_annot1, module_number, file_pcolor, file_output,
+        motif_str, monoallelic1
     )
 
-    # write the alignments
-    if args.verbose:
-        if confidence is not None:
-            # get number of precise alignments for each allele
-            a1 = int(predicted[0]) if isinstance(predicted[0], int) else None
-            a2 = int(predicted[1]) if isinstance(predicted[1], int) else None
-
-            if a1 is not None and a1 > 0:
-                report.write_alignment(
-                    f'{motif_dir}/alignment_{module_number}_a{a1}.fasta', qual_annot, module_number, a1,
-                    zip_it=args.gzip_outputs, cutoff_after=args.cutoff_alignments
-                )
-            if a2 is not None and a2 != a1 and a2 != 0:
-                report.write_alignment(
-                    f'{motif_dir}/alignment_{module_number}_a{a2}.fasta', qual_annot,
-                    module_number, a2, zip_it=args.gzip_outputs,
-                    cutoff_after=args.cutoff_alignments
-                )
+    # append to the result line
+    result_lines.append(generate_result_line(
+        motif_class, predicted1, confidence1,
+        len(qual_annot1), len(primer_annot1), len(filt_annot1),
+        module_number, qual_annot=qual_annot1
+    ))
 
     # infer phasing (if we are not on the first repeating module)
     if prev_module is not None:
         # get the last module number
-        last_num = prev_module[0]
+        last_num1 = prev_module[0]
 
         # post filtering
-        both_good_annot, filtered_annot = postfilter_class.get_filtered_list(
-            annotations, [last_num, module_number], both_primers=[True, True]
+        both_good_annot1, filtered_annot1 = postfilter_class.get_filtered_list(
+            annotations1, [last_num1, module_number], both_primers=[True, True]
         )
-        left_good_annot, left_bad_annot = postfilter_class.get_filtered_list(
-            filtered_annot, [last_num, module_number],
-            both_primers=[False, True]
+        left_good_annot1, left_bad_annot1 = postfilter_class.get_filtered_list(
+            filtered_annot1, [last_num1, module_number], both_primers=[False, True]
         )
-        right_good_annot, none_good_annot = postfilter_class.get_filtered_list(
-            left_bad_annot, [last_num, module_number],
-            both_primers=[True, False]
+        right_good_annot1, none_good_annot1 = postfilter_class.get_filtered_list(
+            left_bad_annot1, [last_num1, module_number], both_primers=[True, False]
         )
-        one_good_annot = left_good_annot + right_good_annot
-
-        # write files
-        if args.verbose:
-            report.write_all(
-                both_good_annot, one_good_annot, none_good_annot, motif_dir, motif_class, last_num, module_number,
-                zip_it=args.gzip_outputs, cutoff_alignments=args.cutoff_alignments
-            )
+        one_good_annot1 = left_good_annot1 + right_good_annot1
 
         # infer phasing
-        phasing, supp_reads = inference.phase(both_good_annot, last_num, module_number)
-
-        # write phasing into a file
-        if args.verbose:
-            inference.save_phasing(
-                f'{motif_dir}/phasing_{last_num}_{module_number}.txt', phasing, supp_reads
-            )
+        phasing1, supp_reads1 = inference.phase(both_good_annot1, last_num1, module_number)
 
         # append to the result line
         result_lines.append(generate_result_line(
-            motif_class, phasing, supp_reads, len(both_good_annot),
-            len(one_good_annot), len(none_good_annot), last_num,
-            second_module_number=module_number
+            motif_class, phasing1, supp_reads1,
+            len(both_good_annot1), len(one_good_annot1), len(none_good_annot1),
+            last_num1, second_module_number=module_number
         ))
 
-    # append to the result line
-    result_lines.append(generate_result_line(
-        motif_class, predicted, confidence, len(qual_annot),
-        len(primer_annot), len(filt_annot), module_number,
-        qual_annot=qual_annot
-    ))
+    if args.verbose:
+        # write files if needed
+        report.write_all(
+            qual_annot1, primer_annot1, filt_annot2,
+            motif_dir, motif_class, module_number,
+            zip_it=args.gzip_outputs, cutoff_alignments=args.cutoff_alignments
+        )
+
+        # write the alignments
+        if confidence1 is not None:
+            # get number of precise alignments for each allele
+            a1 = int(predicted1[0]) if isinstance(predicted1[0], int) else None
+            a2 = int(predicted1[1]) if isinstance(predicted1[1], int) else None
+
+            if a1 is not None and a1 > 0:
+                report.write_alignment(
+                    f'{motif_dir}/alignment_{module_number}_a{a1}.fasta',
+                    qual_annot1, module_number, a1,
+                    zip_it=args.gzip_outputs, cutoff_after=args.cutoff_alignments
+                )
+            if a2 is not None and a2 != a1 and a2 != 0:
+                report.write_alignment(
+                    f'{motif_dir}/alignment_{module_number}_a{a2}.fasta',
+                    qual_annot1, module_number, a2,
+                    zip_it=args.gzip_outputs, cutoff_after=args.cutoff_alignments
+                )
+
+        if prev_module is not None:
+            # write files
+            report.write_all(
+                both_good_annot1, one_good_annot1, none_good_annot1,
+                motif_dir, motif_class, last_num1, module_number,
+                zip_it=args.gzip_outputs, cutoff_alignments=args.cutoff_alignments
+            )
+
+            # write phasing into a file
+            inference.save_phasing(
+                f'{motif_dir}/phasing_{last_num1}_{module_number}.txt', phasing1, supp_reads1
+            )
 
 
 def process_group(
@@ -295,12 +310,14 @@ def process_group(
         # TODO: maybe it would be nice to warn user?
         return motif_class, [], input_len, filtered_len
 
+    # https://github.com/pandas-dev/pandas-stubs/issues/1001
     # create annotations from rows
-    # TODO: fix types
-    annotations = df.apply(lambda row: annotation.Annotation(
-        row['read_id'], row['mate_order'], row['read'], row['reference'],
-        row['modules'], row['log_likelihood'], motif_class
-    ), axis=1)
+    annotations: list[annotation.Annotation] = []
+    for _, row in df.iterrows():
+        annotations.append(annotation.Annotation(
+            row['read_id'], row['mate_order'], row['read'], row['reference'],
+            row['modules'], row['log_likelihood'], motif_class
+        ))
 
     # create annotation pairs from annotations
     annotation_pairs = annotation.annotations_to_pairs(annotations)
@@ -318,11 +335,17 @@ def process_group(
     postfilter_class = PostFilter(args)
     for i, (module_number, _, _) in enumerate(repeating_modules):
         prev_module = None if i == 0 else repeating_modules[i - 1]
+        file_pcolor, file_output = None, None
+        if args.verbose:
+            file_pcolor = f'{motif_dir}/pcolor_{module_number}'
+            file_output = f'{motif_dir}/allcall_{module_number}.txt'
+
         too_complex_function_inferring_and_creating_reports(
             annotation_pairs=annotation_pairs, module_number=module_number,
             postfilter_class=postfilter_class, motif_dir=motif_dir,
             motif_class=motif_class, read_distribution=read_distribution,
-            motif_str=motif_str, result_lines=result_lines, prev_module=prev_module
+            motif_str=motif_str, result_lines=result_lines, prev_module=prev_module,
+            args=args, file_pcolor=file_pcolor, file_output=file_output
         )
 
     if args.verbose:
@@ -351,16 +374,21 @@ def process_group(
     return motif_class, result_lines, input_len, filtered_len
 
 
-def process_group_tuple(x: tuple[argparse.Namespace, pd.DataFrame, str]) -> tuple[Motif, list[dict], int, int]:
+def process_group_tuple(
+    x: tuple[argparse.Namespace, pd.DataFrame, str]
+) -> tuple[Motif, list[dict], int, int]:
     """
     Wrapper for process_group() to use in parallelization (pool.imap).
     """
     return process_group(x[0], x[1], x[2])
 
 
-def generate_groups_gzipped(input_stream: TextIO, column_name: str = 'motif', chunk_size: int = 1000000) -> Iterator[pd.DataFrame]:
+def generate_groups_gzipped(
+    input_stream: TextIO, column_name: str = 'motif', chunk_size: int = 1000000
+) -> Iterator[pd.DataFrame]:
     """
-    Generate sub-parts of the input table according to "column_name". Able to process even large files. Gzipped version
+    Generate sub-parts of the input table according to "column_name".
+    Able to process even large files. Gzipped version
     :param input_stream: TextIO - input stream
     :param column_name: str - column name for grouping of the table
     :param chunk_size: int - chunk size for table processing
@@ -374,9 +402,12 @@ def generate_groups_gzipped(input_stream: TextIO, column_name: str = 'motif', ch
             yield g
 
 
-def generate_groups(input_stream: TextIO, column_name: str = 'motif', chunk_size: int = 1000000) -> Iterator[pd.DataFrame]:
+def generate_groups(
+    input_stream: TextIO, column_name: str = 'motif', chunk_size: int = 1000000
+) -> Iterator[pd.DataFrame]:
     """
-    Generate sub-parts of the input table according to "column_name". Able to process even large files.
+    Generate sub-parts of the input table according to "column_name".
+    Able to process even large files.
     :param input_stream: TextIO - input stream
     :param column_name: str - column name for grouping of the table
     :param chunk_size: int - chunk size for table processing
@@ -386,7 +417,9 @@ def generate_groups(input_stream: TextIO, column_name: str = 'motif', chunk_size
     current_group_data = pd.DataFrame()
 
     # read the output of remaSTR into annotations
-    for chunk in pd.read_csv(input_stream, sep='\t', chunksize=chunk_size, iterator=True, quoting=csv.QUOTE_NONE):
+    for chunk in pd.read_csv(
+        input_stream, sep='\t', chunksize=chunk_size, iterator=True, quoting=csv.QUOTE_NONE
+    ):
 
         # identify the unique groups in the chunk
         unique_groups = chunk[column_name].unique()
@@ -428,8 +461,8 @@ def consume_iterator(
     :return: list[Motif], pd.DataFrame, int - motifs in list and table of all results, input length
     """
     # consume iterator of results
-    all_motifs = []
-    all_result_lines = []
+    all_motifs: list[Motif] = []
+    all_result_lines: list[dict[Any, Any]] = []
     all_input_len = 0
     all_filtered_len = 0
     for i, (motif, rls, input_l, filtered_l) in enumerate(results_iterator):
@@ -441,10 +474,12 @@ def consume_iterator(
             all_filtered_len += filtered_l
 
         # report progress
-        if args.progress > 0 and (i + 1) % args.progress == 0:
-            report.log_str(f'Progress: {i + 1:10d} motifs done. ({datetime.now():%Y-%m-%d %H:%M:%S})')
+        # if args.progress > 0 and (i + 1) % args.progress == 0:
+        #     report.log_str(f'Progress: {i + 1:10d} motifs done. ({datetime.now():%Y-%m-%d %H:%M:%S})')
 
-    return all_motifs, pd.DataFrame.from_dict(all_result_lines).sort_values(by=['motif_name'], kind='stable'), all_input_len, all_filtered_len
+    df = pd.DataFrame.from_records(all_result_lines)
+    df.sort_values(by=['motif_name'], kind='stable')
+    return (all_motifs, df, all_input_len, all_filtered_len)
 
 
 def normalize_ref_alt(ref: str, alt: str) -> tuple[str, str]:
@@ -502,8 +537,8 @@ def write_vcf(df: pd.DataFrame, out: str) -> None:
     lines.append('##INFO=<ID=BG,Number=0,Type=Flag,Description="Background variant">\n')
     lines.append('##INFO=<ID=EXP,Number=0,Type=Flag,Description="Expansion variant">\n')
     lines.append('##INFO=<ID=REF,Number=1,Type=Integer,Description="Reference copy number">\n')
-    lines.append('##INFO=<ID=RU,Number=1,Type=String,Description="Repeat unit in the reference orientation">\n')
-    lines.append('##INFO=<ID=SVLEN,Number=1,Type=Integer,Description="Alternate length - Reference length">\n')
+    lines.append('##INFO=<ID=RU,Number=1,Type=String,Description="Repeat unit in ref orientation">\n')
+    lines.append('##INFO=<ID=SVLEN,Number=1,Type=Integer,Description="Alt length - Ref length">\n')
     lines.append('##INFO=<ID=SVTYPE,Number=1,Type=String,Description="Type of structural variant">\n')
     lines.append('#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tsample\n')
 
@@ -542,7 +577,7 @@ def chr_and_pos(line: str) -> tuple[int, int]:
     return (chrom2, int(pos))
 
 
-if __name__ == '__main__':
+def main():
     start_time = datetime.now()
     args = arguments.load_arguments()
 
@@ -562,7 +597,8 @@ if __name__ == '__main__':
     groups_iterator = itertools.islice(groups_iterator, args.start_motif, stop_motif)
 
     # create iterator of results
-    all_inputs = ((args, motif_table, motif_table[motif_column_name].iloc[0]) for motif_table in groups_iterator)
+    all_inputs = ((args, motif_table, motif_table[motif_column_name].iloc[0])
+                  for motif_table in groups_iterator)
 
     iterator: Iterable
     if args.processes > 1:
@@ -595,3 +631,8 @@ if __name__ == '__main__':
     end_time = datetime.now()
     report.log_str(f'DANTE_remaSTR Stopping : {end_time:%Y-%m-%d %H:%M:%S}')
     report.log_str(f'Total time of run      : {end_time - start_time}')
+
+
+if __name__ == '__main__':
+    # this is good practice so the variables do not pollute the global scope
+    main()
