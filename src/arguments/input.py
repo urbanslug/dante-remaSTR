@@ -98,7 +98,7 @@ def load_arguments() -> argparse.Namespace:
     return args
 
 
-def positive_int(value: str, max_limit: int = None) -> int:
+def positive_int(value: str, max_limit: int | None = None) -> int:
     """
     Represents positive decimal number, 0 included
     :param value: string value to estimate

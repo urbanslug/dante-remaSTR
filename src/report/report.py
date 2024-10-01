@@ -573,15 +573,15 @@ def read_all_call(allcall_file: str) -> tuple[float, int | str, int | str, float
 
     overall_conf = float(lines[0].strip().split()[-1].split('%')[0]) / 100
 
-    def get_allele(line):
+    def get_allele(line: str) -> tuple[int | str, float | str]:
         """
         Get allele number and its confidence from a line.
         :param line: str - a single line of AllCall output
         :return: (int/str, float) - allele number and its confidence
         """
         split = line.strip().split()
-        num = split[0]
-        conf = split[-1].split('%')[0].split(')')[0]
+        num: int | str = split[0]
+        conf: float | str = split[-1].split('%')[0].split(')')[0]
         try:
             conf = float(conf) / 100
         except ValueError:
@@ -592,7 +592,7 @@ def read_all_call(allcall_file: str) -> tuple[float, int | str, int | str, float
             pass
         return num, conf
 
-    def get_probability(line):
+    def get_probability(line: str) -> float:
         perc = line.strip().split()[-1][:-1]
         return float(perc)
 

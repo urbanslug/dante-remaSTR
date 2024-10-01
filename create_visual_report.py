@@ -34,6 +34,7 @@ def load_arguments() -> argparse.Namespace:
                         default='all_visual.html')
     parser.add_argument('--sample-regex', '-r', help='Regex for sample name. Default=\'.*\' (all samples)', default='.*')
     parser.add_argument('--expansion-hunter', '-e', action='store_true', help='Process data from visualize_expansion_hunter.py tool')
+    parser.add_argument('--additional-inputs', help='Additional paths to directories with Dante reports', nargs='*', default=[])
 
     ancestors.add_argument('--mother', '-m',
                            help='Name of the sample for mother or 1-based number of the sample lexicographically. Default=1st sample', default=1)
@@ -53,6 +54,7 @@ def load_arguments() -> argparse.Namespace:
         args.sons = args.sons.split(',')
     if args.daughters is not None:
         args.daughters = args.daughters.split(',')
+    args.input_dir = [args.input_dir] + args.additional_inputs
 
     return args
 
@@ -262,25 +264,25 @@ def check_genotypes(mother_genotypes: tuple[str, str], father_genotypes: tuple[s
             (child_genotypes[0] in father_genotypes + ('B', 'E') and child_genotypes[1] in mother_genotypes + ('B', 'E')))
 
 
-def create_report_dante(args: argparse.Namespace) -> None:
-    # create output directory
-    os.makedirs(args.output_dir, exist_ok=True)
+def fill_table_dante(args: argparse.Namespace, input_dir: str, table: pd.DataFrame | None = None) -> pd.DataFrame:
+    # if table is None
+    if table is None:
+        table = pd.DataFrame()
 
     # find all motif directories in root directory
-    possible_paths = glob.glob(f'{args.input_dir}/*/*/allcall_1.txt')
-    samples = set([path.split('/')[-3] for path in possible_paths])
+    possible_paths = glob.glob(f'{input_dir}/*/*/allcall_*.txt')
+    samples = list(set([path.split('/')[-3] for path in possible_paths]))
     samples = sorted([sample for sample in samples if re.match(args.sample_regex, sample)])
     motifs = sorted(set([path.split('/')[-2] for path in possible_paths]))
 
     # read all result tables
-    pd_tables = {sample: pd.read_csv(f'{args.input_dir}/{sample}/table.tsv', sep='\t') for sample in samples}
+    pd_tables = {sample: pd.read_csv(f'{input_dir}/{sample}/table.tsv', sep='\t') for sample in samples}
 
     # save the genotyping info for later use
-    genotypes = defaultdict(dict)
+    genotypes: dict = defaultdict(dict)
     nomenclatures = {}
 
     # fill the table
-    table = pd.DataFrame()
     for motif in motifs:
         for sample in samples:
             subtable = pd_tables[sample][pd_tables[sample]['Motif'] == motif]
@@ -288,29 +290,31 @@ def create_report_dante(args: argparse.Namespace) -> None:
 
             # look if there are more all-call results:
             for i, row in subtable.iterrows():
-                number = row['Repetition index']
-                repetitions = f'{os.path.realpath(args.input_dir)}/{sample}/{motif}/repetitions_{number}.png'
+                rep_idx = row['Repetition index']
+                sequence_list = row['Sequence'].split(',')
+                repetitions = f'{os.path.realpath(input_dir)}/{sample}/{motif}/repetitions_{rep_idx}.png'
                 if not os.path.exists(repetitions):
+                    print('WARNING!', repetitions, 'DOES NOT EXIST!')
                     continue
 
-                parts = number.split('_')
+                parts = rep_idx.split('_')
                 if len(parts) == 1:
-                    number = int(number)
+                    rep_idx = int(rep_idx)
                     allcall = repetitions.replace('repetitions', 'allcall')[:-4] + '.txt'
                     rep_idx2 = None
-                    row_name = f'{motif} REP_{number}'
+                    row_name = f'{motif}_{sequence_list[0][:sequence_list[0].find("[")]}'
                 elif len(parts) == 2:
-                    number = int(parts[0])
+                    rep_idx = int(parts[0])
                     allcall = None
                     rep_idx2 = int(parts[1])
-                    row_name = f'{motif} PHASING {number}-{rep_idx2}'
+                    row_name = f'{motif} PHASING {rep_idx}-{rep_idx2}'
                 else:
                     assert False
 
                 # phasing instead of genotyping
                 if rep_idx2 is not None:
                     # read phasing:
-                    phasing_file = f'{os.path.realpath(args.input_dir)}/{sample}/{motif}/phasing_{number}_{rep_idx2}.txt'
+                    phasing_file = f'{os.path.realpath(input_dir)}/{sample}/{motif}/phasing_{rep_idx}_{rep_idx2}.txt'
                     phasing_file_contents = load_phasing(phasing_file)
                     (a1, a2), (c, c1, c2) = (('--', '--'), (0.0, 0.0, 0.0)) if phasing_file_contents is None else phasing_file_contents
                     repetitions = repetitions.replace('.png', '.json')
@@ -321,10 +325,8 @@ def create_report_dante(args: argparse.Namespace) -> None:
 
                 nomenclatures[row_name] = nomenclature
                 table.at[row_name, sample] = repetitions
-                sequence = row['Sequence']
-                rep_idx = row['Repetition index']
                 sequence_highlight = ','.join(
-                    [f'<b>{s}</b>' if i + 1 == rep_idx or i + 1 == rep_idx2 else s for i, s in enumerate(sequence.split(','))])
+                    [f'<b>{s}</b>' if i + 1 == rep_idx or i + 1 == rep_idx2 or len(sequence_list) == 1 else s for i, s in enumerate(sequence_list)])
                 table.at[row_name + ' result', sample] = (f'alleles: {str(a1):2s} ({float_to_str(c1, percents=True)}) {str(a2):2s} '
                                                           f'({float_to_str(c2, percents=True)}) total {float_to_str(c, percents=True)}<br>'
                                                           f'{sequence_highlight}')
@@ -370,44 +372,56 @@ def create_report_dante(args: argparse.Namespace) -> None:
     # resort the columns
     table = table[(['Ancestry'] + samples) if 'Ancestry' in list(table.columns) else samples]
 
-    # create a html file
-    with open(f'{args.output_dir}/{args.output_name}', 'w') as f:
-        f.write(df_to_html_table(table))
+    # return table
+    return table
 
 
-def create_report_expansion_hunter(args: argparse.Namespace) -> None:
-    # create output directory
-    os.makedirs(args.output_dir, exist_ok=True)
+def fill_table_expansion_hunter(args: argparse.Namespace, input_dir: str, table: pd.DataFrame | None = None) -> pd.DataFrame:
+    # if table is None
+    if table is None:
+        table = pd.DataFrame()
 
     # find all motif directories in root directory
-    possible_paths = glob.glob(f'{args.input_dir}/*/results.tsv')
-    samples = set([path.split('/')[-2] for path in possible_paths])
+    possible_paths = glob.glob(f'{input_dir}/*/results.tsv')
+    samples = list(set([path.split('/')[-2] for path in possible_paths]))
     samples = sorted([sample for sample in samples if re.match(args.sample_regex, sample)])
 
     # read all result tables
-    pd_tables = {sample: pd.read_csv(f'{args.input_dir}/{sample}/results.tsv', sep='\t', index_col=0) for sample in samples}
+    pd_tables = {sample: pd.read_csv(f'{input_dir}/{sample}/results.tsv', sep='\t', index_col=0) for sample in samples}
     motifs = list(list(pd_tables.values())[0].index)
 
     # fill the table
-    table = pd.DataFrame()
     for motif in motifs:
         for sample in samples:
             # row from table
             row = pd_tables[sample].loc[motif]
 
             # fill table:
-            table.at[motif, sample] = f'{os.path.realpath(args.input_dir)}/{sample}/{motif}.png'
+            table.at[motif, sample] = f'{os.path.realpath(input_dir)}/{sample}/{motif}.png'
             table.at[motif + ' result', sample] = (f'Alleles: {row["Allele 1"]} / {row["Allele 2"]} '
                                                    f'({row["Allele 1 Interval"]} / {row["Allele 2 Interval"]})')
+
+    # return table
+    return table
+
+
+if __name__ == '__main__':
+    # Load arguments
+    args = load_arguments()
+    table = None
+
+    # Go through every input directory
+    for input_dir in args.input_dir:
+        # try Dante
+        table = fill_table_dante(args, input_dir, table)
+
+        # add EH results?
+        if args.expansion_hunter:
+            table = fill_table_expansion_hunter(args, input_dir, table)
+
+    # create output directory
+    os.makedirs(args.output_dir, exist_ok=True)
 
     # create a html file
     with open(f'{args.output_dir}/{args.output_name}', 'w') as f:
         f.write(df_to_html_table(table))
-
-
-if __name__ == '__main__':
-    args = load_arguments()
-    if args.expansion_hunter:
-        create_report_expansion_hunter(args)
-    else:
-        create_report_dante(args)
