@@ -302,7 +302,7 @@ def fill_table_dante(args: argparse.Namespace, input_dir: str, table: pd.DataFra
                     rep_idx = int(rep_idx)
                     allcall = repetitions.replace('repetitions', 'allcall')[:-4] + '.txt'
                     rep_idx2 = None
-                    row_name = f'{motif}_{sequence_list[0][:sequence_list[0].find("[")]}'
+                    row_name = f'{motif}_{sequence_list[0][:sequence_list[0].find("[")]}_{rep_idx - 1}'
                 elif len(parts) == 2:
                     rep_idx = int(parts[0])
                     allcall = None

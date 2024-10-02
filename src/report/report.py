@@ -500,7 +500,7 @@ def plot_histogram_image(out_prefix: str, spanning_counts: list[tuple[int, int]]
 
 def write_all(quality_annotations: list[annotation.Annotation], filt_primer: list[annotation.Annotation],
               filtered_annotations: list[annotation.Annotation], motif_dir: str, motif_class: Motif, module_number: int,
-              second_module_number: int = None, zip_it: bool = True, cutoff_alignments: int = None) -> None:
+              second_module_number: int | None = None, zip_it: bool = True, cutoff_alignments: int | None = None) -> None:
     """
     Write all output files: quality annotations, one-primer annotations, filtered annotations, statistics, repetitions + images.
     :param quality_annotations: list(Annotation) - list of blue annotations
