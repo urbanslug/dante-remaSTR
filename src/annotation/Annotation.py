@@ -7,19 +7,9 @@ from src.annotation import Motif
 
 # define base mapping to regex for nucleotide symbols
 base_mapping = {
-    'A': 'A',
-    'C': 'C',
-    'G': 'G',
-    'T': 'T',
-    'R': '[GA]',
-    'Y': '[CT]',
-    'K': '[GT]',
-    'M': '[AC]',
-    'S': '[GC]',
-    'W': '[AT]',
-    'D': '[GAT]',
-    'H': '[ACT]',
-    'V': '[GCA]',
+    'A': 'A', 'C': 'C', 'G': 'G', 'T': 'T',
+    'R': '[GA]', 'Y': '[CT]', 'K': '[GT]', 'M': '[AC]', 'S': '[GC]', 'W': '[AT]',
+    'D': '[GAT]', 'H': '[ACT]', 'V': '[GCA]',  # AGT missing?
     'N': '[ACTG]'
 }
 
