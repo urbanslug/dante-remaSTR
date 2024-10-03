@@ -40,7 +40,8 @@ for each of the annotated motifs and a summary report in HTML (report.html).
 Otherwise only a table with all genotypes, confidences, and supporting
 information.
 '''
-# max repetitions on the graph
+
+# max repetitions on the graph - WTF???
 MAX_REPETITIONS = 40
 
 
@@ -188,29 +189,6 @@ base_mapping = {
 }
 
 
-def change_suffix(filename: str, suffix: str) -> str:
-    """
-    Change suffix into a new one.
-    :param filename: str - filename
-    :param suffix: str - string to append
-    :return: str - new filename with new suffix
-    """
-    return filename[:filename.rfind('.')] + suffix
-
-
-def nonempty_file(file_path: str) -> str:
-    """
-    Checks if the filename in input is non-empty file.
-    :param file_path: str - filename to check
-    :return: str - filename
-    """
-    if not os.path.exists(file_path):
-        raise ArgumentTypeError(f'File {file_path} does not exist')
-    if os.path.getsize(file_path) == 0:
-        raise ArgumentTypeError(f'File {file_path} is empty')
-    return file_path
-
-
 class Motif:
     """
     Class to represent DNA motifs.
@@ -302,13 +280,7 @@ class Motif:
         """
         return self.name
 
-    def get_modules(self) -> list[tuple[str, int]]:
-        """
-        Returns list of modules.
-        :return: List of tuples containing sequence and repetition count.
-        """
-        return self.modules
-
+    # TODO: remove me
     def get_repeating_modules(self) -> list[tuple[int, str, int]]:
         """
         Returns list of modules with more than one repetition.
@@ -359,7 +331,7 @@ class Annotation:
         self.states = states
         self.probability = probability
         self.motif = motif
-        self.n_modules = len(motif.get_modules())
+        self.n_modules = len(motif.modules)
 
         # Calculate insertion/deletion/mismatch string
         self.mismatches_string = self.__get_errors()
@@ -432,7 +404,7 @@ class Annotation:
         # Divide by the module length where applicable
         # TODO this is not right for grey ones, where only closed ones should be counted, so round is not right.
         return tuple([1 if reps == 1 and cnt > 0 else round(cnt / len(seq))
-                      for (seq, reps), cnt in zip(self.motif.get_modules(), repetitions)])
+                      for (seq, reps), cnt in zip(self.motif.modules, repetitions)])
 
     def __get_module_sequences(self) -> tuple[str, ...]:
         """
@@ -458,7 +430,7 @@ class Annotation:
         """
         # get overhang as module length
         if overhang is None:
-            seq, _ = self.motif.get_modules()[module_num]
+            seq, _ = self.motif.modules[module_num]
             overhang = len(seq)
 
         # define module character
@@ -703,9 +675,9 @@ class Annotation:
                     [self.module_sequences[index_rep]]
                 )
         elif include_flanking:
-            data = zip(self.module_repetitions, self.motif.get_modules(), self.module_sequences)
+            data = zip(self.module_repetitions, self.motif.modules, self.module_sequences)
         else:
-            data = zip(self.module_repetitions[1:-1], self.motif.get_modules()[1:-1], self.module_sequences[1:-1])
+            data = zip(self.module_repetitions[1:-1], self.motif.modules[1:-1], self.module_sequences[1:-1])
 
         # iterate and build the nomenclature string
         nomenclatures = []
@@ -824,43 +796,6 @@ class AnnotationPair:
     def __str__(self):
         return '\n'.join(['1', str(self.ann1), '2', str(self.ann2)])
 
-    def has_required_modules(self, required_repetitions: list[int]) -> bool:
-        """
-        Validate, if read modules are sufficiently annotated (in at least one of the reads)
-        :param required_repetitions: list of number of required annotated modules
-        :return: True, if one of the annotations has required number of annotated modules
-        """
-        left = self.ann1 is not None and self.ann1.has_required_modules(required_repetitions)
-        right = self.ann2 is not None and self.ann2.has_required_modules(required_repetitions)
-        return left or right
-
-    def has_required_bases(self, required_bases: list[int]) -> bool:
-        """
-        Validate, if read bases are sufficiently annotated (in at least one of the reads)
-        :param required_bases: list of number of required annotated bases, one for each module
-        :return: True, if one of the annotations has required number of annotated bases for each module
-        """
-        left = self.ann1 is not None and self.ann1.has_required_bases(required_bases)
-        right = self.ann2 is not None and self.ann2.has_required_bases(required_bases)
-        return left or right
-
-    def has_one_primer(
-        self, required_bases: list[int], required_repetitions: list[int], index_rep: int, index_rep2: int | None = None
-    ) -> bool:
-        """
-        Validate, if at least one primer is sufficiently annotated (in at least one of the reads)
-        :param required_bases: list of number of required annotated bases, one for each module
-        :param required_repetitions: list of number of required annotated modules
-        :param index_rep: int - index of the repetition, that we are looking at
-        :param index_rep2: int - index of the second repetition, that we are looking at
-        :return: True, if one of the annotations has at least one primer is sufficiently annotated
-        """
-        left = self.ann1 is not None and self.ann1.has_one_primer(
-            required_bases, required_repetitions, index_rep, index_rep2)
-        rght = self.ann2 is not None and self.ann2.has_one_primer(
-            required_bases, required_repetitions, index_rep, index_rep2)
-        return left or rght
-
     def more_info_than(self, second_pair: AnnotationPair) -> bool:
         """
         Check if this AnnotationPair has more info than second AnnotationPair
@@ -906,38 +841,6 @@ class AnnotationPair:
             else:
                 return self.ann2
 
-    def get_str_repetitions(self, index_str: int) -> tuple[bool, int] | None:
-        """
-        Get the number of str repetitions for a particular index.
-        :param index_str: int - index of a str
-        :return: (bool, int) - closed?, number of str repetitions
-        """
-
-        def add_primers(annotation: Annotation, module_num: int) -> list[tuple[bool, int]]:
-            """
-            Add str repetitions from one annotation into an array of results.
-            :param annotation: Annotation - input annotation
-            :param module_num: int - index of a str
-            :return: list(bool, int) - closed?, number of str repetitions
-            """
-            primer1 = module_num > 0 and annotation.module_repetitions[module_num - 1] > 0
-            primer2 = module_num + 1 < len(annotation.module_repetitions)\
-                and annotation.module_repetitions[module_num + 1] > 0
-            if primer1 or primer2:
-                return [(primer1 and primer2, annotation.module_repetitions[module_num])]
-            return []
-
-        results = []
-        if self.ann1 is not None and self.ann1.is_annotated_right():
-            results.extend(add_primers(self.ann1, index_str))
-        if self.ann2 is not None and self.ann2.is_annotated_right():
-            results.extend(add_primers(self.ann2, index_str))
-
-        # return the highest (first see if it is closed and then pick the highest number):
-        if len(results) > 0:
-            return sorted(results)[-1]
-        return None
-
 
 def annotations_to_pairs(annots: list[Annotation]) -> list[AnnotationPair]:
     """
@@ -971,22 +874,6 @@ def annotations_to_pairs(annots: list[Annotation]) -> list[AnnotationPair]:
             i += 1
 
     return result
-
-
-def pairs_to_annotations(annotation_pairs: list[AnnotationPair]) -> list[Annotation]:
-    """
-    Convert an array of annotations pairs to annotation array.
-    :param annotation_pairs: list(AnnotationPair) - annotations
-    :return: list(Annotation)
-    """
-    annots = []
-    for ap in annotation_pairs:
-        if ap.ann1 is not None:
-            annots.append(ap.ann1)
-        if ap.ann2 is not None:
-            annots.append(ap.ann2)
-
-    return annots
 
 
 def pairs_to_annotations_pick(annotation_pairs: list[AnnotationPair], index_str: int | None) -> list[Annotation]:
@@ -1073,20 +960,6 @@ def remove_pcr_duplicates(annot_pairs: list[AnnotationPair]) -> tuple[list[Annot
     duplicates = duplicates_1 + duplicates_2
 
     return deduplicated, duplicates
-
-
-def shorten_str(string: str, max_length: int = 40, ellipsis_str: str = '...') -> str:
-    """
-    Shorten string to max_length and include ellipsis.
-    :param string: str - string to shorten
-    :param max_length: int - maximum length to shorten to
-    :param ellipsis_str: str - ellipsis to add to end of string
-    :return: str - shortened string
-    """
-    if len(string) > max_length:
-        return string[:max_length - len(ellipsis_str)] + ellipsis_str
-    else:
-        return string
 
 
 def errors_per_read(
@@ -1350,7 +1223,7 @@ def process_group(
     # TODO: extract to function?
     if args.skip_quality_under > 0 and 'quality' in df.columns:
         filtered_df = df[df.apply(
-            lambda row: has_good_quality(row, args.skip_quality_under, 1, len(motif_class.get_modules()) - 2),
+            lambda row: has_good_quality(row, args.skip_quality_under, 1, len(motif_class.modules) - 2),
             axis=1
         )]
         print("Kept {:4d}/{:4d} ({:5.1f}%) reads for {}".format(
@@ -1431,7 +1304,7 @@ def process_group(
 
     if args.verbose:
         # generate nomenclatures for all modules:
-        for i, (seq, reps) in enumerate(motif_class.get_modules()):
+        for i, (seq, reps) in enumerate(motif_class.modules):
             # write files if needed
             if reps == 1:
                 # pick annotations from pairs if needed
@@ -1685,7 +1558,7 @@ class PostFilter:
             and ann.module_repetitions[module_number] >= self.min_rep_cnt
         )
 
-        seq, reps = ann.motif.get_modules()[module_number]
+        seq, reps = ann.motif.modules[module_number]
 
         return is_right and has_primers and has_less_errors and has_flanks and (has_repetitions or reps == 1)
 
@@ -1837,23 +1710,6 @@ def write_annotations(out_file: str, annotations: list[Annotation], zip_it: bool
     with gzip.open(out_file, 'wt') if zip_it else open(out_file, 'w') as fw:
         for annot in annotations:
             fw.write(str(annot) + '\n')
-
-
-def write_annotation_pairs(out_file: str, annotation_pairs: list[AnnotationPair], zip_it: bool = True) -> None:
-    """
-    Stores annotations in alignment format into output text file
-    :param out_file: Alignment file
-    :param annotation_pairs: Annotated pairs of reads
-    :param zip_it: bool - whether to gzip the resulting file
-    """
-    if zip_it and not out_file.endswith('.gz'):
-        out_file += '.gz'
-    with gzip.open(out_file, 'wt') if zip_it else open(out_file, 'w') as fw:
-        for ap in annotation_pairs:
-            write_left = str(ap.ann1) if ap.ann1 is not None else 'Left None\n'
-            fw.write(write_left)
-            write_right = str(ap.ann2) if ap.ann2 is not None else 'Right None\n'
-            fw.write(write_right + '\n')
 
 
 def write_alignment(
@@ -2425,56 +2281,6 @@ def write_all(
     )
 
 
-def read_all_call(
-    allcall_file: str
-) -> tuple[float, int | str, int | str, float, float, float, float, float, float] | None:
-    """
-    Read AllCall output and returns allele predictions and confidences.
-    :param allcall_file: str - filename of AllCall output
-    :return: tuple(9) - overall_confidence, allele numbers, and confidences for them,
-    0 for allele number if BG is the best
-    """
-    if not os.path.exists(allcall_file):
-        return None
-
-    with open(allcall_file) as f:
-        lines = f.readlines()
-
-    overall_conf = float(lines[0].strip().split()[-1].split('%')[0]) / 100
-
-    def get_allele(line):
-        """
-        Get allele number and its confidence from a line.
-        :param line: str - a single line of AllCall output
-        :return: (int/str, float) - allele number and its confidence
-        """
-        split = line.strip().split()
-        num = split[0]
-        conf = split[-1].split('%')[0].split(')')[0]
-        try:
-            conf = float(conf) / 100
-        except ValueError:
-            pass
-        try:
-            num = int(num)
-        except ValueError:
-            pass
-        return num, conf
-
-    def get_probability(line):
-        perc = line.strip().split()[-1][:-1]
-        return float(perc)
-
-    a1, c1 = get_allele(lines[1])
-    a2, c2 = get_allele(lines[2])
-    c3 = get_probability(lines[3])
-    c4 = get_probability(lines[4])
-    c5 = get_probability(lines[5])
-    c6 = get_probability(lines[6])
-
-    return overall_conf, a1, a2, c1, c2, c3, c4, c5, c6
-
-
 def custom_format(template: str, **kwargs) -> str:
     """
     Custom format of strings for only those that we provide
@@ -3011,30 +2817,6 @@ class Inference:
 
             return self.likelihood_rl(rl) * partial_likelihood / float(number_of_options)
 
-    def likelihood_read_intersection(self, model_i, model_j, observed, rl, closed=True):
-        """
-        Likelihood of generation of read with observed allele count and rl.
-        :param model_i: ndarray - model for the left allele
-        :param model_j: ndarray - model for the right allele
-        :param observed: int - observed allele count
-        :param rl: int - read length
-        :param closed: bool - if the read is closed - i.e. both primers are there
-        :return:
-        """
-        if closed:
-            return (self.likelihood_rl(rl)
-                    * self.likelihood_intersection(model_i, model_j, observed)
-                    * self.likelihood_coverage(observed, rl, True))
-        else:
-            number_of_options = 0
-            partial_likelihood = 0
-            for true_length in itertools.chain(range(observed, self.max_rep), [self.max_with_e - 1]):
-                partial_likelihood += (self.likelihood_intersection(model_i, model_j, true_length)
-                                       * self.likelihood_coverage(true_length, rl, False))
-                number_of_options += 1
-
-            return self.likelihood_rl(rl) * partial_likelihood / float(number_of_options)
-
     @functools.lru_cache()
     def likelihood_read(
         self, observed: int, rl: int, model_index1: int, model_index2: int | None = None, closed: bool = True
@@ -3225,9 +3007,6 @@ class Inference:
             inner = [f'{j}/{i}' for j in ['B'] + list(range(self.min_rep, max_str))]
             hovertext.append(inner)
 
-        # hovertext = [[f'{j}/{i}'
-        #     for i in list(range(self.min_rep, max_str)) + ['E']]
-        #     for j in ['B'] + list(range(self.min_rep, max_str))]
         hovertext[0][-1] = 'E/E'
         hovertext[-1][0] = 'B'
         hovertext[-1][1] = 'E'
@@ -3521,23 +3300,6 @@ def save_phasing(phasing_file: str, phasing: tuple[str, str], supp_reads: tuple[
     with open(phasing_file, 'w') as f:
         f.write(f'{phasing[0]}\t{phasing[1]}\n')
         f.write(f'{supp_reads[0]}\t{supp_reads[1]}\t{supp_reads[2]}\n')
-
-
-def load_phasing(phasing_file: str) -> tuple[tuple[str, str], tuple[str, str, str]] | None:
-    """
-    Load the phasing information from a file.
-    :param phasing_file: str - filename from where to load the phasing information
-    :return: tuple - predicted symbols and confidences
-    """
-    if not os.path.exists(phasing_file):
-        return None
-
-    # load the file
-    with open(phasing_file, 'r') as f:
-        phasing = f.readline().strip().split('\t')
-        supp_reads = f.readline().strip().split('\t')
-
-    return (phasing[0], phasing[1]), (supp_reads[0], supp_reads[1], supp_reads[2])
 
 
 contents = """
@@ -3877,12 +3639,6 @@ alleles: {result}<br>
     }}
 </script>
 
-<p><a href="#content">Back to content</a></p>
-"""
-
-motif_string_empty_old = """<h2 id="{motif_name}">{motif}</h2>
-<p>{sequence}</p>
-NOT AVAILABLE
 <p><a href="#content">Back to content</a></p>
 """
 
