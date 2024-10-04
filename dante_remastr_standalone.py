@@ -116,20 +116,16 @@ def load_arguments() -> Namespace:
         help='Output destination (directory). Default=./dante_out/'
     )
     options.add_argument(
-        '--verbose', '-v', action='store_true',
-        help='Print all the outputs. Default is to print only the result table to stdout.'
-    )
-    options.add_argument(
-        '--processes', '-p', type=positive_nonzero_int, default=8,
-        help='Processes to use. Default=8'
-    )
-    options.add_argument(
         '--cutoff-alignments', type=positive_int, default=20,
         help='How many bases to keep beyond annotated part. Default=20'
     )
     options.add_argument(
         '--male', action='store_true',
         help='Indicate that the sample is male. Process motifs from chrX/chrY as mono-allelic.'
+    )
+    options.add_argument(
+        '--verbose', '-v', action='store_true',
+        help='Print all the outputs. Default is to print only the result table to stdout.'
     )
 
     debug = parser.add_argument_group('Debug')
@@ -151,7 +147,7 @@ def positive_int(value: str) -> int:
     try:
         int_value = int(value)
     except ValueError:
-        raise ArgumentTypeError(f'Value {value} is not integer')
+        raise ArgumentTypeError(f'Value {value} is not integer') from None
     if int_value < 0:
         raise ArgumentTypeError(f'Value {value} is negative')
     return int_value
@@ -168,11 +164,10 @@ def probability(value: str) -> float:
     try:
         float_value = float(value)
     except ValueError:
-        raise ArgumentTypeError(f'Value {value} is not float')
+        raise ArgumentTypeError(f'Value {value} is not float') from None
     if 0 <= float_value <= 1:
         return float_value
-    else:
-        raise ArgumentTypeError(f'Value {value} is not in interval <0, 1>')
+    raise ArgumentTypeError(f'Value {value} is not in interval <0, 1>')
 
 
 # --- garbage under this line -------------------------------------------------
@@ -398,9 +393,9 @@ class Annotation:
         repetitions = self.__get_bases_per_module()
 
         # Divide by the module length where applicable
-        # TODO this is not right for grey ones, where only closed ones should be counted, so round is not right.
-        return tuple([1 if reps == 1 and cnt > 0 else round(cnt / len(seq))
-                      for (seq, reps), cnt in zip(self.motif.modules, repetitions)])
+        # TODO: this is not right for grey ones, where only closed ones should be counted, so round is not right.
+        return tuple(1 if reps == 1 and cnt > 0 else round(cnt / len(seq))
+                     for (seq, reps), cnt in zip(self.motif.modules, repetitions))
 
     def __get_module_sequences(self) -> tuple[str, ...]:
         """
@@ -477,8 +472,7 @@ class Annotation:
 
         if relative:
             return errors / float(sum(self.module_bases)) <= max_errors
-        else:
-            return errors <= max_errors
+        return errors <= max_errors
 
     def primers(self, index_rep: int) -> int:
         """
@@ -757,13 +751,10 @@ class AnnotationPair:
         if index_str is None:
             if self.ann1.info_value() >= self.ann2.info_value():
                 return self.ann1
-            else:
-                return self.ann2
-        else:
-            if self.ann1.info_value_str(index_str) >= self.ann2.info_value_str(index_str):
-                return self.ann1
-            else:
-                return self.ann2
+            return self.ann2
+        if self.ann1.info_value_str(index_str) >= self.ann2.info_value_str(index_str):
+            return self.ann1
+        return self.ann2
 
 
 def errors_per_read(
@@ -785,11 +776,10 @@ def errors_per_read(
             float(np.mean([indels / float(length) for indels, _, length in errors]) * mean_length),
             float(np.mean([mismatches / float(length) for _, mismatches, length in errors]) * mean_length)
         )
-    else:
-        return (
-            float(np.mean([indels for indels, _, _ in errors])),
-            float(np.mean([mismatches for _, mismatches, _ in errors]))
-        )
+    return (
+        float(np.mean([indels for indels, _, _ in errors])),
+        float(np.mean([mismatches for _, mismatches, _ in errors]))
+    )
 
 
 def generate_result_line(
@@ -1023,31 +1013,6 @@ def process_group(
 
     # filter/cut those with low quality
     input_len = len(df)
-    # TODO: extract to function?
-    if args.skip_quality_under > 0 and 'quality' in df.columns:
-        filtered_df = df[df.apply(
-            lambda row: has_good_quality(row, args.skip_quality_under, 1, len(motif_class.modules) - 2),
-            axis=1
-        )]
-        print("Kept {:4d}/{:4d} ({:5.1f}%) reads for {}".format(
-            len(filtered_df), len(df), len(filtered_df) / len(df) * 100.0, motif_class.dir_name()
-        ))
-        df = filtered_df
-    # TODO: extract to function?
-    if args.cut_quality_under > 0 and 'quality' in df.columns:
-        cut_df: pd.DataFrame = df.apply(
-            lambda row: cut_low_quality(row, args.cut_quality_under),
-            result_type="expand",  # forcing DataFrame output, instead of Series
-            axis=1
-        )
-        kept_bases = cut_df['read'].str.len().sum()
-        all_bases = df['read'].str.len().sum()
-        print("Cut {:4d}/{:4d} ({:5.1f}%) bases for {}".format(
-            (all_bases - kept_bases), all_bases, ((all_bases - kept_bases) / all_bases * 100.0),
-            motif_class.dir_name()
-        ))
-        df = cut_df
-
     filtered_len = len(df)
     if filtered_len == 0:
         # TODO: maybe it would be nice to warn user?
@@ -1365,9 +1330,9 @@ class PostFilter:
         # filter annotations
         quality_annotations = [
             an for an in annotations
-            if all([
+            if all((
                 self.quality_annotation(an, mn, both_primers=bp) for mn, bp in zip(module_number, both_primers)
-            ])
+            ))
         ]
         filtered_annotations = [an for an in annotations if an not in quality_annotations]
 
@@ -1753,8 +1718,8 @@ def write_histogram_image2d(
         return
 
     # assign maximals
-    xm = max([r for (_, r), _ in dedup_reps])
-    ym = max([r for _, (_, r) in dedup_reps])
+    xm = max(r for (_, r), _ in dedup_reps)
+    ym = max(r for _, (_, r) in dedup_reps)
     max_ticks = max(ym, xm) + 2
     xm = max(MAX_REPETITIONS, xm)
     ym = max(MAX_REPETITIONS, ym)
@@ -1826,12 +1791,11 @@ def write_histogram_image2d(
     def parse_labels(num, num_primer):
         if num == 0 and num_primer == 0:
             return ''
-        elif num == 0 and num_primer != 0:
+        if num == 0 and num_primer != 0:
             return '0/%s' % str(num_primer)
-        elif num != 0 and num_primer == 0:
+        if num != 0 and num_primer == 0:
             return '%s/0' % str(num)
-        else:
-            return '%s/%s' % (str(num), str(num_primer))
+        return '%s/%s' % (str(num), str(num_primer))
 
     str1 = 'STR %d [%s]' % (index_rep + 1, seq.split('-')[-1])
     str2 = 'STR %d [%s]' % (index_rep2 + 1, seq2.split('-')[-1])
@@ -2013,21 +1977,21 @@ def write_all(
 
     # write output files
     write_annotations(f'{motif_dir}/annotations_{suffix}.txt', quality_annotations, zip_it=zip_it)
-    if len(quality_annotations) and max([len(a.read_seq) for a in quality_annotations]) > 200:
+    if len(quality_annotations) and max(len(a.read_seq) for a in quality_annotations) > 200:
         write_annotations(
             f'{motif_dir}/annotations_{suffix}_short.txt',
             [a.get_shortened_annotation(cutoff_alignments) for a in quality_annotations],
             zip_it=zip_it
         )
     write_annotations(f'{motif_dir}/filtered_{suffix}.txt', filtered_annotations, zip_it=zip_it)
-    if len(filtered_annotations) and max([len(a.read_seq) for a in filtered_annotations]) > 200:
+    if len(filtered_annotations) and max(len(a.read_seq) for a in filtered_annotations) > 200:
         write_annotations(
             f'{motif_dir}/filtered_{suffix}_short.txt',
             [a.get_shortened_annotation(cutoff_alignments) for a in filtered_annotations],
             zip_it=zip_it
         )
     write_annotations(f'{motif_dir}/filtered_primer_{suffix}.txt', filt_primer, zip_it=zip_it)
-    if len(filt_primer) and max([len(a.read_seq) for a in filt_primer]) > 200:
+    if len(filt_primer) and max(len(a.read_seq) for a in filt_primer) > 200:
         write_annotations(
             f'{motif_dir}/filtered_primer_{suffix}_short.txt',
             [a.get_shortened_annotation(cutoff_alignments) for a in filt_primer],
@@ -2312,7 +2276,7 @@ def linear_rate(n, p1=0.0, p2=1.0, p3=1.0):
     return p1 + p2 * n
 
 
-def n2_rate(n, p1=0.0, p2=1.0, p3=1.0):
+def quadratic_rate(n, p1=0.0, p2=1.0, p3=1.0):
     return p1 + p2 * n + p3 * n * n
 
 
@@ -2402,7 +2366,8 @@ class Inference:
     DEFAULT_FIT_FUNCTION = 'linear'
 
     def __init__(
-        self, read_distribution, params_file, str_rep=3, minl_primer1=5, minl_primer2=5, minl_str=5,
+        self,
+        read_distribution, params_file, str_rep=3, minl_primer1=5, minl_primer2=5, minl_str=5,
         p_bckg_closed=None, p_bckg_open=None, p_expanded=None
     ):
         """
@@ -2439,7 +2404,7 @@ class Inference:
         """
         # extract params
         model_params, rate_func_str = self.read_params(self.params_file)
-        str_to_func = {'linear': linear_rate, 'const': const_rate, 'exponential': exp_rate, 'square': n2_rate}
+        str_to_func = {'linear': linear_rate, 'const': const_rate, 'exponential': exp_rate, 'square': quadratic_rate}
         rate_func = const_rate
         if rate_func_str in str_to_func.keys():
             rate_func = str_to_func[rate_func_str]
@@ -2556,15 +2521,14 @@ class Inference:
             return (self.likelihood_rl(rl)
                     * self.likelihood_model(model, observed)
                     * self.likelihood_coverage(observed, rl, True))
-        else:
-            number_of_options = 0
-            partial_likelihood = 0
-            for true_length in itertools.chain(range(observed, self.max_rep), [self.max_with_e - 1]):
-                partial_likelihood += (self.likelihood_model(model, true_length)
-                                       * self.likelihood_coverage(true_length, rl, False))
-                number_of_options += 1
+        number_of_options = 0
+        partial_likelihood = 0
+        for true_length in itertools.chain(range(observed, self.max_rep), [self.max_with_e - 1]):
+            partial_likelihood += (self.likelihood_model(model, true_length)
+                                   * self.likelihood_coverage(true_length, rl, False))
+            number_of_options += 1
 
-            return self.likelihood_rl(rl) * partial_likelihood / float(number_of_options)
+        return self.likelihood_rl(rl) * partial_likelihood / float(number_of_options)
 
     @functools.lru_cache()
     def likelihood_read(
@@ -3607,11 +3571,10 @@ def generate_motifb64(
                     sequence=sequence, alignment=align_html + align_html_a1 + align_html_a2
                     + filt_align_html + left_align_html + right_align_html
                 )))
-    else:
-        return (content_string_empty.format(motif_name=motif_clean.rsplit('_', 1)[0], motif=motif),
-                motif_string_empty.format(post_bases=postfilter.min_rep_len, post_reps=postfilter.min_rep_cnt,
-                                          motif_name=motif_clean, motif=motif, sequence=sequence, errors=errors),
-                (motif, ''))
+    return (content_string_empty.format(motif_name=motif_clean.rsplit('_', 1)[0], motif=motif),
+            motif_string_empty.format(post_bases=postfilter.min_rep_len, post_reps=postfilter.min_rep_cnt,
+                                      motif_name=motif_clean, motif=motif, sequence=sequence, errors=errors),
+            (motif, ''))
 
 
 def generate_alignment(

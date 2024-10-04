@@ -11,11 +11,10 @@ max-line-length=120
 # disable = too-many-lines,
 #           missing-module-docstring,
 disable = all
-enable = unused-variable, unused-argument, ungrouped-imports, unnecessary-lambda
-# use-a-generator
-# , no-else-return
-# enable raise-missing-from https://stefan.sofa-rockers.org/2020/10/28/raise-from/
-# consider-using-generator
+enable =
+    unused-variable, unused-argument, ungrouped-imports, unnecessary-lambda, 
+    use-a-generator, no-else-return, raise-missing-from, consider-using-generator
+# raise-missing-from https://stefan.sofa-rockers.org/2020/10/28/raise-from/
 
 [METHOD_ARGS]
 [MISCELLANEOUS]
