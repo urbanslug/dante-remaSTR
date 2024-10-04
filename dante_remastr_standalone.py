@@ -116,10 +116,6 @@ def load_arguments() -> Namespace:
         help='Output destination (directory). Default=./dante_out/'
     )
     options.add_argument(
-        '--deduplicate', '-d', action='store_true',
-        help='Turn on the deduplication of reads.'
-    )
-    options.add_argument(
         '--verbose', '-v', action='store_true',
         help='Print all the outputs. Default is to print only the result table to stdout.'
     )
@@ -466,78 +462,6 @@ class Annotation:
         """
         return self.primers(index_str), self.module_repetitions[index_str], self.module_bases[index_str]
 
-    def has_required_modules(self, required_repetitions: list[int]) -> bool:
-        """
-        Validate, if read is annotated with sufficient number of modules
-        :param required_repetitions: list of number of required repetitions, one for each module
-        :return: True, if annotation has required number of repetition for each module
-        """
-        if not required_repetitions:
-            return True
-
-        for repetition, required_repetition in zip(self.module_repetitions, required_repetitions):
-            if repetition < required_repetition:
-                return False
-        return True
-
-    def has_required_bases(self, required_bases: list[int]) -> bool:
-        """
-        Validate, if read bases are sufficiently annotated
-        :param required_bases: list of number of required annotated bases, one for each module
-        :return: True, if annotation has required number of annotated bases for each module
-        """
-        if not required_bases:
-            return True
-
-        for bases, required_base in zip(self.module_bases, required_bases):
-            if bases < required_base:
-                return False
-        return True
-
-    def has_one_primer(
-        self, required_bases: list[int], required_repetitions: list[int], index_rep: int, index_rep2: int | None = None
-    ) -> bool:
-        """
-        Validate, if at least one primer is sufficiently annotated, in case of 2 repetitions, we check only the
-        :param required_bases: list of number of required annotated bases, one for each module
-        :param required_repetitions: list of number of required annotated modules
-        :param index_rep: int - index of the repetition, that we are looking at
-        :param index_rep2: int - index of the second repetition, that we are looking at
-        :return: True, if annotation has at least one primer is sufficiently annotated
-        """
-        # if it is not interesting just throw it away
-        if not self.is_annotated_right():
-            return False
-
-        # if no filter, accept all
-        if required_bases is None and required_repetitions is None:
-            return True
-
-        def check_reqs(index: int) -> bool:
-            """
-            Check if requirements are met on 'index'
-            :param index: int - index of a module
-            :return: bool - requirements are met?
-            """
-            if required_bases is not None and self.module_bases[index] < required_bases[index]:
-                return False
-            if required_repetitions is not None and self.module_repetitions[index] < required_repetitions[index]:
-                return False
-            return True
-
-        if index_rep2 is None:
-            index_rep2 = index_rep
-        index_rep, index_rep2 = min(index_rep, index_rep2), max(index_rep, index_rep2)
-
-        # if the module has right primer, and it is clipped on the left
-        if index_rep2 + 1 < len(required_bases) and self.states[0] != '-' \
-                and check_reqs(index_rep2 + 1) and check_reqs(index_rep):
-            return True
-        # if the module has left primer, and it is clipped on the right
-        if index_rep - 1 >= 0 and self.states[-1] != '-' and check_reqs(index_rep - 1) and check_reqs(index_rep2):
-            return True
-        return False
-
     def has_less_errors(self, max_errors: float | int, relative=False) -> bool:
         """
         Check if this annotation has fewer errors than max_errors.
@@ -842,126 +766,6 @@ class AnnotationPair:
                 return self.ann2
 
 
-def annotations_to_pairs(annots: list[Annotation]) -> list[AnnotationPair]:
-    """
-    Convert an array of annotations to annotation pairs array.
-    :param annots: list(Annotation) - annotations
-    :return: list(AnnotationPair)
-    """
-
-    # sort:
-    sorted_list = sorted(annots, key=lambda annot: (annot.read_id, annot.left_pair))
-
-    # remove duplicates:
-    seen = set()
-    deduplicated = []
-    for ann in sorted_list:
-        if (ann.read_id, ann.left_pair) not in seen:
-            seen.add((ann.read_id, ann.left_pair))
-            deduplicated.append(ann)
-
-    result = []
-
-    i = 0
-    while i < len(deduplicated):
-        if i + 1 < len(deduplicated) and deduplicated[i].read_id == deduplicated[i + 1].read_id:
-            assert deduplicated[i].ordered and deduplicated[i + 1].ordered\
-                and deduplicated[i].left_pair != deduplicated[i + 1].left_pair
-            result.append(AnnotationPair(deduplicated[i], deduplicated[i + 1]))
-            i += 2
-        else:
-            result.append(AnnotationPair(deduplicated[i], None))
-            i += 1
-
-    return result
-
-
-def pairs_to_annotations_pick(annotation_pairs: list[AnnotationPair], index_str: int | None) -> list[Annotation]:
-    """
-    Convert an array of annotations pairs to annotation array. Leave only the more informative one.
-    :param annotation_pairs: list(AnnotationPair) - annotations
-    :param index_str: int: index of the STR to look at or None if we should get the whole motif into account
-    :return: list(Annotation)
-    """
-    return [ap.get_more_informative_annotation(index_str) for ap in annotation_pairs]
-
-
-# TODO make this faster/parallelize -
-# takes too long when number of found reads is more than 10.000-100.000 (1min at 7.500, 4h at 400.000)
-def remove_pcr_duplicates(annot_pairs: list[AnnotationPair]) -> tuple[list[AnnotationPair], list[AnnotationPair]]:
-    """
-    Remove PCR duplicates -- deduplicate the annotation pair list.
-    :param annot_pairs: list(AnnotationPair) - list of Annotation Pairs
-    :return: list(AnnotationPair), list(AnnotationPair) - deduplicated list and duplications
-    """
-    def remove_none(ann_pairs: list[AnnotationPair], first: bool = True) -> list[AnnotationPair]:
-        """
-        Remove annotation pairs with None first (second) annotation from the pair.
-        :param ann_pairs: list(AnnotationPair) - list of Annotation Pairs
-        :param first: bool - look at the first annotation from the pair?
-        :return: list(AnnotationPair) - list of Annotation Pairs without None pairs
-        """
-        return [ap for ap in ann_pairs if (first and ap.ann1 is not None) or (not first and ap.ann2 is not None)]
-
-    def restore_none(pairs_with_none: list[AnnotationPair], first: bool = True) -> list[AnnotationPair]:
-        """
-        Restore annotation pairs with None first (second) annotation from the pair.
-        :param pairs_with_none: list(AnnotationPair) - list of Annotation Pairs with None annotations
-        :param first: bool - look at the first annotation from the pair?
-        :return: list(AnnotationPair) - list of Annotation Pairs with restored Annotation Pairs with None annotation
-        """
-        return [ap for ap in pairs_with_none if (first and ap.ann1 is None) or (not first and ap.ann2 is None)]
-
-    def deduplicate(ann_pairs: list[AnnotationPair]) -> tuple[list[AnnotationPair], list[AnnotationPair]]:
-        """
-        Remove PCR duplicates -- deduplicate the annotation pair list.
-        :param ann_pairs: list(AnnotationPair) - list of Annotation Pairs sorted by annotation_1 or annotation_2
-        :return: list(AnnotationPair), list(AnnotationPair) - deduplicated list and duplications
-        """
-        dedup = []
-        duplic = []
-
-        if not ann_pairs:
-            return [], []
-
-        # Find duplicates by comparing neighbours in sorted list
-        prev_ap = ann_pairs[0]
-        for curr_ap in ann_pairs[1:]:
-            if prev_ap == curr_ap:
-                if prev_ap.more_info_than(curr_ap):
-                    duplic.append(curr_ap)
-                else:
-                    duplic.append(prev_ap)
-                    prev_ap = curr_ap
-            else:
-                dedup.append(prev_ap)
-                prev_ap = curr_ap
-
-        dedup.append(prev_ap)
-
-        return dedup, duplic
-
-    if not annot_pairs:
-        return [], []
-
-    # Deduplication according to first annotation in pair
-    curr_pairs = remove_none(annot_pairs, True)
-    curr_pairs = sorted(curr_pairs, key=lambda ap: ap.ann1.read_seq)
-    deduplicated_1, duplicates_1 = deduplicate(curr_pairs)
-
-    curr_pairs = deduplicated_1 + restore_none(annot_pairs, True)
-
-    # Deduplication according to second annotation in pair
-    curr_pairs = remove_none(curr_pairs, False)
-    curr_pairs = sorted(curr_pairs, key=lambda ann: ann.ann2.read_seq[::-1])  # type: ignore
-    deduplicated_2, duplicates_2 = deduplicate(curr_pairs)
-
-    deduplicated = deduplicated_2 + restore_none(deduplicated_1, False)
-    duplicates = duplicates_1 + duplicates_2
-
-    return deduplicated, duplicates
-
-
 def errors_per_read(
     errors: list[tuple[int, int, int]], relative: bool = False
 ) -> tuple[float | str, float | str]:
@@ -1258,14 +1062,6 @@ def process_group(
             row['modules'], row['log_likelihood'], motif_class
         ))
 
-    # create annotation pairs from annotations
-    annotation_pairs = annotations_to_pairs(annotations)
-
-    # deduplicate?
-    if args.deduplicate:
-        annotation_pairs, duplicates = remove_pcr_duplicates(annotation_pairs)
-        print(f"Number of PCR duplicates: {len(duplicates)}")
-
     # infer read distribution
     read_distribution = np.bincount([len(ann.read_seq) for ann in annotations], minlength=100)
 
@@ -1282,14 +1078,12 @@ def process_group(
             file_pcolor = f'{motif_dir}/pcolor_{module_number}'
             file_output = f'{motif_dir}/allcall_{module_number}.txt'
 
-        annotations1: list[Annotation]
-        annotations1 = pairs_to_annotations_pick(annotation_pairs, module_number)
         result = too_complex_function_inferring_and_creating_reports(
             module_number=module_number,
             postfilter_class=postfilter_class,
             motif_class=motif_class, read_distribution=read_distribution,
             motif_str=motif_str, result_lines=result_lines, prev_module=prev_module,
-            args=args, file_pcolor=file_pcolor, file_output=file_output, annotations1=annotations1
+            args=args, file_pcolor=file_pcolor, file_output=file_output, annotations1=annotations
         )
         postfilter_counts, postfilter_counts_phasing, \
             phasing, supp_reads, confidence, predicted, result_lines, last_num1 = result
@@ -1307,9 +1101,6 @@ def process_group(
         for i, (seq, reps) in enumerate(motif_class.modules):
             # write files if needed
             if reps == 1:
-                # pick annotations from pairs if needed
-                annotations = pairs_to_annotations_pick(annotation_pairs, i)
-
                 # setup post filtering - no primers, insufficient quality, ...
                 qual_annot, _ = postfilter_class.get_filtered(annotations, i, both_primers=True)
 
@@ -1319,7 +1110,6 @@ def process_group(
                         f'{motif_dir}/nomenclatures_{i}.txt', qual_annot, index_rep=i
                     )
         # try to get the overall nomenclature:
-        annotations = pairs_to_annotations_pick(annotation_pairs, None)
         for module_number, _, _ in repeating_modules:
             annotations, _ = postfilter_class.get_filtered(annotations, module_number, both_primers=True)
         write_histogram_nomenclature(f'{motif_dir}/nomenclature.txt', annotations)
@@ -2633,7 +2423,6 @@ class Inference:
         self.minl_primer2 = minl_primer2
         self.minl_str = minl_str
         self.read_distribution = read_distribution
-        self.sum_reads_log = np.log(np.sum(read_distribution))
         self.sum_reads = np.sum(read_distribution)
         self.params_file = params_file
         self.p_expanded = p_expanded
@@ -2736,10 +2525,6 @@ class Inference:
         :return: float - likelihood of a read coming from this model
         """
         return model[g]
-
-    @staticmethod
-    def likelihood_intersection(model_i, model_j, g):
-        return min(model_i[g], model_j[g])
 
     def likelihood_coverage(self, true_length, rl, closed=True):
         """
