@@ -19,8 +19,8 @@ import functools
 import itertools
 
 import numpy as np
-import pandas as pd
 import numpy.typing as npt
+import pandas as pd
 
 import plotly.graph_objects as go  # type: ignore
 from scipy.stats import binom  # type: ignore
@@ -1078,7 +1078,6 @@ def too_complex_function_inferring_and_creating_reports(
     annotations1: list[Annotation],
     postfilter_class: PostFilter,
     motif_class: Motif,
-    motif_dir: str,
     motif_str: str,
     module_number: int,
     read_distribution: npt.NDArray[np.int64],
@@ -1265,6 +1264,7 @@ def process_group(
     # deduplicate?
     if args.deduplicate:
         annotation_pairs, duplicates = remove_pcr_duplicates(annotation_pairs)
+        print(f"Number of PCR duplicates: {len(duplicates)}")
 
     # infer read distribution
     read_distribution = np.bincount([len(ann.read_seq) for ann in annotations], minlength=100)
@@ -1286,7 +1286,7 @@ def process_group(
         annotations1 = pairs_to_annotations_pick(annotation_pairs, module_number)
         result = too_complex_function_inferring_and_creating_reports(
             module_number=module_number,
-            postfilter_class=postfilter_class, motif_dir=motif_dir,
+            postfilter_class=postfilter_class,
             motif_class=motif_class, read_distribution=read_distribution,
             motif_str=motif_str, result_lines=result_lines, prev_module=prev_module,
             args=args, file_pcolor=file_pcolor, file_output=file_output, annotations1=annotations1
@@ -1387,17 +1387,13 @@ def consume_iterator(
     all_result_lines: list[dict[Any, Any]] = []
     all_input_len = 0
     all_filtered_len = 0
-    for i, (motif, rls, input_l, filtered_l) in enumerate(results_iterator):
+    for motif, rls, input_l, filtered_l in results_iterator:
         if filtered_l > 0:
             # append data
             all_motifs.append(motif)
             all_result_lines.extend(rls)
             all_input_len += input_l
             all_filtered_len += filtered_l
-
-        # report progress
-        # if args.progress > 0 and (i + 1) % args.progress == 0:
-        #     report.log_str(f'Progress: {i + 1:10d} motifs done. ({datetime.now():%Y-%m-%d %H:%M:%S})')
 
     df = pd.DataFrame.from_records(all_result_lines)
     df.sort_values(by=['motif_name'], kind='stable')
@@ -1465,7 +1461,7 @@ def write_vcf(df: pd.DataFrame, out: str) -> None:
     lines.append('#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tsample\n')
 
     records: list[str] = []
-    for i, row in df.iterrows():
+    for _, row in df.iterrows():
         m1 = re.match(r"([A-Z]+)\[([0-9]+)\]", row["motif_sequence"])
         if m1 is None:
             print(f"{row['motif_sequence']} returned None")
@@ -1480,7 +1476,7 @@ def write_vcf(df: pd.DataFrame, out: str) -> None:
             make_vcf_line(row["chromosome"], row["start"], unit, copies, str(row["allele1"]), "1/.", records)
             make_vcf_line(row["chromosome"], row["start"], unit, copies, str(row["allele2"]), "./1", records)
 
-    records.sort(key=lambda x: chr_and_pos(x))
+    records.sort(key=chr_and_pos)
     with open(f"{out}/variants.vcf", "w") as f:
         f.writelines(lines + records)
 
@@ -1558,7 +1554,7 @@ class PostFilter:
             and ann.module_repetitions[module_number] >= self.min_rep_cnt
         )
 
-        seq, reps = ann.motif.modules[module_number]
+        _seq, reps = ann.motif.modules[module_number]
 
         return is_right and has_primers and has_less_errors and has_flanks and (has_repetitions or reps == 1)
 
@@ -2194,7 +2190,7 @@ def plot_histogram_image(
                      tickvals=list(range(5, len(dist), 5)),
                      ticktext=list(range(5, len(dist), 5)))
 
-    with open(out_prefix + '.json', 'w') as f:
+    with open(out_prefix + '.json', 'w', encoding='utf-8') as f:
         f.write(fig.to_json())
 
     # fig.write_image(out_prefix + '_plotly.pdf')
@@ -2519,50 +2515,18 @@ def combine_distribs(deletes, inserts):
 
 
 def const_rate(n, p1=0.0, p2=1.0, p3=1.0):
-    """
-    Constant rate function.
-    :param n: int - allele number (unused)
-    :param p1: float - constant parameter
-    :param p2: float - linear parameter (unused)
-    :param p3: float - additional parameter (unused)
-    :return: float - p1
-    """
     return p1
 
 
 def linear_rate(n, p1=0.0, p2=1.0, p3=1.0):
-    """
-    Linear rate function.
-    :param n: int - allele number
-    :param p1: float - constant parameter
-    :param p2: float - linear parameter
-    :param p3: float - additional parameter (unused)
-    :return: float - p1 + p2 * n
-    """
     return p1 + p2 * n
 
 
 def n2_rate(n, p1=0.0, p2=1.0, p3=1.0):
-    """
-    Quadratic rate function.
-    :param n: int - allele number
-    :param p1: float - constant parameter
-    :param p2: float - linear parameter
-    :param p3: float - quadratic parameter
-    :return: float - p1 + p2 * n + p3 * n * n
-    """
     return p1 + p2 * n + p3 * n * n
 
 
 def exp_rate(n, p1=0.0, p2=1.0, p3=1.0):
-    """
-    Exponential rate function.
-    :param n: int - allele number
-    :param p1: float - constant parameter
-    :param p2: float - linear parameter
-    :param p3: float - exponential parameter
-    :return: float - p1 + p2 * e^(p3 * n)
-    """
     return p1 + p2 * math.exp(p3 * n)
 
 
@@ -2857,8 +2821,10 @@ class Inference:
 
         return allele1_likelihood + allele2_likelihood + bckgrnd_likelihood  # - alleles_intersection
 
-    def infer(self, annotations: list[Annotation], filt_annotations: list[Annotation], index_rep: int,
-              verbose: bool = True, monoallelic: bool = False) -> dict[tuple[int | str, int | str], float]:
+    def infer(
+        self, annotations: list[Annotation], filt_annotations: list[Annotation],
+        index_rep: int, monoallelic: bool = False
+    ) -> dict[tuple[int | str, int | str], float]:
         """
         Does all the inference,
         computes for which 2 combination of alleles are these annotations and parameters the best.
@@ -3235,7 +3201,7 @@ class Inference:
             return ('B', 'B'), (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 
         # infer likelihoods
-        lh_dict = self.infer(annotations, filt_annotations, index_rep, verbose=False, monoallelic=monoallelic)
+        lh_dict = self.infer(annotations, filt_annotations, index_rep, monoallelic=monoallelic)
 
         # print pcolor image
         # creates file .pdf, .png and .json

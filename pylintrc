@@ -1,0 +1,29 @@
+[MAIN]
+[BASIC]
+[CLASSES]
+[DESIGN]
+[EXCEPTIONS]
+[FORMAT]
+max-line-length=120
+[IMPORTS]
+[LOGGING]
+[MESSAGES CONTROL]
+# disable = too-many-lines,
+#           missing-module-docstring,
+disable = all
+enable = unused-variable, unused-argument, ungrouped-imports, unnecessary-lambda
+# use-a-generator
+# , no-else-return
+# enable raise-missing-from https://stefan.sofa-rockers.org/2020/10/28/raise-from/
+# consider-using-generator
+
+[METHOD_ARGS]
+[MISCELLANEOUS]
+[REFACTORING]
+[REPORTS]
+[SIMILARITIES]
+[SPELLING]
+[STRING]
+[TYPECHECK]
+[VARIABLES]
+
