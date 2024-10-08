@@ -74,6 +74,7 @@ summary_plot_string = """
 """
 
 motif_plot_string = """<h3>{sample_name}</h3>
+alleles: {a1}  ({c1}%) {a2}  ({c2}%) total  {c}%<br>
 <table>
     <tr>
         <td colspan="1">
@@ -82,12 +83,14 @@ motif_plot_string = """<h3>{sample_name}</h3>
                 Plotly.react('hist-{sample_id}', {hist_plot}, {{}});
             </script>
         </td>
+        <!--
         <td colspan="1">
             <div class="pcol pic100" id="pcol-{sample_id}"></div>
             <script>
                 Plotly.react('pcol-{sample_id}', {pcol_plot}, {{}});
             </script>
         </td>
+        -->
     </tr>
 </table>
 """
@@ -181,7 +184,7 @@ def parse_label(num: int) -> str:
 
 
 def generate_motif_report(path: str, key: str, samples: list[list[str]], plots: list[str],
-                          alignments: list[str], fig_heatmap: go.Figure, fig_hist: go.Figure, bgs: int):
+                          alignments: list[str], fig_heatmap: go.Figure, fig_hist: go.Figure, bgs: int, sequence: str) -> None:
     """
     Generate report file for one motif
     :param path: str - path to output dir
@@ -207,7 +210,7 @@ def generate_motif_report(path: str, key: str, samples: list[list[str]], plots: 
     with open('%s/report_%s.html' % (path, key), 'w') as f:
         table = motif_summary.format(table='\n'.join(rows))
         summary_plots = summary_plot_string.format(background=bgs, heatmap=to_json(fig_heatmap), histogram=to_json(fig_hist))
-        f.write(custom_format(template, motif=key.split('_')[0], seq=key.split('_')[1],
+        f.write(custom_format(template, motif=key.split('_')[0], seq=sequence,
                               motifs_content=table, summary_plots=summary_plots, motif_plots='\n'.join(motif_plots)))
 
 
@@ -229,6 +232,7 @@ def create_reports(arg_list: argparse.Namespace):
     motifs = {}
     plots = {}
     alignments = {}
+    sequences = {}
     current_alignment = []
     prev_name = ''
 
@@ -245,11 +249,15 @@ def create_reports(arg_list: argparse.Namespace):
         cnt += 1
 
         file = BeautifulSoup(open(path, 'r'), 'html.parser')
-        sample = file.find(id='sample_name').text.strip()
+        try:
+            sample = file.find(id='sample_name').text.strip()
+        except AttributeError:
+            continue
 
         # find table of class 'tg' and extract all rows from it
         for cl in file.find_all(class_='tg'):
-            for i, row in enumerate(cl.find_all('tr')):
+            rep_num = 1
+            for row in cl.find_all('tr'):
                 columns = row.find_all('td')
 
                 # remove head rows
@@ -257,7 +265,7 @@ def create_reports(arg_list: argparse.Namespace):
                     continue
 
                 if len(columns) >= 17:
-                    name = re.sub(r'[^\w_]', '', columns[0].text.strip()) + '_' + str(i + 1)
+                    name = re.sub(r'[^\w_]', '', columns[0].text.strip()) + '_rep' + str(rep_num)
                     if ',' in name:
                         break
 
@@ -267,7 +275,11 @@ def create_reports(arg_list: argparse.Namespace):
 
                     # append to list
                     motifs[name] = motifs.get(name, []) + [doc]
+                    sequences[name] = columns[1].text.strip()
+                    rep_num += 1
 
+        rep_num = 1
+        last_name = ''
         for cl in file.find_all(class_='plots'):
             name = cl.find(class_='hist')['class'][-1]
             hist = cl.find(class_='hist').find_next('script').text
@@ -288,14 +300,16 @@ def create_reports(arg_list: argparse.Namespace):
                 continue
             pcol_data = pcol_data_re.group(1)
 
-            name += '_' + prev[0].text
-            temp = motif_plot_string.format(sample_name=sample, sample_id=name + '_' + sample,
-                                            hist_plot=hist_data, pcol_plot=pcol_data)
-
-            if name not in plots:
-                plots[name] = [temp]
+            if name != last_name:
+                rep_num = 1
             else:
-                plots[name].append(temp)
+                rep_num += 1
+            name += '_rep' + str(rep_num)
+            data = motifs[name][-1]
+            temp = motif_plot_string.format(sample_name=sample, sample_id=name + '_' + sample,
+                                            hist_plot=hist_data, pcol_plot=pcol_data, a1=data[1], c1=data[2], a2=data[3], c2=data[4], c=data[5])
+
+            plots[name] = plots.get(name, []) + [temp]
 
         for cl in file.find_all(class_='align'):
             name = cl['class'][-1]
@@ -428,7 +442,8 @@ def create_reports(arg_list: argparse.Namespace):
 
         # generate motif
         generate_motif_report(arg_list.output_dir, _key, motifs[_key], plots.get(_key, []),
-                              alignments.get(_key, ['no alignments available'] * len(plots.get(_key, []))), fig_heatmap, fig_histogram, bgs)
+                              alignments.get(_key, ['no alignments available'] * len(plots.get(_key, []))),
+                              fig_heatmap, fig_histogram, bgs, sequences[_key])
 
 
 if __name__ == '__main__':
