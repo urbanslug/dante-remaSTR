@@ -1250,7 +1250,7 @@ def chr_and_pos(line: str) -> tuple[int, int]:
     return (chrom2, int(pos))
 
 
-def run(input_stream: TextIO, args: Namespace):
+def run(input_stream: TextIO, args: Namespace) -> tuple[list[Motif], pd.DataFrame]:
     groups_iterator = generate_groups(input_stream)
 
     # create iterator of results
@@ -2090,8 +2090,8 @@ def generate_nomenclatures(filename: str, motif: Motif, nomenclature_limit: int)
 
 
 def write_report(
-    motifs: list[Motif], result_table: pd.DataFrame,
-    post_filter: PostFilter, report_dir: str, nomenclature_limit: int = 5
+    motifs: list[Motif], result_table: pd.DataFrame, post_filter: PostFilter,
+    report_dir: str, nomenclature_limit: int = 5
 ) -> None:
     """
     Generate and write a report.
@@ -2105,14 +2105,15 @@ def write_report(
     # tsv file with table:
     columns_to_rename = {
         'motif_name': 'Motif', 'motif_nomenclature': 'Nomenclature', 'motif_sequence': 'Sequence',
-        'repetition_index': 'Repetition index', 'confidence': 'Overall confidence', 'allele1': 'Allele 1 prediction',
-        'conf_allele1': 'Allele 1 confidence', 'reads_a1': 'Allele 1 reads', 'allele2': 'Allele 2 prediction',
-        'conf_allele2': 'Allele 2 confidence', 'reads_a2': 'Allele 2 reads', 'quality_reads': 'Reads (full)',
-        'one_primer_reads': 'Reads (partial)', 'conf_background_all': 'Both Background prob.',
-        'conf_background': 'One Background prob.', 'conf_extended_all': 'Background Expanded prob.',
-        'conf_extended': 'One Expanded prob.', 'indels': 'Indels per read', 'mismatches': 'Mismatches per read',
-        'indels_a1': 'Allele 1 indels', 'mismatches_a1': 'Allele 1 mismatches', 'indels_a2': 'Allele 2 indels',
-        'mismatches_a2': 'Allele 2 mismatches'
+        'repetition_index': 'Repetition index', 'confidence': 'Overall confidence',
+        'allele1': 'Allele 1 prediction', 'conf_allele1': 'Allele 1 confidence', 'reads_a1': 'Allele 1 reads',
+        'allele2': 'Allele 2 prediction', 'conf_allele2': 'Allele 2 confidence', 'reads_a2': 'Allele 2 reads',
+        'quality_reads': 'Reads (full)', 'one_primer_reads': 'Reads (partial)',
+        'conf_background_all': 'Both Background prob.', 'conf_background': 'One Background prob.',
+        'conf_extended_all': 'Background Expanded prob.', 'conf_extended': 'One Expanded prob.',
+        'indels': 'Indels per read', 'mismatches': 'Mismatches per read',
+        'indels_a1': 'Allele 1 indels', 'mismatches_a1': 'Allele 1 mismatches',
+        'indels_a2': 'Allele 2 indels', 'mismatches_a2': 'Allele 2 mismatches'
     }
     result_table = result_table[columns_to_rename.keys()]
 
@@ -2191,13 +2192,19 @@ def write_report(
                     tf.write(f'{motif.name}_{suffix}\t{result["allele1"]}\t{result["allele2"]}\n')
 
     # load the report template
-    script_dir = os.path.dirname(os.path.abspath(__file__)) + "/src/report"
+    # TODO: this is super bad
+    # script_dir = os.path.dirname(os.path.abspath(__file__)) + "/src/report"
+
+    # /home/balaz/projects/STRs/remaSTR_validation/refactoring/src/dante-remaSTR/dante_remastr_standalone_templates
+    script_dir = os.path.dirname(os.path.abspath(__file__)) + "/dante_remastr_standalone_templates"
+
     template = open(f'{script_dir}/report.html', 'r').read()
     template_static = open(f'{script_dir}/report.html', 'r').read()
 
     # fill sample name and version of software
     sample = os.path.basename(report_dir)
-    version = open(f'{os.path.dirname(os.path.dirname(script_dir))}/version.txt', 'r').read().strip()
+    # version = open(f'{os.path.dirname(os.path.dirname(script_dir))}/version.txt', 'r').read().strip()
+    version = open(f'{script_dir}/version.txt', 'r').read().strip()
     template = custom_format(template, sample=sample, version=version)
     template_static = custom_format(template_static, sample=sample, version=version)
     tabs = []
@@ -3038,12 +3045,15 @@ make_datatable_string = """
 </script>
 """
 
-content_string = """ <tr>
+# this is repeated for each motif
+content_string = """
+<tr>
     <td class="tg-s6z2">
         <a href="#{motif_name}" class="tablinks"
         onclick="openTab(event, '{motif_name}'); $('.{motif_name}').trigger('content-change');">{motif}</a>
     </td>
-</tr>"""
+</tr>
+"""
 
 content_string_empty = ""
 
@@ -3126,7 +3136,7 @@ motif_summary = """
     $('#tg-{motif_id}').DataTable({{scrollX: true}});
 }} );
 </script>
-<p><a href="#content">Back to content</a></p>
+
 {motifs}
 </div>
 """
@@ -3222,6 +3232,7 @@ alleles: {result}<br>
     }}
 </script>
 
+<!-- TODO: this is incorrect -->
 <p><a href="{alignment}">Link to alignments</a></p>
 <p><a href="#content">Back to content</a></p>
 """
