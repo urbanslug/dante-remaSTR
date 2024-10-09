@@ -1691,8 +1691,7 @@ def write_histogram_nomenclature(
 
 
 def write_histogram_image2d(
-    out_prefix: str, deduplicated: list[Annotation],
-    index_rep: int, index_rep2: int, seq: str, seq2: str
+    out_prefix: str, deduplicated: list[Annotation], index_rep: int, index_rep2: int, seq: str, seq2: str
 ) -> None:
     """
     Stores quantity of different combinations of module repetitions,
@@ -1828,8 +1827,9 @@ def write_histogram_image2d(
     # fig.write_image(out_prefix + '_plotly.pdf')
 
 
-def write_histogram_image(out_prefix: str, annotations: list[Annotation],
-                          filt_annot: list[Annotation], index_rep: int) -> None:
+def write_histogram_image(
+    out_prefix: str, annotations: list[Annotation], filt_annot: list[Annotation], index_rep: int
+) -> None:
     """
     Stores quantity of different combinations of module repetitions, generates separate graph image for each module
     :param out_prefix: Output file prefix
@@ -1843,53 +1843,44 @@ def write_histogram_image(out_prefix: str, annotations: list[Annotation],
     repetitions = sorted_repetitions(annotations)
     repetitions_filt = sorted_repetitions(filt_annot)
 
-    plot_histogram_image(
-        out_prefix, [(r[index_rep], c) for r, c in repetitions], [(r[index_rep], c) for r, c in repetitions_filt]
-    )
+    spanning_counts = [(r[index_rep], c) for r, c in repetitions]
+    filtered_counts = [(r[index_rep], c) for r, c in repetitions_filt]
+    inread_counts = []
 
-
-def plot_histogram_image(
-    out_prefix: str, spanning_counts: list[tuple[int, int]], filtered_counts: list[tuple[int, int]],
-    inread_counts: list[tuple[int, int]] | None = None
-) -> None:
-    """
-    Generates separate graph image for each module
-    :param out_prefix: Output file prefix
-    :param spanning_counts: list of spanning counts (repetition, number of reads)
-    :param filtered_counts: list of flanking counts (repetition, number of reads)
-    :param inread_counts: list of inread counts (repetition, number of reads)
-    """
-    # empty inread array
-    if inread_counts is None:
-        inread_counts = []
-
-    # adjust variables
-    width = 0.9
-    plt.figure(figsize=(20, 8))
     xm = max(
         [r for r, c in spanning_counts]
         + [r for r, c in filtered_counts]
         + [r for r, c in inread_counts]
         + [MAX_REPETITIONS]
     )
-    dist = [0] * (xm + 1)
 
     # set data
+    dist = [0] * (xm + 1)
     for r, c in spanning_counts:
         dist[r] += c
+
     dist_filt = dist.copy()
     for r, c in filtered_counts:
         dist_filt[r] += c
+
     dist_inread = dist_filt.copy()
     for r, c in inread_counts:
         dist_inread[r] += c
 
+    # print(dist, dist_filt, dist_inread, sep="\n", end="\n\n")
+    # plot_histogram_image_matplotlib(out_prefix, dist, dist_filt, dist_inread, xm)
+    plot_histogram_image_plotly(out_prefix, dist, dist_filt, dist_inread)
+
+
+def plot_histogram_image_matplotlib(
+    out_prefix: str, spanning: list[int], flanking: list[int], inread: list[int], xm: int
+) -> None:
+    width = 0.9
+    plt.figure(figsize=(20, 8))
     # create barplots
-    rects_inread: Iterable = [None] * len(dist)
-    if len(inread_counts) > 0:
-        rects_inread = plt.bar(np.arange(xm + 1), dist_inread, width, color='orange', alpha=0.4)
-    rects_filt = plt.bar(np.arange(xm + 1), dist_filt, width, color='lightgrey')
-    rects = plt.bar(np.arange(xm + 1), dist, width)
+    rects_inread = plt.bar(np.arange(xm + 1), inread, width, color='orange', alpha=0.4)
+    rects_filt = plt.bar(np.arange(xm + 1), flanking, width, color='lightgrey')
+    rects = plt.bar(np.arange(xm + 1), spanning, width)
     plt.xticks(np.arange(1, xm + 1))
     plt.ylabel('Counts')
     plt.xlabel('STR repetitions')
@@ -1917,33 +1908,29 @@ def plot_histogram_image(
     plt.savefig(out_prefix + '.png')
     plt.close()
 
-    # ----- PLOTLY HISTOGRAM -----
-    dist_text = ['' if d == 0 else str(d) for d in dist]
-    dist_filt_text = ['' if df - d == 0 else str(df - d) for df, d in zip(dist_filt, dist)]
-    dist_inread_text = ['' if di - df == 0 else str(di - df) for di, df in zip(dist_inread, dist_filt)]
+
+def plot_histogram_image_plotly(
+    out_prefix: str, spanning: list[int], flanking: list[int], inread: list[int]
+) -> None:
+    dist_text = ['' if d == 0 else str(d) for d in spanning]
+    dist_filt_text = ['' if df - d == 0 else str(df - d) for df, d in zip(flanking, spanning)]
+    dist_inread_text = ['' if di - df == 0 else str(di - df) for di, df in zip(inread, flanking)]
 
     fig = go.Figure()
-    if len(inread_counts) > 0:
-        fig.add_bar(
-            y=dist_inread, text=dist_inread_text, name='Inread reads', marker_color='#FF6600', textfont_color='#FF6600'
-        )
-    fig.add_bar(
-        y=dist_filt, text=dist_filt_text, name='Partial reads', marker_color='#CCCCCC', textfont_color='#CCCCCC'
-    )
-    fig.add_bar(y=dist, text=dist_text, name='Full reads', marker_color='#636EFA', textfont_color='#636EFA')
+    fig.add_bar(y=inread, text=dist_inread_text, name='Inread reads', marker_color='#FF6600', textfont_color='#FF6600')
+    fig.add_bar(y=flanking, text=dist_filt_text, name='Partial reads', marker_color='#CCCCCC', textfont_color='#CCCCCC')
+    fig.add_bar(y=spanning, text=dist_text, name='Full reads', marker_color='#636EFA', textfont_color='#636EFA')
 
     fig.update_traces(textposition='outside', texttemplate='%{text}', hovertemplate='%{text}', textfont_size=7)
-    fig.update_layout(width=800, height=450,
-                      title='Histogram of repetitions',
-                      hovermode='x',
-                      yaxis_fixedrange=True,
-                      template='simple_white',
-                      barmode='overlay')
+    fig.update_layout(
+        width=800, height=450, title='Histogram of repetitions', hovermode='x', yaxis_fixedrange=True,
+        template='simple_white', barmode='overlay'
+    )
     fig.update_yaxes(title_text='Read counts')
-    fig.update_xaxes(title_text='STR repetitions', tickmode='array',
-                     tickvals=list(range(5, len(dist), 5)),
-                     ticktext=list(range(5, len(dist), 5)))
-
+    fig.update_xaxes(
+        title_text='STR repetitions', tickmode='array', tickvals=list(range(5, len(spanning), 5)),
+        ticktext=list(range(5, len(spanning), 5))
+    )
     with open(out_prefix + '.json', 'w', encoding='utf-8') as f:
         f.write(fig.to_json())
 
@@ -1951,9 +1938,9 @@ def plot_histogram_image(
 
 
 def write_all(
-    quality_annotations: list[Annotation], filt_primer: list[Annotation],
-    filtered_annotations: list[Annotation], motif_dir: str, motif_class: Motif, module_number: int,
-    cutoff_alignments: int, second_module_number: int | None = None, zip_it: bool = True
+    quality_annotations: list[Annotation], filt_primer: list[Annotation], filtered_annotations: list[Annotation],
+    motif_dir: str, motif_class: Motif, module_number: int, cutoff_alignments: int,
+    second_module_number: int | None = None, zip_it: bool = True
 ) -> None:
     """
     Write all output files: quality annotations, one-primer annotations, filtered annotations, statistics,
