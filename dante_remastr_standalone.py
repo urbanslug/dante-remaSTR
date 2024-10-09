@@ -1719,7 +1719,7 @@ def write_histogram_image2d(
     # assign maximals
     xm = max(r for (_, r), _ in dedup_reps)
     ym = max(r for _, (_, r) in dedup_reps)
-    max_ticks = max(ym, xm) + 2
+    max_ticks = max(ym, xm) + 2  # TODO: why does max_ticks exist?
     xm = max(MAX_REPETITIONS, xm)
     ym = max(MAX_REPETITIONS, ym)
 
@@ -1734,23 +1734,24 @@ def write_histogram_image2d(
         if not c1 and c2:
             data_primer[r1:, r2] += 1
 
-    # TODO: extract to function
-    # create colormaps:
-    # cmap_blue = matplotlib.cm.get_cmap('Blues')
+    str1 = 'STR %d [%s]' % (index_rep + 1, seq.split('-')[-1])
+    str2 = 'STR %d [%s]' % (index_rep2 + 1, seq2.split('-')[-1])
+
+    # plot_histogram_image2d_matplotlib(out_prefix, data, data_primer, str1, str2, max_ticks)
+    plot_histogram_image2d_plotly(out_prefix, data, data_primer, str1, str2, max_ticks)
+
+
+def plot_histogram_image2d_matplotlib(
+    out_prefix: str, data: np.ndarray, data_primer: np.ndarray,
+    str1: str, str2: str, max_ticks: int,
+) -> None:
     cmblue = matplotlib.colormaps['Blues']
-    # start from light blue to deep blue
-    cmap_blue = cmblue(np.arange(int(cmblue.N * 0.15), int(cmblue.N * 0.8)))
+    cmap_blue = cmblue(np.arange(int(cmblue.N * 0.15), int(cmblue.N * 0.8)))  # start from light blue to deep blue
     cmap_blue[0, -1] = 0.0  # Set alpha on the lowest element only
-    # cmap_grey = matplotlib.cm.get_cmap('Greys')
+
     cmgrey = matplotlib.colormaps['Greys']
     cmap_grey = cmgrey(np.arange(int(cmgrey.N * 0.15), int(cmgrey.N * 0.6)))  # start from light grey to deep grey
     cmap_grey[0, -1] = 0.0  # Set alpha on the lowest element only
-    cmap_grey_plotly = [(i, f'rgba({c[0]}, {c[1]}, {c[2]}, {c[3]})') for i, c in [
-        (0.0, cmap_grey[0]), (0.01, cmap_grey[1]), (1.0, cmap_grey[-1])
-    ]]
-    cmap_blue_plotly = [(i, f'rgba({c[0]}, {c[1]}, {c[2]}, {c[3]})') for i, c in [
-        (0.0, cmap_blue[0]), (0.01, cmap_blue[1]), (1.0, cmap_blue[-1])
-    ]]
 
     # plot pcolor
     plt.figure(figsize=(12, 8))
@@ -1763,8 +1764,8 @@ def write_histogram_image2d(
         vmin=np.min(data), vmax=np.max(data) + 0.01
     )
     plt.xticks()
-    plt.ylabel('STR %d [%s]' % (index_rep + 1, seq.split('-')[-1]))
-    plt.xlabel('STR %d [%s]' % (index_rep2 + 1, seq2.split('-')[-1]))
+    plt.ylabel(str1)
+    plt.xlabel(str2)
     plt.colorbar(img1)
     plt.colorbar(img2)
 
@@ -1785,8 +1786,11 @@ def write_histogram_image2d(
     plt.savefig(out_prefix + '.png')
     plt.close()
 
-    # ----- PLOTLY HISTOGRAM -----
-    # TODO: extract to function
+
+def plot_histogram_image2d_plotly(
+    out_prefix: str, data: np.ndarray, data_primer: np.ndarray,
+    str1: str, str2: str, max_ticks: int,
+) -> None:
     def parse_labels(num, num_primer):
         if num == 0 and num_primer == 0:
             return ''
@@ -1796,17 +1800,28 @@ def write_histogram_image2d(
             return '%s/0' % str(num)
         return '%s/%s' % (str(num), str(num_primer))
 
-    str1 = 'STR %d [%s]' % (index_rep + 1, seq.split('-')[-1])
-    str2 = 'STR %d [%s]' % (index_rep2 + 1, seq2.split('-')[-1])
-
     text = [[parse_labels(data[i, j], data_primer[i, j]) for j in range(data.shape[1])] for i in range(data.shape[0])]
 
     fig = go.Figure()
+
+    cmgrey = matplotlib.colormaps['Greys']
+    cmap_grey = cmgrey(np.arange(int(cmgrey.N * 0.15), int(cmgrey.N * 0.6)))  # start from light grey to deep grey
+    cmap_grey[0, -1] = 0.0  # Set alpha on the lowest element only
+    cmap_grey_plotly = [(i, f'rgba({c[0]}, {c[1]}, {c[2]}, {c[3]})') for i, c in [
+        (0.0, cmap_grey[0]), (0.01, cmap_grey[1]), (1.0, cmap_grey[-1])
+    ]]
     if np.sum(data_primer[:max_ticks, :max_ticks]) > 0:
         fig.add_trace(go.Heatmap(
             z=data_primer[:max_ticks, :max_ticks], name='Repetitions heatmap',
             showscale=True, colorbar_x=1.3, colorbar_title='Partial reads', colorscale=cmap_grey_plotly
         ))
+
+    cmblue = matplotlib.colormaps['Blues']
+    cmap_blue = cmblue(np.arange(int(cmblue.N * 0.15), int(cmblue.N * 0.8)))  # start from light blue to deep blue
+    cmap_blue[0, -1] = 0.0  # Set alpha on the lowest element only
+    cmap_blue_plotly = [(i, f'rgba({c[0]}, {c[1]}, {c[2]}, {c[3]})') for i, c in [
+        (0.0, cmap_blue[0]), (0.01, cmap_blue[1]), (1.0, cmap_blue[-1])
+    ]]
     fig.add_trace(go.Heatmap(
         z=data[:max_ticks, :max_ticks], text=text, name='Repetitions heatmap',
         showscale=True, colorbar_title='Full reads', colorscale=cmap_blue_plotly
@@ -1845,7 +1860,7 @@ def write_histogram_image(
 
     spanning_counts = [(r[index_rep], c) for r, c in repetitions]
     filtered_counts = [(r[index_rep], c) for r, c in repetitions_filt]
-    inread_counts = []
+    inread_counts: list[tuple] = []
 
     xm = max(
         [r for r, c in spanning_counts]
