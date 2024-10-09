@@ -40,8 +40,6 @@ for each of the annotated motifs and a summary report in HTML (report.html).
 Otherwise only a table with all genotypes, confidences, and supporting
 information.
 '''
-
-# max repetitions on the graph - WTF???
 MAX_REPETITIONS = 40
 
 
@@ -63,10 +61,7 @@ def main() -> None:
     # generate htmo report  and alignments.html, but not fastas
     if args.verbose:
         post_filter = PostFilter(args)
-        write_report(
-            sorted(all_motifs), rl_df, post_filter,
-            args.output_dir, args.nomenclatures
-        )
+        write_report(sorted(all_motifs), rl_df, post_filter, args.output_dir, args.nomenclatures)
 
     end_time = datetime.now()
     print(f'DANTE_remaSTR Stopping : {end_time:%Y-%m-%d %H:%M:%S}')
@@ -1063,7 +1058,7 @@ def process_group(
 
     if args.verbose:
         # generate nomenclatures for all modules:
-        for i, (seq, reps) in enumerate(motif_class.modules):
+        for i, (_seq, reps) in enumerate(motif_class.modules):
             # write files if needed
             if reps == 1:
                 # setup post filtering - no primers, insufficient quality, ...
@@ -2081,7 +2076,7 @@ def generate_nomenclatures(filename: str, motif: Motif, nomenclature_limit: int)
             line_split = line.split('\t')
             motif_parts = [f'<td>{s}</td>' for s in line_split[1:]]
             ref = f'{motif.chrom}:g.{motif.start}_{motif.end}'
-            nom_row = nomenclature_string.format(count=line_split[0] + 'x', ref=ref, parts='\n    '.join(motif_parts))
+            nom_row = NOMENCLATURE_STRING.format(count=line_split[0] + 'x', ref=ref, parts='\n    '.join(motif_parts))
             lines.append(nom_row)
 
             # end?
@@ -2119,10 +2114,6 @@ def write_report(
     }
     result_table = result_table[columns_to_rename.keys()]
 
-    # merge all_profiles:
-    all_profiles = f'{report_dir}/all_profiles.txt'
-    all_true = f'{report_dir}/all_profiles.true'
-
     mcs = {}
     ms: dict[str, list[str]] = {}
     rows: dict[str, list[str]] = {}
@@ -2130,6 +2121,10 @@ def write_report(
     mcs_static = []
     ms_static: list[str] = []
     rows_static = []
+
+    # merge all_profiles:
+    all_profiles = f'{report_dir}/all_profiles.txt'
+    all_true = f'{report_dir}/all_profiles.true'
 
     with open(all_profiles, 'w') as pf, open(all_true, 'w') as tf:
         for motif in motifs:
@@ -2141,21 +2136,14 @@ def write_report(
                 suffix = result['repetition_index']
 
                 # read files
-                rep_file = find_file(f'{report_dir}/{motif.dir_name()}/repetitions_{suffix}.json')
-                pcol_file = find_file(f'{report_dir}/{motif.dir_name()}/pcolor_{suffix}.json')
-                align_file = find_file(f'{report_dir}/{motif.dir_name()}/alignment_{suffix}.fasta', include_gzip=True)
-                filt_align_file = find_file(
-                    f'{report_dir}/{motif.dir_name()}/alignment_filtered_{suffix}.fasta', include_gzip=True
-                )
-                filt_left_file = find_file(
-                    f'{report_dir}/{motif.dir_name()}/alignment_filtered_left_{suffix}.fasta', include_gzip=True
-                )
-                filt_right_file = find_file(
-                    f'{report_dir}/{motif.dir_name()}/alignment_filtered_right_{suffix}.fasta', include_gzip=True
-                )
-                nomenclature_lines = generate_nomenclatures(
-                    f'{report_dir}/{motif.dir_name()}/nomenclatures_{suffix}.txt', motif, nomenclature_limit
-                )
+                dir_name = f'{report_dir}/{motif.dir_name()}'
+                rep_file = find_file(f'{dir_name}/repetitions_{suffix}.json')
+                pcol_file = find_file(f'{dir_name}/pcolor_{suffix}.json')
+                align_file = find_file(f'{dir_name}/alignment_{suffix}.fasta', include_gzip=True)
+                filt_align_file = find_file(f'{dir_name}/alignment_filtered_{suffix}.fasta', include_gzip=True)
+                filt_left_file = find_file(f'{dir_name}/alignment_filtered_left_{suffix}.fasta', include_gzip=True)
+                filt_right_file = find_file(f'{dir_name}/alignment_filtered_right_{suffix}.fasta', include_gzip=True)
+                nomenclature_lines = generate_nomenclatures(f'{dir_name}/nomenclatures_{suffix}.txt', motif, nomenclature_limit)
 
                 # generate rows of tables and images
                 row = generate_row(seq, result, post_filter)
@@ -2213,15 +2201,15 @@ def write_report(
 
     # save the report file
     with open(f'{report_dir}/report.html', 'w') as f:
-        contents_table = contents.format(table='\n'.join(sorted(mcs.values())))
-        template = custom_format(template, motifs_content=contents_table + '\n' + make_datatable_string)
+        contents_table = CONTENTS.format(table='\n'.join(sorted(mcs.values())))
+        template = custom_format(template, motifs_content=contents_table + '\n' + MAKE_DATATABLE_STRING)
 
         # generate content for each motif
         for motif in sorted(motifs, key=lambda x: x.name):
             motif_clean = re.sub(r'[^\w_]', '', motif.name.replace('/', '_'))
             nomenclature_lines = generate_nomenclatures(
                 f'{report_dir}/{motif.dir_name()}/nomenclature.txt', motif, nomenclature_limit)
-            tabs.append(motif_summary.format(
+            tabs.append(MOTIF_SUMMARY.format(
                 motif_id=motif_clean, nomenclatures='\n'.join(nomenclature_lines),
                 table='\n'.join(rows[motif.name]), motifs='\n'.join(ms[motif.name])
             ))
@@ -2230,8 +2218,8 @@ def write_report(
 
     # save the static report file
     with open(f'{report_dir}/report_static.html', 'w') as f:
-        contents_table = contents.format(table='\n'.join(mcs_static))
-        table = motif_summary_static.format(table='\n'.join(rows_static))
+        contents_table = CONTENTS.format(table='\n'.join(mcs_static))
+        table = MOTIF_SUMMARY_STATIC.format(table='\n'.join(rows_static))
 
         f.write(custom_format(template_static, motifs_content=contents_table,
                               table=table, motifs='\n'.join(ms_static)))
@@ -2277,11 +2265,11 @@ def combine_distribs(deletes, inserts):
     return end_distr
 
 
-def const_rate(n, p1=0.0, p2=1.0, p3=1.0):
+def const_rate(_n, p1=0.0, _p2=1.0, _p3=1.0):
     return p1
 
 
-def linear_rate(n, p1=0.0, p2=1.0, p3=1.0):
+def linear_rate(n, p1=0.0, p2=1.0, _p3=1.0):
     return p1 + p2 * n
 
 
@@ -3026,7 +3014,7 @@ def save_phasing(phasing_file: str, phasing: tuple[str, str], supp_reads: tuple[
         f.write(f'{supp_reads[0]}\t{supp_reads[1]}\t{supp_reads[2]}\n')
 
 
-contents = """
+CONTENTS = """
 <table class="tg" id="content-tg">
     <thead>
         <tr>
@@ -3039,7 +3027,7 @@ contents = """
 </table>
 """
 
-make_datatable_string = """
+MAKE_DATATABLE_STRING = """
 <script>
     $(document).ready( function () {{
     $('#content-tg').DataTable();
@@ -3048,7 +3036,7 @@ make_datatable_string = """
 """
 
 # this is repeated for each motif
-content_string = """
+CONTENT_STRING = """
 <tr>
     <td class="tg-s6z2">
         <a href="#{motif_name}" class="tablinks"
@@ -3057,9 +3045,10 @@ content_string = """
 </tr>
 """
 
-content_string_empty = ""
+CONTENT_STRING_EMPTY = ""
 
-row_string = """  <tr>
+ROW_STRING = """
+  <tr>
     <td class="tg-s6z2">{motif_name}</td>
     <td class="tg-s6z2">{motif_nomenclature}</td>
     <td class="tg-s6z2">{allele1}</td>
@@ -3077,9 +3066,10 @@ row_string = """  <tr>
     <td class="tg-s6z2">{mismatches}</td>
     <td class="tg-s6z2">{quality_reads}</td>
     <td class="tg-s6z2">{one_primer_reads}</td>
-  </tr>"""
+  </tr>
+"""
 
-nomenclature_string = """
+NOMENCLATURE_STRING = """
 <tr>
     <td>{count}</td>
     <td>{ref}</td>
@@ -3087,7 +3077,7 @@ nomenclature_string = """
 </tr>
 """
 
-motif_summary = """
+MOTIF_SUMMARY = """
 <div class="tabcontent" id="{motif_id}" style="display: none">
 <h2 class="summary_nomenclatures">Nomenclatures</h2>
 <table class="nomtg">
@@ -3143,7 +3133,7 @@ motif_summary = """
 </div>
 """
 
-motif_summary_static = """
+MOTIF_SUMMARY_STATIC = """
 <div style="margin: 25px 0 25px 0">
 <h2 class="summary">Summary table</h2>
 <table class="tg">
@@ -3186,7 +3176,7 @@ motif_summary_static = """
 </div>
 """
 
-motif_stringb64 = """
+MOTIF_STRINGB64 = """
 <h2 id="data-{motif_name}">{motif}</h2>
 <p>{sequence}</p>
 Nomenclatures:<br>
@@ -3239,7 +3229,7 @@ alleles: {result}<br>
 <p><a href="#content">Back to content</a></p>
 """
 
-motif_stringb64_reponly = """
+MOTIF_STRINGB64_REPONLY = """
 <h2 id="data-{motif_name}">{motif}</h2>
 <p>{sequence}</p>
 Nomenclatures:<br>
@@ -3282,7 +3272,7 @@ alleles: {result}<br>
 <p><a href="#content">Back to content</a></p>
 """
 
-motif_stringb64_static = """
+MOTIF_STRINGB64_STATIC = """
 <h2 id="{motif_name}">{motif}</h2>
 <p>{sequence}</p>
 Nomenclatures:<br>
@@ -3331,7 +3321,7 @@ alleles: {result}<br>
 <p><a href="#content">Back to content</a></p>
 """
 
-motif_stringb64_reponly_static = """
+MOTIF_STRINGB64_REPONLY_STATIC = """
 <h2 id="{motif_name}">{motif}</h2>
 <p>{sequence}</p>
 Nomenclatures:<br>
@@ -3370,15 +3360,15 @@ alleles: {result}<br>
 <p><a href="#content">Back to content</a></p>
 """
 
-motif_string_empty = ""
+MOTIF_STRING_EMPTY = ""
 
-alignment_string = """
+ALIGNMENT_STRING = """
   <p>{sequence}</p>
   {alignment}
   <hr>
 """
 
-align_vis = """
+ALIGN_VIS = """
   <details>
     <summary>{display_text}</summary>
     <div id="A{name}" class="align">press "Run with JS"</div>
@@ -3447,7 +3437,7 @@ def generate_row(sequence: str, result: pd.Series, postfilter: PostFilter) -> st
     :return: str - html string with rows of the summary table
     """
     highlight = list(map(int, str(result['repetition_index']).split('_')))
-    sequence, subpart = highlight_subpart(sequence, highlight)
+    sequence, _subpart = highlight_subpart(sequence, highlight)
 
     # shorten sequence:
     keep = 10
@@ -3472,7 +3462,7 @@ def generate_row(sequence: str, result: pd.Series, postfilter: PostFilter) -> st
         'mismatches_a1': float_to_str(result['mismatches_a1'], decimals=2),
         'indels_a2': float_to_str(result['indels_a2'], decimals=2),
         'mismatches_a2': float_to_str(result['mismatches_a2'], decimals=2)}
-    return row_string.format(**{**result, **updated_result})  # TODO: WTF?
+    return ROW_STRING.format(**{**result, **updated_result})  # TODO: WTF?
 
 
 def get_alignment_name(alignment_file: str, allele: int) -> str:
@@ -3509,7 +3499,7 @@ def generate_motifb64(
     """
     # prepare and generate alignments
     highlight = list(map(int, str(result_in['repetition_index']).split('_')))
-    sequence, subpart = highlight_subpart(sequence, highlight)
+    sequence, _subpart = highlight_subpart(sequence, highlight)
     motif = result_in['motif_name']
     motif_name_part1 = f'{result_in["motif_name"].replace("/", "_")}'
     motif_name_part2 = f'{",".join(map(str, highlight)) if highlight is not None else "mot"}'
@@ -3544,50 +3534,55 @@ def generate_motifb64(
 
     # return content and picture parts:
     motif_templates = {
-        'static': {'pcol': motif_stringb64_static, 'no-pcol': motif_stringb64_reponly_static},
-        'dynamic': {'pcol': motif_stringb64, 'no-pcol': motif_stringb64_reponly}
+        'static': {'pcol': MOTIF_STRINGB64_STATIC, 'no-pcol': MOTIF_STRINGB64_REPONLY_STATIC},
+        'dynamic': {'pcol': MOTIF_STRINGB64, 'no-pcol': MOTIF_STRINGB64_REPONLY}
     }
 
-    if repetition is not None:
-        reps = open(repetition, 'r').read()
-        align_html = generate_alignment(
-            motif_clean, alignment, motif_clean.split('_')[0],
-            'Spanning reads alignment visualization'
-        )
-        filt_align_html = generate_alignment(
-            motif_clean + '_filtered', filtered_alignment, motif_clean.split('_')[0],
-            'Partial reads alignment visualization', seq_logo=False
-        )
-        left_align_html = generate_alignment(
-            motif_clean + '_filtered_left', filtered_left_alignment, motif_clean.split('_')[0],
-            'Left flank reads alignment visualization'
-        )
-        right_align_html = generate_alignment(
-            motif_clean + '_filtered_right', filtered_right_alignment, motif_clean.split('_')[0],
-            'Right flank reads alignment visualization'
+    if repetition is None:
+        return (
+            CONTENT_STRING_EMPTY.format(motif_name=motif_clean.rsplit('_', 1)[0], motif=motif),
+            MOTIF_STRING_EMPTY.format(post_bases=postfilter.min_rep_len, post_reps=postfilter.min_rep_cnt, motif_name=motif_clean, motif=motif, sequence=sequence, errors=errors),
+            (motif, '')
         )
 
-        # select template
-        motif_template = motif_templates['static' if static else 'dynamic']['no-pcol' if pcolor is None else 'pcol']
+    reps = open(repetition, 'r').read()
+    align_html = generate_alignment(
+        motif_clean, alignment, motif_clean.split('_')[0],
+        'Spanning reads alignment visualization'
+    )
+    filt_align_html = generate_alignment(
+        motif_clean + '_filtered', filtered_alignment, motif_clean.split('_')[0],
+        'Partial reads alignment visualization', seq_logo=False
+    )
+    left_align_html = generate_alignment(
+        motif_clean + '_filtered_left', filtered_left_alignment, motif_clean.split('_')[0],
+        'Left flank reads alignment visualization'
+    )
+    right_align_html = generate_alignment(
+        motif_clean + '_filtered_right', filtered_right_alignment, motif_clean.split('_')[0],
+        'Right flank reads alignment visualization'
+    )
 
-        # read pcolor if available
-        pcol = '' if pcolor is None else open(pcolor, 'r').read()
+    # select template
+    motif_template = motif_templates['static' if static else 'dynamic']['no-pcol' if pcolor is None else 'pcol']
 
-        # return filled valid template
-        return (content_string.format(motif_name=motif_clean.rsplit('_', 1)[0], motif=motif),
-                motif_template.format(
-                    post_bases=postfilter.min_rep_len, post_reps=postfilter.min_rep_cnt, motif_name=motif_clean_id,
-                    motif_id=motif_clean.rsplit('_', 1)[0], motif=motif, motif_reps=reps, result=result,
-                    motif_pcolor=pcol, alignment=f'{motif_name.replace(" ", "%20")}/alignments.html', sequence=sequence,
-                    errors=errors, nomenclatures='\n'.join(nomenclature_lines)),
-                (motif, alignment_string.format(
-                    sequence=sequence, alignment=align_html + align_html_a1 + align_html_a2
-                    + filt_align_html + left_align_html + right_align_html
-                )))
-    return (content_string_empty.format(motif_name=motif_clean.rsplit('_', 1)[0], motif=motif),
-            motif_string_empty.format(post_bases=postfilter.min_rep_len, post_reps=postfilter.min_rep_cnt,
-                                      motif_name=motif_clean, motif=motif, sequence=sequence, errors=errors),
-            (motif, ''))
+    # read pcolor if available
+    pcol = '' if pcolor is None else open(pcolor, 'r').read()
+
+    # return filled valid template
+    return (
+        CONTENT_STRING.format(motif_name=motif_clean.rsplit('_', 1)[0], motif=motif),
+        motif_template.format(
+            post_bases=postfilter.min_rep_len, post_reps=postfilter.min_rep_cnt, motif_name=motif_clean_id,
+            motif_id=motif_clean.rsplit('_', 1)[0], motif=motif, motif_reps=reps, result=result,
+            motif_pcolor=pcol, alignment=f'{motif_name.replace(" ", "%20")}/alignments.html', sequence=sequence,
+            errors=errors, nomenclatures='\n'.join(nomenclature_lines)
+        ),
+        (motif, ALIGNMENT_STRING.format(
+            sequence=sequence, alignment=align_html + align_html_a1 + align_html_a2
+            + filt_align_html + left_align_html + right_align_html
+        ))
+    )
 
 
 def generate_alignment(
@@ -3612,7 +3607,7 @@ def generate_alignment(
             string = f.read()
         string = string[:string.find('#')]
 
-        return align_vis.format(
+        return ALIGN_VIS.format(
             fasta=string, name=motif, motif_id=motif_id,
             display_text=display_text, seq_logo='true' if seq_logo else 'false'
         )

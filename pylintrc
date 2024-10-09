@@ -13,7 +13,8 @@ max-line-length=120
 disable = all
 enable =
     unused-variable, unused-argument, ungrouped-imports, unnecessary-lambda, 
-    use-a-generator, no-else-return, raise-missing-from, consider-using-generator
+    use-a-generator, no-else-return, raise-missing-from, consider-using-generator,
+    invalid-name
 # raise-missing-from https://stefan.sofa-rockers.org/2020/10/28/raise-from/
 
 [METHOD_ARGS]
