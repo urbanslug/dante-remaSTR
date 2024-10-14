@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from argparse import ArgumentParser, Namespace, RawDescriptionHelpFormatter, ArgumentTypeError
 from datetime import datetime
-from typing import TextIO, Iterable, Iterator, Any
+from typing import TextIO, Iterator, Any
 from collections import Counter
 from copy import copy
 
@@ -59,32 +59,23 @@ BASE_MAPPING = {
 def main() -> None:
     start_time = datetime.now()
     args = load_arguments()
-    # args = Namespace(
-    #     output_dir='dante_out',
-    #     input_tsv=open("../../cache/HG002.GRCh38.remastr_output.tsv", "r"),
-    #     male=False,
-
-    #     verbose=True,
-    #     nomenclatures=5,
-    #     cutoff_alignments=20,
-    # )
-    print(args)
+    # args = load_arguments_fake()
 
     print('DANTE_remaSTR = "Da Amazing NucleoTide Exposer" (remastered)')
     print(f'DANTE_remaSTR Starting : {start_time:%Y-%m-%d %H:%M:%S}')
 
-    data = []
+    all_motifs: list[Motif] = []
+    all_result_lines: list[dict[Any, Any]] = []
     for motif_table in generate_groups(args.input_tsv):
-        result = process_group(args, motif_table)
-        data.append(result)
-        # this should be longer... it's the main loop
-    del result
-    del motif_table
+        motif, rls = process_group(args, motif_table)
+        all_motifs.append(motif)
+        all_result_lines.extend(rls)
 
-    all_motifs, rl_df = consume_iterator(data)
+    rl_df = pd.DataFrame.from_records(all_result_lines)
+    del all_result_lines
+    rl_df.sort_values(by=['motif_name'], kind='stable')
 
     print(f'Writing outputs: {datetime.now():%Y-%m-%d %H:%M:%S}')
-
     out_file = args.output_dir + "/variants.tsv"
     rl_df.to_csv(out_file, sep='\t')
     write_vcf(rl_df, args.output_dir)
@@ -99,6 +90,18 @@ def main() -> None:
     end_time = datetime.now()
     print(f'DANTE_remaSTR Stopping : {end_time:%Y-%m-%d %H:%M:%S}')
     print(f'Total time of run      : {end_time - start_time}')
+
+
+def load_arguments_fake() -> Namespace:
+    return Namespace(
+        output_dir='dante_out',
+        input_tsv=open("../../cache/HG002.GRCh38.remastr_output.tsv", "r"),
+        male=False,
+
+        verbose=True,
+        nomenclatures=5,
+        cutoff_alignments=20,
+    )
 
 
 def load_arguments() -> Namespace:
@@ -794,6 +797,7 @@ def too_complex_function_inferring_and_creating_reports(
         module_number, qual_annot=anns_spanning
     ))
 
+    # TODO: split here
     # infer phasing (if we are not on the first repeating module)
     last_num1 = None
     both_good_annot1 = None
@@ -1005,27 +1009,6 @@ def generate_groups(input_stream: TextIO, chunk_size: int = 1000000) -> Iterator
     # process the last group
     if not current_group_data.empty:
         yield current_group_data
-
-
-def consume_iterator(
-    results_iterator: Iterable[tuple[Motif, list[dict]]]
-) -> tuple[list[Motif], pd.DataFrame]:
-    """
-    Consume iterator of results.
-    :param results_iterator: generator - motif and its corresponding results of modules
-    :return: list[Motif], pd.DataFrame, int - motifs in list and table of all results, input length
-    """
-    # consume iterator of results
-    all_motifs: list[Motif] = []
-    all_result_lines: list[dict[Any, Any]] = []
-    for motif, rls in results_iterator:
-        # append data
-        all_motifs.append(motif)
-        all_result_lines.extend(rls)
-
-    df = pd.DataFrame.from_records(all_result_lines)
-    df.sort_values(by=['motif_name'], kind='stable')
-    return (all_motifs, df)
 
 
 def normalize_ref_alt(ref: str, alt: str) -> tuple[str, str]:
