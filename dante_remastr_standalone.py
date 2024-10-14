@@ -30,8 +30,6 @@ import matplotlib.pyplot as plt  # noqa
 import matplotlib.patheffects as patheffects  # noqa
 
 VERSION = "0.9.0"
-MAX_REPETITIONS = 40
-MOTIF_COLUMN_NAME = 'motif'
 DANTE_DESCRIPTION = '''
     DANTE = Da Amazing NucleoTide Exposer (Remastered)
     --------------------------------------------------
@@ -42,23 +40,49 @@ for each of the annotated motifs and a summary report in HTML (report.html).
 Otherwise only a table with all genotypes, confidences, and supporting
 information.
 '''
+MOTIF_COLUMN_NAME = 'motif'
+MIN_FLANK_LEN = 3
+MIN_REP_LEN = 3
+MIN_REP_CNT = 1
+MAX_ABS_ERROR = None
+MAX_REL_ERROR = 1.0
+MAX_REPETITIONS = 40
+
+BASE_MAPPING = {
+    'A': 'A', 'C': 'C', 'G': 'G', 'T': 'T',
+    'M': '[AC]', 'R': '[AG]', 'W': '[AT]', 'S': '[CG]', 'Y': '[CT]', 'K': '[GT]',
+    'V': '[ACG]', 'H': '[ACT]', 'D': '[AGT]', 'B': '[CGT]',
+    'N': '[ACGT]'
+}
 
 
 def main() -> None:
     start_time = datetime.now()
     args = load_arguments()
+    # args = Namespace(
+    #     output_dir='dante_out',
+    #     input_tsv=open("../../cache/HG002.GRCh38.remastr_output.tsv", "r"),
+    #     male=False,
+
+    #     verbose=True,
+    #     nomenclatures=5,
+    #     cutoff_alignments=20,
+    # )
+    print(args)
 
     print('DANTE_remaSTR = "Da Amazing NucleoTide Exposer" (remastered)')
     print(f'DANTE_remaSTR Starting : {start_time:%Y-%m-%d %H:%M:%S}')
 
     data = []
-    for motif_table in generate_groups(sys.stdin):
+    for motif_table in generate_groups(args.input_tsv):
         result = process_group(args, motif_table)
         data.append(result)
+        # this should be longer... it's the main loop
+    del result
+    del motif_table
 
-    all_motifs, rl_df, input_len, filtered_len = consume_iterator(data)
+    all_motifs, rl_df = consume_iterator(data)
 
-    print(f'Kept {filtered_len:4d}/{input_len:4d} ({filtered_len / input_len * 100.0:5.1f}%) reads.')
     print(f'Writing outputs: {datetime.now():%Y-%m-%d %H:%M:%S}')
 
     out_file = args.output_dir + "/variants.tsv"
@@ -69,7 +93,7 @@ def main() -> None:
         all_motifs = sorted(all_motifs)
         merge_all_profiles(args.output_dir, all_motifs, rl_df)
 
-        post_filter = PostFilter(args)
+        post_filter = PostFilter()
         write_report(all_motifs, rl_df, post_filter, args.output_dir, args.nomenclatures)
 
     end_time = datetime.now()
@@ -87,64 +111,41 @@ def load_arguments() -> Namespace:
         description=textwrap.dedent(DANTE_DESCRIPTION)
     )
 
-    # TODO: cancel Postfilter parameters
-    postfilter = parser.add_argument_group('Post-filter')
-    postfilter.add_argument(
-        '--min-flank-len', '-fl', type=positive_int, default=3,
-        help='Minimal flank length in bases. Default=3'
-    )
-    postfilter.add_argument(
-        '--min-rep-len', '-rl', type=positive_int, default=3,
-        help='Minimal repetition length in bases. Default=3'
-    )
-    postfilter.add_argument(
-        '--min-rep-cnt', '-rc', type=positive_int, default=1,
-        help='Minimal repetition count. Default=1'
-    )
-    postfilter.add_argument(
-        '--max-abs-error', '-ea', type=positive_int, default=None,
-        help='Maximal number of errors. Default=All'
-    )
-    postfilter.add_argument(
-        '--max-rel-error', '-er', type=probability, default=1.0,
-        help='Maximal ratio of errors to read length. Default=All'
-    )
-
     options = parser.add_argument_group('Options')
     options.add_argument(
-        '--nomenclatures', '-n', type=positive_int, default=5,
-        help='Number of nomenclature strings to add to reports. Default=5'
+        '--input-tsv', '-i', type=valid_input_tsv, default="",
+        help='Input annotation table as obtained by remaSTR. Default=stdin'
     )
     options.add_argument(
         '--output-dir', '-o', type=str, default="dante_out",
         help='Output destination (directory). Default=./dante_out/'
     )
     options.add_argument(
-        '--cutoff-alignments', type=positive_int, default=20,
-        help='How many bases to keep beyond annotated part. Default=20'
+        '--verbose', '-v', action='store_true',
+        help='Print all the outputs. Default is to print only the result table to stdout.'
     )
     options.add_argument(
         '--male', action='store_true',
         help='Indicate that the sample is male. Process motifs from chrX/chrY as mono-allelic.'
     )
     options.add_argument(
-        '--verbose', '-v', action='store_true',
-        help='Print all the outputs. Default is to print only the result table to stdout.'
+        '--nomenclatures', '-n', type=positive_int, default=5,
+        help='Number of nomenclature strings to add to reports. Default=5'
     )
-
-    debug = parser.add_argument_group('Debug')
-    debug.add_argument(
-        '--skip-quality-under', type=positive_int, default=0,
-        help='Skip reads that have quality lower than this value. Default=0, so skip none.'
-    )
-    debug.add_argument(
-        '--cut-quality-under', type=positive_int, default=0,
-        help='Cut parts of reads that have quality lower than this value. Default=0, so cut nothing.'
+    options.add_argument(
+        '--cutoff-alignments', type=positive_int, default=20,
+        help='How many bases to keep beyond annotated part. Default=20'
     )
 
     args = parser.parse_args()
 
     return args
+
+
+def valid_input_tsv(value: str) -> TextIO:
+    if value == "":
+        return sys.stdin
+    return open(value, "r")
 
 
 def positive_int(value: str) -> int:
@@ -155,33 +156,6 @@ def positive_int(value: str) -> int:
     if int_value < 0:
         raise ArgumentTypeError(f'Value {value} is negative')
     return int_value
-
-
-def positive_nonzero_int(value: str) -> int:
-    int_value = positive_int(value)
-    if int_value == 0:
-        raise ArgumentTypeError(f'Value {value} cannot be 0')
-    return int_value
-
-
-def probability(value: str) -> float:
-    try:
-        float_value = float(value)
-    except ValueError:
-        raise ArgumentTypeError(f'Value {value} is not float') from None
-    if 0 <= float_value <= 1:
-        return float_value
-    raise ArgumentTypeError(f'Value {value} is not in interval <0, 1>')
-
-
-# --- garbage under this line -------------------------------------------------
-# define base mapping to regex for nucleotide symbols
-base_mapping = {
-    'A': 'A',     'C': 'C',     'G': 'G', 'T': 'T',
-    'R': '[GA]',  'Y': '[CT]',  'K': '[GT]', 'M': '[AC]', 'S': '[GC]', 'W': '[AT]',
-    'D': '[GAT]', 'H': '[ACT]', 'V': '[GCA]',  # AGT missing?
-    'N': '[ACTG]'
-}
 
 
 class Motif:
@@ -359,7 +333,7 @@ class Annotation:
         """
         err_line = []
         for exp, read in zip(self.expected_seq.upper(), self.read_seq.upper()):
-            if exp == '-' or read in base_mapping.get(exp, ''):
+            if exp == '-' or read in BASE_MAPPING.get(exp, ''):
                 err_line.append('_')
             elif read == '_':
                 err_line.append('D')
@@ -461,7 +435,7 @@ class Annotation:
         """
         return self.primers(index_str), self.module_repetitions[index_str], self.module_bases[index_str]
 
-    def has_less_errors(self, max_errors: float | int, relative=False) -> bool:
+    def has_less_errors(self, max_errors: float | int | None, relative=False) -> bool:
         """
         Check if this annotation has fewer errors than max_errors.
         Make it relative to the annotated length if relative is set.
@@ -561,7 +535,7 @@ class Annotation:
         :return: int - The start position of the first occurrence of the motif sequence. Returns -1 if not found.
         """
         # convert motif sequence to regex
-        motif_regex = ''.join(base_mapping[char] for char in motif_sequence)
+        motif_regex = ''.join(BASE_MAPPING[char] for char in motif_sequence)
 
         # compile the regular expression pattern
         pattern = re.compile(motif_regex)
@@ -789,7 +763,6 @@ def generate_result_line(
 
 # this has mixed functionality - it does prediction and it does writing
 def too_complex_function_inferring_and_creating_reports(
-    args: Namespace,
     annotations1: list[Annotation],
     postfilter_class: PostFilter,
     motif_class: Motif,
@@ -799,34 +772,26 @@ def too_complex_function_inferring_and_creating_reports(
     result_lines: list,
     prev_module: tuple[int, str, int] | None,
     file_pcolor: str | None,
-    file_output: str | None
+    file_output: str | None,
+    is_monoallelic: bool
 ):
-    monoallelic1 = args.male and chrom_from_string(motif_class.chrom) in [
-        ChromEnum.X, ChromEnum.Y
-    ]
-
-    # setup post filtering - no primers, insufficient quality, ...
-    qual_annot1, filt_annot1 = postfilter_class.get_filtered(annotations1, module_number, both_primers=True)
-    primer_annot1, filt_annot2 = postfilter_class.get_filtered(filt_annot1, module_number, both_primers=False)
+    anns_spanning, rest = postfilter_class.get_filtered(annotations1, module_number, both_primers=True)
+    anns_flanking, anns_filtered = postfilter_class.get_filtered(rest, module_number, both_primers=False)
+    del rest
 
     # why is this a class?
     # run inference - this takes most of the time (for no --verbose)
-    model = Inference(
-        read_distribution, None, str_rep=args.min_rep_cnt,
-        minl_primer1=args.min_flank_len, minl_primer2=args.min_flank_len,
-        minl_str=args.min_rep_len
-    )
-
-    predicted1, confidence1 = model.genotype(
-        qual_annot1, primer_annot1, module_number, file_pcolor, file_output,
-        motif_str, monoallelic1
+    model = Inference(read_distribution, None)
+    predicted1, confidence1 = model.genotype(  # this should return lh_dict
+        anns_spanning, anns_flanking, module_number, file_pcolor, file_output,
+        motif_str, is_monoallelic
     )
 
     # append to the result line
     result_lines.append(generate_result_line(
         motif_class, predicted1, confidence1,
-        len(qual_annot1), len(primer_annot1), len(filt_annot1),
-        module_number, qual_annot=qual_annot1
+        len(anns_spanning), len(anns_flanking), len(anns_filtered),
+        module_number, qual_annot=anns_spanning
     ))
 
     # infer phasing (if we are not on the first repeating module)
@@ -863,14 +828,14 @@ def too_complex_function_inferring_and_creating_reports(
         ))
 
     return (
-        (qual_annot1, primer_annot1, filt_annot2),
+        (anns_spanning, anns_flanking, anns_filtered),
         (both_good_annot1, one_good_annot1, none_good_annot1),
         phasing1, supp_reads1, confidence1, predicted1, result_lines, last_num1
     )
 
 
 def report(
-    args, motif_dir, motif_class, module_number, last_num1, prev_module,
+    cutoff_alignments, motif_dir, motif_class, module_number, last_num1, prev_module,
     ann_qual, ann_primer, ann_filter, ann_2good, ann_1good, ann_0good,
     phasing, supp_reads, confidence, predicted
 ):
@@ -880,7 +845,7 @@ def report(
     write_all(
         ann_qual, ann_primer, ann_filter,
         motif_dir, motif_class, module_number,
-        zip_it=False, cutoff_alignments=args.cutoff_alignments
+        zip_it=False, cutoff_alignments=cutoff_alignments
     )
 
     if prev_module is not None:
@@ -888,7 +853,7 @@ def report(
         write_all(
             ann_2good, ann_1good, ann_0good,
             motif_dir, motif_class, last_num1, second_module_number=module_number,
-            zip_it=False, cutoff_alignments=args.cutoff_alignments
+            zip_it=False, cutoff_alignments=cutoff_alignments
         )
 
         # write phasing into a file
@@ -906,77 +871,69 @@ def report(
             write_alignment(
                 f'{motif_dir}/alignment_{module_number}_a{a1}.fasta',
                 ann_qual, module_number, a1,
-                zip_it=False, cutoff_after=args.cutoff_alignments
+                zip_it=False, cutoff_after=cutoff_alignments
             )
         if a2 is not None and a2 != a1 and a2 != 0:
             write_alignment(
                 f'{motif_dir}/alignment_{module_number}_a{a2}.fasta',
                 ann_qual, module_number, a2,
-                zip_it=False, cutoff_after=args.cutoff_alignments
+                zip_it=False, cutoff_after=cutoff_alignments
             )
 
 
 def process_group(
     args: Namespace, df: pd.DataFrame
-) -> tuple[Motif, list[dict], int, int]:
+) -> tuple[Motif, list[dict]]:
     """
-    Process the group as pandas Dataframe. Return motif name if processed correctly or None otherwise.
+    Process the group as pandas Dataframe.
     :param args: argparse.Namespace - namespace of program arguments
     :param df: pd.DataFrame - contains information about annotated reads for a single motif to process
     :param motif_str: str - motif nomenclature
-    :return: Motif, list(dict), int, int - motif, result lines, input length, length of filtered intput
+    :return: motif, result lines, input length, length of filtered intput
     """
     motif_str = df[MOTIF_COLUMN_NAME].iloc[0]
-
-    # build motif class
     name = None if 'name' not in df.columns or df.iloc[0]['name'] in ['None', ''] else df.iloc[0]['name']
     motif_class = Motif(motif_str, name)
+    motif_dir = f'{args.output_dir}/{motif_class.dir_name()}'
+    monoallelic1 = args.male and chrom_from_string(motif_class.chrom) in [ChromEnum.X, ChromEnum.Y]
+    os.makedirs(motif_dir, exist_ok=True)
 
-    # filter/cut those with low quality
-    input_len = len(df)
-    filtered_len = len(df)
-    if filtered_len == 0:
-        # TODO: maybe it would be nice to warn user?
-        return motif_class, [], input_len, filtered_len
-
-    # https://github.com/pandas-dev/pandas-stubs/issues/1001
-    # create annotations from rows
     annotations: list[Annotation] = []
+    rd: list = []
     for _, row in df.iterrows():
-        annotations.append(Annotation(
-            row['read_id'], row['mate_order'], row['read'], row['reference'],
-            row['modules'], row['log_likelihood'], motif_class
-        ))
+        ann = Annotation(
+            row['read_id'], row['mate_order'], row['read'], row['reference'], row['modules'],
+            row['log_likelihood'], motif_class
+        )
+        annotations.append(ann)
+        rd.append(len(ann.read_seq))
 
     # infer read distribution
-    read_distribution = np.bincount([len(ann.read_seq) for ann in annotations], minlength=100)
+    read_distribution = np.bincount(rd, minlength=100)
 
     # create report for each repeating module
+    postfilter_class = PostFilter()
     result_lines: list[dict] = []
     repeating_modules = motif_class.get_repeating_modules()
-    postfilter_class = PostFilter(args)
     for i, (module_number, _, _) in enumerate(repeating_modules):
         prev_module = None if i == 0 else repeating_modules[i - 1]
         file_pcolor, file_output = None, None
         if args.verbose:
-            motif_dir = f'{args.output_dir}/{motif_class.dir_name()}'
-            os.makedirs(motif_dir, exist_ok=True)
             file_pcolor = f'{motif_dir}/pcolor_{module_number}'
             file_output = f'{motif_dir}/allcall_{module_number}.txt'
 
         result = too_complex_function_inferring_and_creating_reports(
-            module_number=module_number,
-            postfilter_class=postfilter_class,
-            motif_class=motif_class, read_distribution=read_distribution,
+            annotations1=annotations, is_monoallelic=monoallelic1, module_number=module_number,
+            postfilter_class=postfilter_class, motif_class=motif_class, read_distribution=read_distribution,
             motif_str=motif_str, result_lines=result_lines, prev_module=prev_module,
-            args=args, file_pcolor=file_pcolor, file_output=file_output, annotations1=annotations
+            file_pcolor=file_pcolor, file_output=file_output
         )
         postfilter_counts, postfilter_counts_phasing, \
             phasing, supp_reads, confidence, predicted, result_lines, last_num1 = result
 
         if args.verbose:
             report(
-                args, motif_dir, motif_class, module_number, last_num1, prev_module,
+                args.cutoff_alignments, motif_dir, motif_class, module_number, last_num1, prev_module,
                 postfilter_counts[0], postfilter_counts[1], postfilter_counts[2],
                 postfilter_counts_phasing[0], postfilter_counts_phasing[1], postfilter_counts_phasing[2],
                 phasing, supp_reads, confidence, predicted
@@ -1001,7 +958,7 @@ def process_group(
         write_histogram_nomenclature(f'{motif_dir}/nomenclature.txt', annotations)
 
     # return motif name in case it was processed normally
-    return motif_class, result_lines, input_len, filtered_len
+    return motif_class, result_lines
 
 
 def generate_groups(input_stream: TextIO, chunk_size: int = 1000000) -> Iterator[pd.DataFrame]:
@@ -1051,8 +1008,8 @@ def generate_groups(input_stream: TextIO, chunk_size: int = 1000000) -> Iterator
 
 
 def consume_iterator(
-    results_iterator: Iterable[tuple[Motif, list[dict], int, int]]
-) -> tuple[list[Motif], pd.DataFrame, int, int]:
+    results_iterator: Iterable[tuple[Motif, list[dict]]]
+) -> tuple[list[Motif], pd.DataFrame]:
     """
     Consume iterator of results.
     :param results_iterator: generator - motif and its corresponding results of modules
@@ -1061,19 +1018,14 @@ def consume_iterator(
     # consume iterator of results
     all_motifs: list[Motif] = []
     all_result_lines: list[dict[Any, Any]] = []
-    all_input_len = 0
-    all_filtered_len = 0
-    for motif, rls, input_l, filtered_l in results_iterator:
-        if filtered_l > 0:
-            # append data
-            all_motifs.append(motif)
-            all_result_lines.extend(rls)
-            all_input_len += input_l
-            all_filtered_len += filtered_l
+    for motif, rls in results_iterator:
+        # append data
+        all_motifs.append(motif)
+        all_result_lines.extend(rls)
 
     df = pd.DataFrame.from_records(all_result_lines)
     df.sort_values(by=['motif_name'], kind='stable')
-    return (all_motifs, df, all_input_len, all_filtered_len)
+    return (all_motifs, df)
 
 
 def normalize_ref_alt(ref: str, alt: str) -> tuple[str, str]:
@@ -1176,16 +1128,12 @@ class PostFilter:
     Class that encapsulates post-filtering.
     """
 
-    def __init__(self, args: Namespace):
-        """
-        Initialize post-filter class.
-        :param args: arguments of the program
-        """
-        self.min_flank_len = args.min_flank_len
-        self.min_rep_len = args.min_rep_len
-        self.min_rep_cnt = args.min_rep_cnt
-        self.max_rel_error = args.max_rel_error
-        self.max_abs_error = args.max_abs_error
+    def __init__(self):
+        self.min_flank_len = MIN_FLANK_LEN
+        self.min_rep_len = MIN_REP_LEN
+        self.min_rep_cnt = MIN_REP_CNT
+        self.max_rel_error = MAX_REL_ERROR
+        self.max_abs_error = MAX_ABS_ERROR
 
     def quality_annotation(self, ann: Annotation, module_number: int, both_primers: bool = True) -> bool:
         """
@@ -1268,71 +1216,6 @@ class PostFilter:
         # filtered_annotations = [an for an in annotations if an not in quality_annotations]
 
         return quality_annotations, filtered_annotations
-
-
-def has_good_quality(row: dict, min_qual: int, first_module: int, last_module: int) -> bool:
-    """
-    Checks if the read has good quality everywhere in the annotated part.
-    :param row: dict - the read, its sequence, data, quality?
-    :param min_qual: int - minimal quality to have
-    :param first_module: int - first module of the annotation to look at
-    :param last_module: int - last module of the annotation to look at
-    :return: bool - True if the read has enough quality bases in the annotated part
-    """
-    # first adjust the lengths due to insertions
-    indices_to_except = set([i for i, ltr in enumerate(row['read']) if ltr == '_'])
-    seq = ''.join(c for i, c in enumerate(row['read']) if i not in indices_to_except)
-    ref = ''.join(c for i, c in enumerate(row['reference']) if i not in indices_to_except)
-    mod = ''.join(c for i, c in enumerate(row['modules']) if i not in indices_to_except)
-    qual = [ord(q) - ord('!') for q in row['quality']]
-
-    assert len(seq) == len(ref) == len(mod) == len(qual), (
-        row['motif'], row['read_sn'], len(seq), len(qual), row['read'], seq, row['quality']
-    )
-
-    # identify annotated place
-    annot_start = mod.find(chr(ord('0') + first_module))
-    if annot_start == -1:
-        if mod[0] != '-' and ord(mod[0]) - ord('0') <= last_module:
-            annot_start = 0
-        else:
-            return True
-    annot_end = mod.rfind(chr(ord('0') + last_module))
-    annot_end = len(mod) if annot_end == -1 else annot_end + 1
-
-    # look if there is enough quality in the annotated part
-    return all(q >= min_qual for q in qual[annot_start:annot_end])
-
-
-def cut_low_quality(row: dict, min_qual: int) -> dict:
-    """
-    Cut parts of the read with low quality
-    :param row: dict - the read, its sequence, data, quality?
-    :param min_qual: int - minimal quality to have
-    :return: dict - row with updated sequences/qualities
-    """
-    # first adjust the quality column due to insertions
-    indices_ins = [i for i, ltr in enumerate(row['read']) if ltr == '_']
-    result = []
-    last_idx = 0
-    for idx in sorted(indices_ins):
-        result.append(row['quality'][last_idx:idx])  # Append substring up to current index
-        result.append('X')  # Insert 'X' (high quality)
-        last_idx = idx  # Update last index to current
-    result.append(row['quality'][last_idx:])  # Append the remaining part of the string
-    qual = [ord(q) - ord('!') for q in ''.join(result)]
-
-    assert len(row['read']) == len(qual), (row['motif'], row['read_sn'], len(qual), row['read'], row['quality'])
-
-    # cut low quality from relevant parts of row
-    keep_ids = np.array(qual) >= min_qual
-    row['read'] = ''.join(np.array(list(row['read']))[keep_ids])
-    row['reference'] = ''.join(np.array(list(row['reference']))[keep_ids])
-    row['modules'] = ''.join(np.array(list(row['modules']))[keep_ids])
-    row['quality'] = ''.join([chr(q + ord('!')) for q in np.array(qual)[keep_ids]])
-
-    # return the modified row
-    return row
 
 
 class ChromEnum(enum.Enum):
@@ -2117,7 +2000,8 @@ def generate_report_html(
         nomenclature_file = f'{data_dir}/{motif.dir_name()}/nomenclature.txt'
         nomenclature_lines = generate_nomenclatures(nomenclature_file, motif, nomenclature_limit)
         tabs.append(MOTIF_SUMMARY.format(
-            motif_id=motif_clean, nomenclatures='\n'.join(nomenclature_lines), table='\n'.join(rows[motif.name]), motifs='\n'.join(ms[motif.name])
+            motif_id=motif_clean, nomenclatures='\n'.join(nomenclature_lines),
+            table='\n'.join(rows[motif.name]), motifs='\n'.join(ms[motif.name])
         ))
     motifs_tab = '\n'.join(tabs)
 
@@ -2241,16 +2125,14 @@ def generate_models_one_allele(min_rep: int, max_rep: int) -> Iterator[tuple[int
 
 class Inference:
     """ Class for inference of alleles. """
-
     MIN_REPETITIONS = 1
-
     # default parameters for inference (miSeq default)
     DEFAULT_MODEL_PARAMS = (0.00716322, 0.000105087, 0.0210812, 0.0001648)
     DEFAULT_FIT_FUNCTION = 'linear'
 
     def __init__(
-        self,
-        read_distribution, params_file, str_rep=3, minl_primer1=5, minl_primer2=5, minl_str=5,
+        self, read_distribution, params_file,
+        str_rep=MIN_REP_CNT, minl_primer1=MIN_FLANK_LEN, minl_primer2=MIN_FLANK_LEN, minl_str=MIN_REP_LEN,
         p_bckg_closed=None, p_bckg_open=None, p_expanded=None
     ):
         """
@@ -2286,7 +2168,8 @@ class Inference:
         :return: None
         """
         # extract params
-        model_params, rate_func_str = self.read_params(self.params_file)
+        model_params = self.DEFAULT_MODEL_PARAMS
+        rate_func_str = self.DEFAULT_FIT_FUNCTION
         str_to_func = {'linear': linear_rate, 'const': const_rate, 'exponential': exp_rate, 'square': quadratic_rate}
         rate_func = const_rate
         if rate_func_str in str_to_func.keys():
@@ -2330,38 +2213,12 @@ class Inference:
         self.model_probabilities = {'E': self.p_expanded, 'B': l_bckg_model_open}
         self.model_probabilities.update({i: l_others for i in self.allele_models.keys()})
 
-    def read_params(self, params_file):
-        """
-        Reads all parameters written with write_params(print_all=True)
-        :param params_file: str - filename to read parameters from, if None, load default params
-        :return: 4-tuple, 2-tuple, function - parameters for model,
-        read count drop, and error function for model distributions
-        """
-        if params_file is None:
-            return self.DEFAULT_MODEL_PARAMS, self.DEFAULT_FIT_FUNCTION
-
-        # read 2nd and last line of the file
-        with open(params_file) as f:
-            lines = f.readlines()
-            fit_function = lines[1].strip().split()[1]
-            split = list(map(float, lines[-1].strip().split()))
-
-        if len(split) < 4:
-            print('ERROR: parameters were not read successfully, using defaults!', file=sys.stderr)
-            return self.DEFAULT_MODEL_PARAMS, self.DEFAULT_FIT_FUNCTION
-
-        # extract parameters from last line of file
-        model_params = tuple(split[0:4])
-
-        return model_params, fit_function
-
     def likelihood_rl(self, rl):
         """
         Likelihood of a read with this length.
         :param rl: int - read length
         :return: float - likelihood of a read this long
         """
-        # print('rl', self.read_distribution[rl] / float(self.sum_reads))
         return self.read_distribution[rl] / float(self.sum_reads)
 
     @staticmethod
@@ -2780,36 +2637,6 @@ class Inference:
             confidence_exp, confidence_exp_all
         )
 
-    # this should be normal function outside the class, there is no need for staticmethod
-    @staticmethod
-    def write_output(
-        file_desc: str | TextIO, predicted: tuple[int | str, int | str],
-        conf: tuple[float, float, float | str, float, float, float, float],
-        name: str | int
-    ):
-        """
-        Write result of one prediction.
-        :param file_desc: file descriptor - where to write to
-        :param predicted: tuple(int/char, int/char) - predicted alleles
-        :param conf: confidence of prediction (whole, 1st allele, 2nd allele, background and expanded alleles)
-        :param name: str/int - name/number of the sample
-        :return: None
-        """
-        def write_output_fd(f, predicted, conf, name):
-            print(f'Predicted alleles for {name}: (confidence = {float_to_str(conf[1], percents=True)})', file=f)
-            print(f'\t{str(predicted[0]):3s} (confidence = {float_to_str(conf[1], percents=True)})', file=f)
-            print(f'\t{str(predicted[1]):3s} (confidence = {float_to_str(conf[2], percents=True)})', file=f)
-            print(f'B   B   {float_to_str(conf[3], percents=True)}', file=f)
-            print(f'all B   {float_to_str(conf[4], percents=True)}', file=f)
-            print(f'B   E   {float_to_str(conf[5], percents=True)}', file=f)
-            print(f'all E   {float_to_str(conf[6], percents=True)}', file=f)
-
-        if type(file_desc) is str:
-            with open(file_desc, 'w') as f:
-                write_output_fd(f, predicted, conf, name)
-        else:
-            write_output_fd(file_desc, predicted, conf, name)
-
     def genotype(
         self, annotations: list[Annotation], filt_annotations: list[Annotation], index_rep: int,
         file_pcolor: str | None,
@@ -2820,8 +2647,7 @@ class Inference:
         Genotype based on all annotations - infer likelihoods, print pcolor and write output
         :param annotations: list(Annotation) - good (blue) annotations
         :param filt_annotations: list(Annotation) - (grey) annotations with one primer
-        :param index_rep: i
-        nt - index of a repetition
+        :param index_rep: int - index of a repetition
         :param file_pcolor: str - file prefix for a pcolor image
         :param file_output: str - file for genotyping output
         :param name: str - name of the sample
@@ -2836,7 +2662,6 @@ class Inference:
         lh_dict = self.infer(annotations, filt_annotations, index_rep, monoallelic=monoallelic)
 
         # print pcolor image
-        # creates file .pdf, .png and .json
         lh_array, predicted = self.print_pcolor(lh_dict, file_pcolor, name)
 
         # adjust for no spanning reads (should output Background)
@@ -2851,10 +2676,39 @@ class Inference:
 
         # write output
         if file_output is not None:
-            self.write_output(file_output, predicted_sym, confidence, name)
+            write_output(file_output, predicted_sym, confidence, name)
 
         # return predicted and confidence
         return predicted_sym, confidence
+
+
+def write_output(
+    file_desc: str | TextIO, predicted: tuple[int | str, int | str],
+    conf: tuple[float, float, float | str, float, float, float, float],
+    name: str | int
+):
+    """
+    Write result of one prediction.
+    :param file_desc: file descriptor - where to write to
+    :param predicted: tuple(int/char, int/char) - predicted alleles
+    :param conf: confidence of prediction (whole, 1st allele, 2nd allele, background and expanded alleles)
+    :param name: str/int - name/number of the sample
+    :return: None
+    """
+    def write_output_fd(f, predicted, conf, name):
+        print(f'Predicted alleles for {name}: (confidence = {float_to_str(conf[1], percents=True)})', file=f)
+        print(f'\t{str(predicted[0]):3s} (confidence = {float_to_str(conf[1], percents=True)})', file=f)
+        print(f'\t{str(predicted[1]):3s} (confidence = {float_to_str(conf[2], percents=True)})', file=f)
+        print(f'B   B   {float_to_str(conf[3], percents=True)}', file=f)
+        print(f'all B   {float_to_str(conf[4], percents=True)}', file=f)
+        print(f'B   E   {float_to_str(conf[5], percents=True)}', file=f)
+        print(f'all E   {float_to_str(conf[6], percents=True)}', file=f)
+
+    if type(file_desc) is str:
+        with open(file_desc, 'w') as f:
+            write_output_fd(f, predicted, conf, name)
+    else:
+        write_output_fd(file_desc, predicted, conf, name)
 
 
 def phase(
@@ -3367,6 +3221,7 @@ def generate_alignment(
         return ''
 
 
+# %%
 if __name__ == '__main__':
     # this is good practice so the variables do not pollute the global scope
     main()
