@@ -764,57 +764,34 @@ def generate_result_line(
     }
 
 
-# this has mixed functionality - it does prediction and it does writing
-def too_complex_function_inferring_and_creating_reports(
-    annotations1: list[Annotation],
-    postfilter_class: PostFilter,
-    motif_class: Motif,
-    motif_str: str,
-    module_number: int,
-    read_distribution: npt.NDArray[np.int64],
-    result_lines: list,
-    prev_module: tuple[int, str, int] | None,
+def phase_modules(
+    annotations: list[Annotation],
+    postfilter: PostFilter,
+    curr_module_number: int,
+    prev_module_number: int,
 ):
-    last_num1 = None
-    both_good_annot1 = None
-    one_good_annot1 = None
-    none_good_annot1 = None
-    phasing1 = None
-    supp_reads1 = None
-    if prev_module is not None:
-        # get the last module number
-        last_num1 = prev_module[0]
+    # post filtering
+    both_good_annot1, filtered_annot1 = postfilter.get_filtered_list(
+        annotations, [prev_module_number, curr_module_number], both_primers=[True, True]
+    )
+    left_good_annot1, left_bad_annot1 = postfilter.get_filtered_list(
+        filtered_annot1, [prev_module_number, curr_module_number], both_primers=[False, True]
+    )
+    right_good_annot1, none_good_annot1 = postfilter.get_filtered_list(
+        left_bad_annot1, [prev_module_number, curr_module_number], both_primers=[True, False]
+    )
+    one_good_annot1 = left_good_annot1 + right_good_annot1
 
-        # post filtering
-        both_good_annot1, filtered_annot1 = postfilter_class.get_filtered_list(
-            annotations1, [last_num1, module_number], both_primers=[True, True]
-        )
-        left_good_annot1, left_bad_annot1 = postfilter_class.get_filtered_list(
-            filtered_annot1, [last_num1, module_number], both_primers=[False, True]
-        )
-        right_good_annot1, none_good_annot1 = postfilter_class.get_filtered_list(
-            left_bad_annot1, [last_num1, module_number], both_primers=[True, False]
-        )
-        one_good_annot1 = left_good_annot1 + right_good_annot1
-
-        # infer phasing
-        phasing1, supp_reads1 = phase(both_good_annot1, last_num1, module_number)
-
-        # append to the result line
-        result_lines.append(generate_result_line(
-            motif_class, phasing1, supp_reads1,
-            len(both_good_annot1), len(one_good_annot1), len(none_good_annot1),
-            last_num1, second_module_number=module_number
-        ))
+    # infer phasing
+    phasing1, supp_reads1 = phase(both_good_annot1, prev_module_number, curr_module_number)
 
     return (
-        (both_good_annot1, one_good_annot1, none_good_annot1),
-        phasing1, supp_reads1, result_lines, last_num1
+        (both_good_annot1, one_good_annot1, none_good_annot1), phasing1, supp_reads1
     )
 
 
 def report(
-    cutoff_alignments, motif_dir, motif_class, module_number, last_num1, prev_module,
+    cutoff_alignments, motif_dir, motif_class, module_number, prev_module_num,
     ann_qual, ann_primer, ann_filter, ann_2good, ann_1good, ann_0good,
     phasing, supp_reads, confidence, predicted
 ):
@@ -827,17 +804,17 @@ def report(
         zip_it=False, cutoff_alignments=cutoff_alignments
     )
 
-    if prev_module is not None:
+    if prev_module_num is not None:
         # write files
         write_all(
             ann_2good, ann_1good, ann_0good,
-            motif_dir, motif_class, last_num1, second_module_number=module_number,
+            motif_dir, motif_class, prev_module_num, second_module_number=module_number,
             zip_it=False, cutoff_alignments=cutoff_alignments
         )
 
         # write phasing into a file
         save_phasing(
-            f'{motif_dir}/phasing_{last_num1}_{module_number}.txt', phasing, supp_reads
+            f'{motif_dir}/phasing_{prev_module_num}_{module_number}.txt', phasing, supp_reads
         )
 
     # write the alignments
@@ -860,9 +837,7 @@ def report(
             )
 
 
-def process_group(
-    args: Namespace, df: pd.DataFrame
-) -> tuple[Motif, list[dict]]:
+def process_group(args: Namespace, df: pd.DataFrame) -> tuple[Motif, list[dict]]:
     """
     Process the group as pandas Dataframe.
     :param args: argparse.Namespace - namespace of program arguments
@@ -874,8 +849,7 @@ def process_group(
     name = None if 'name' not in df.columns or df.iloc[0]['name'] in ['None', ''] else df.iloc[0]['name']
     motif_class = Motif(motif_str, name)
     motif_dir = f'{args.output_dir}/{motif_class.dir_name()}'
-    monoallelic1 = args.male and chrom_from_string(motif_class.chrom) in [ChromEnum.X, ChromEnum.Y]
-    os.makedirs(motif_dir, exist_ok=True)
+    monoallelic = args.male and chrom_from_string(motif_class.chrom) in [ChromEnum.X, ChromEnum.Y]
 
     annotations: list[Annotation] = []
     rd: list = []
@@ -901,17 +875,9 @@ def process_group(
         del rest
 
         # run inference - this takes most of the time (for no --verbose)
-        file_pcolor = None  # these should not exist
-        if args.verbose:
-            pass
-            file_pcolor = f'{motif_dir}/pcolor_{module_number}'
-            # file_output = f'{motif_dir}/allcall_{module_number}.txt'
-
         # why is this a class?
         model = Inference(read_distribution, None)
-        predicted1, confidence1 = model.genotype(  # this should return lh_dict, instead of printing to file
-            anns_spanning, anns_flanking, module_number, file_pcolor, motif_str, monoallelic1
-        )
+        lh_array, predicted1, confidence1 = model.genotype(anns_spanning, anns_flanking, module_number, monoallelic)
 
         # append to the result line
         result_lines.append(generate_result_line(
@@ -920,28 +886,37 @@ def process_group(
             module_number, qual_annot=anns_spanning
         ))
 
-        prev_module = None if i == 0 else repeating_modules[i - 1]
-        result = too_complex_function_inferring_and_creating_reports(
-            annotations1=annotations,
-            module_number=module_number,
-            postfilter_class=postfilter_class,
-            motif_class=motif_class,
-            read_distribution=read_distribution,
-            motif_str=motif_str,
-            result_lines=result_lines,
-            prev_module=prev_module,
-        )
+        prev_module_num = None
+        postfilter_counts_phasing: tuple[list[Annotation], list[Annotation], list[Annotation]] = ([], [], [])
+        phasing = ('-|-', '-|-')
+        supp_reads = ('-/0', '-/0', '-/0')
+        if i != 0:
+            prev_module_num = repeating_modules[i - 1][0]
+            postfilter_counts_phasing, phasing, supp_reads = phase_modules(
+                annotations, postfilter_class, module_number, prev_module_num
+            )
 
-        postfilter_counts_phasing, phasing, supp_reads, result_lines, last_num1 = result
+            result_lines.append(generate_result_line(
+                motif_class, phasing, supp_reads,
+                len(postfilter_counts_phasing[0]), len(postfilter_counts_phasing[1]), len(postfilter_counts_phasing[2]),
+                prev_module_num, second_module_number=module_number
+            ))
 
         if args.verbose:
+            os.makedirs(motif_dir, exist_ok=True)
+            file_pcolor = f'{motif_dir}/pcolor_{module_number}'
+
+            if lh_array is not None:
+                model.draw_pcolor(file_pcolor, lh_array, motif_str)
+
             report(
-                args.cutoff_alignments, motif_dir, motif_class, module_number, last_num1, prev_module,
+                args.cutoff_alignments, motif_dir, motif_class, module_number, prev_module_num,
                 anns_spanning, anns_flanking, anns_filtered,
                 postfilter_counts_phasing[0], postfilter_counts_phasing[1], postfilter_counts_phasing[2],
                 phasing, supp_reads, confidence1, predicted1
             )
 
+    # what does this do?
     if args.verbose:
         # generate nomenclatures for all modules:
         for i, (_seq, reps) in enumerate(motif_class.modules):
@@ -2483,19 +2458,7 @@ class Inference:
 
         # fig.write_image(display_file + '_plotly.png')
 
-    def print_pcolor(
-        self, lh_dict: dict[tuple[int | str, int | str], float],
-        display_file: str | None,
-        name: str, lognorm: bool = True
-    ) -> tuple[np.ndarray, tuple[int, int]]:
-        """
-        Get maximum likelihood option and alternatively print it to image file.
-        :param lh_dict: dict(tuple(int, int):float) - directory of model indices to their likelihood
-        :param display_file: str|None - filename for pcolor image output
-        :param name: str - name to use in title
-        :param lognorm: bool - use loglog scale in displaying likelihood array
-        :return: tuple(int, int) - option with the highest likelihood
-        """
+    def predict(self, lh_dict: dict[tuple[int | str, int | str], float]) -> tuple[np.ndarray, tuple[int, int]]:
         # convert to a numpy array:
         lh_array = np.zeros((self.max_rep, self.max_rep + 1))
         for (k1, k2), v in lh_dict.items():
@@ -2519,9 +2482,15 @@ class Inference:
         if len(lh_array[ind_good]) == 0:
             return lh_array, (0, 0)
         lh_array[~ind_good] = np.NINF
+        best = sorted(np.unravel_index(np.argmax(lh_array), lh_array.shape))
+        prediction = (int(best[0]), int(best[1]))
 
-        # generate image file if specified:
+        # output best option
+        return lh_array, prediction
+
+    def draw_pcolor(self, display_file: str | None, lh_array: np.ndarray, name: str, lognorm: bool = True) -> None:
         if display_file is not None:
+            ind_good = (lh_array < 0.0) & (lh_array > -1e10) & (lh_array != np.nan)
             z_min, z_max = min(lh_array[ind_good]), max(lh_array[ind_good])
             max_str = len(lh_array)
             if lognorm:
@@ -2542,10 +2511,6 @@ class Inference:
             # self.save_pcolor_file(display_file + '.pdf', lh_view, z_min, z_max, title, max_str)
             # self.save_pcolor_file(display_file + '.png', lh_view, z_min, z_max, title, max_str)
             self.save_pcolor_plotly_file(display_file + '.json', lh_copy, lognorm, title, max_str)
-
-        # output best option
-        best = sorted(np.unravel_index(np.argmax(lh_array), lh_array.shape))
-        return lh_array, (int(best[0]), int(best[1]))
 
     def convert_to_sym(self, best: tuple[int, int], monoallelic: bool) -> tuple[int | str, int | str]:
         """
@@ -2620,10 +2585,8 @@ class Inference:
         )
 
     def genotype(
-        self, annotations: list[Annotation], filt_annotations: list[Annotation], index_rep: int,
-        file_pcolor: str | None,
-        name: str, monoallelic: bool = False
-    ) -> tuple[tuple[str | int, str | int], tuple[float, float, float | str, float, float, float, float]]:
+        self, annotations: list[Annotation], filt_annotations: list[Annotation], index_rep: int, monoallelic: bool = False
+    ) -> tuple[np.ndarray | None, tuple[str | int, str | int], tuple[float, float, float | str, float, float, float, float]]:
         """
         Genotype based on all annotations - infer likelihoods, print pcolor and write output
         :param annotations: list(Annotation) - good (blue) annotations
@@ -2637,13 +2600,11 @@ class Inference:
         """
         # if we do not have any good annotations, then quit
         if len(annotations) == 0 and len(filt_annotations) == 0:
-            return ('B', 'B'), (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+            return None, ('B', 'B'), (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 
         # infer likelihoods
         lh_dict = self.infer(annotations, filt_annotations, index_rep, monoallelic=monoallelic)
-
-        # print pcolor image
-        lh_array, predicted = self.print_pcolor(lh_dict, file_pcolor, name)
+        lh_array, predicted = self.predict(lh_dict)
 
         # adjust for no spanning reads (should output Background)
         if len(annotations) == 0:
@@ -2655,12 +2616,8 @@ class Inference:
         # get confidence of our prediction
         confidence = self.get_confidence(lh_array, predicted, monoallelic)
 
-        # write output
-        # if file_output is not None:
-        #     write_output(file_output, predicted_sym, confidence, name)
-
         # return predicted and confidence
-        return predicted_sym, confidence
+        return lh_array, predicted_sym, confidence
 
 
 def write_output(
