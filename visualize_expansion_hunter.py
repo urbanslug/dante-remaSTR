@@ -117,7 +117,7 @@ def load_arguments() -> argparse.Namespace:
     return args
 
 
-def convert_to_array(text: str) -> list:
+def convert_to_array(text: str) -> list[tuple[int, int]]:
     """
     Convert text representation to array.
     :param text: text representation
@@ -126,6 +126,18 @@ def convert_to_array(text: str) -> list:
     if text == '()':
         return []
     return eval(f'[{text}]')
+
+
+def search_array(array: list[tuple[int, int]], key: int, up_to: bool = False) -> int:
+    """
+    Search (rep, count) array for a specific rep and return its count.
+    :param array: list[(reps, counts)] - array of repetitions and their counts
+    :param key: int - key to search for
+    :param up_to: bool - if counting all up to or just equal
+    :return: int - count of a specific rep or 0 if not found
+    """
+    counts = [count for (reps, count) in array if (reps <= key and up_to) or (reps == key and not up_to)]
+    return counts[0] if len(counts) > 0 else 0
 
 
 if __name__ == '__main__':
@@ -166,7 +178,17 @@ if __name__ == '__main__':
             inrepeat_reads = convert_to_array(var_value['CountsOfInrepeatReads'])
             spanning_reads = convert_to_array(var_value['CountsOfSpanningReads'])
             plot_histogram_image(f'{args.output_dir}/{motif_clean}', spanning_reads, flanking_reads, inrepeat_reads)
-            # print(f'{motif_clean} done')
+
+            # identify allele confirming reads
+            table.at[motif_clean, 'Reads (flanking)'] = sum(c for (r, c) in flanking_reads)
+            table.at[motif_clean, 'Reads (spanning)'] = sum(c for (r, c) in spanning_reads)
+            table.at[motif_clean, 'Allele 1 confirming reads (flanking)'] = search_array(flanking_reads, int(genotypes[0]), up_to=True)
+            table.at[motif_clean, 'Allele 2 confirming reads (flanking)'] = search_array(flanking_reads, int(genotypes[1]), up_to=True)
+            table.at[motif_clean, 'Allele 1 confirming reads (spanning)'] = search_array(spanning_reads, int(genotypes[0]))
+            table.at[motif_clean, 'Allele 2 confirming reads (spanning)'] = search_array(spanning_reads, int(genotypes[1]))
+
+    # plotting figures
+    print(f'Plotting figures in {args.output_dir} ... ({datetime.now():%Y-%m-%d %H:%M:%S})')
 
     # plot table and all the result histograms
     body = table.drop('FigFile', axis=1).to_html(classes='tg')

@@ -62,8 +62,8 @@ def errors_per_read(errors: list[tuple[int, int, int]], relative: bool = False) 
 def generate_result_line(
     motif_class: Motif, predicted: tuple[str, str], confidence: tuple[float | str, ...], qual_num: int,
     primer_num: int, filt_num: int, module_number: int, qual_annot: list[annotation.Annotation] | None = None,
-    second_module_number: int | None = None
-) -> dict:
+    flank_annot: list[annotation.Annotation] | None = None, second_module_number: int | None = None
+) -> dict[str, str | float | int]:
     """
     Generate result line from the template string.
     :param motif_class: Motif - motif class
@@ -74,6 +74,7 @@ def generate_result_line(
     :param filt_num: int - number of filtered out reads (no primers, many errors, ...)
     :param module_number: int - module number in motif
     :param qual_annot: list[Annotation] - list of quality annotations for error and number of reads
+    :param flank_annot: list[Annotation] - list of filtered annotations for number of reads
     :param second_module_number: int/None - second module number in motif
     :return: dict - result dictionary
     """
@@ -94,6 +95,7 @@ def generate_result_line(
     mismatches_rel2: float | str
     # get info about errors and number of reads from quality annotations if provided
     reads_a1 = reads_a2 = '---'
+    reads_flank_a1 = reads_flank_a2 = '---'
     indels_rel = mismatches_rel = '---'
     indels_rel1 = mismatches_rel1 = '---'
     indels_rel2 = mismatches_rel2 = '---'
@@ -103,6 +105,10 @@ def generate_result_line(
         a2 = int(predicted[1]) if isinstance(predicted[1], int) else None
         reads_a1 = 0 if a1 is None else len([a for a in qual_annot if a.module_repetitions[module_number] == a1])
         reads_a2 = 0 if a2 is None else len([a for a in qual_annot if a.module_repetitions[module_number] == a2])
+        reads_flank_a1 = primer_num if predicted[0] == 'E' else 0 if a1 is None else len(
+            [a for a in flank_annot if a.module_repetitions[module_number] <= a1])
+        reads_flank_a2 = primer_num if predicted[1] == 'E' else 0 if a2 is None else len(
+            [a for a in flank_annot if a.module_repetitions[module_number] <= a2])
 
         # get info about errors
         errors = [a.get_module_errors(module_number) for a in qual_annot]
@@ -120,7 +126,8 @@ def generate_result_line(
         'motif_name': motif_class.name, 'motif_nomenclature': motif_class.motif, 'motif_sequence': motif_seq,
         'chromosome': motif_class.chrom, 'start': start, 'end': end, 'allele1': predicted[0],
         'allele2': predicted[1], 'confidence': confidence[0], 'conf_allele1': confidence[1],
-        'conf_allele2': confidence[2], 'reads_a1': reads_a1, 'reads_a2': reads_a2, 'indels': indels_rel,
+        'conf_allele2': confidence[2], 'reads_a1': reads_a1, 'reads_a2': reads_a2, 'reads_flank_a1': reads_flank_a1,
+        'reads_flank_a2': reads_flank_a2, 'indels': indels_rel,
         'mismatches': mismatches_rel, 'indels_a1': indels_rel1, 'indels_a2': indels_rel2,
         'mismatches_a1': mismatches_rel1, 'mismatches_a2': mismatches_rel2, 'quality_reads': qual_num,
         'one_primer_reads': primer_num, 'filtered_reads': filt_num,
@@ -254,7 +261,7 @@ def process_group(args: argparse.Namespace, df: pd.DataFrame, motif_str: str) ->
         # append to the result line
         result_lines.append(
             generate_result_line(motif_class, predicted, confidence, len(qual_annot), len(primer_annot), len(filt_annot), module_number,
-                                 qual_annot=qual_annot))
+                                 qual_annot=qual_annot, flank_annot=primer_annot))
 
     # generate nomenclatures for all modules:
     for i, (seq, reps) in enumerate(motif_class.get_modules()):
@@ -385,7 +392,7 @@ def normalize_ref_alt(ref: str, alt: str) -> tuple[str, str]:
         if a == b:
             suffix += 1
 
-    return (ref[:len(ref) - suffix], alt[:len(alt) - suffix])
+    return ref[:len(ref) - suffix], alt[:len(alt) - suffix]
 
 
 def make_vcf_line(
@@ -422,20 +429,19 @@ def make_vcf_line(
 
 
 def write_vcf(df: pd.DataFrame, out: str) -> None:
-    lines = []
-    lines.append('##fileformat=VCFv4.1\n')
-    lines.append('##ALT=<ID=BG,Description="Background">\n')
-    lines.append('##ALT=<ID=EXP,Description="Expansion of unknown (large) size">\n')
-    lines.append('##FILTER=<ID=PASS,Description="All filters passed">\n')
-    lines.append('##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">\n')
-    lines.append('##INFO=<ID=END,Number=1,Type=Integer,Description="End position of the variant">\n')
-    lines.append('##INFO=<ID=BG,Number=0,Type=Flag,Description="Background variant">\n')
-    lines.append('##INFO=<ID=EXP,Number=0,Type=Flag,Description="Expansion variant">\n')
-    lines.append('##INFO=<ID=REF,Number=1,Type=Integer,Description="Reference copy number">\n')
-    lines.append('##INFO=<ID=RU,Number=1,Type=String,Description="Repeat unit in the reference orientation">\n')
-    lines.append('##INFO=<ID=SVLEN,Number=1,Type=Integer,Description="Alternate length - Reference length">\n')
-    lines.append('##INFO=<ID=SVTYPE,Number=1,Type=String,Description="Type of structural variant">\n')
-    lines.append('#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tsample\n')
+    lines = ['##fileformat=VCFv4.1\n',
+             '##ALT=<ID=BG,Description="Background">\n',
+             '##ALT=<ID=EXP,Description="Expansion of unknown (large) size">\n',
+             '##FILTER=<ID=PASS,Description="All filters passed">\n',
+             '##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">\n',
+             '##INFO=<ID=END,Number=1,Type=Integer,Description="End position of the variant">\n',
+             '##INFO=<ID=BG,Number=0,Type=Flag,Description="Background variant">\n',
+             '##INFO=<ID=EXP,Number=0,Type=Flag,Description="Expansion variant">\n',
+             '##INFO=<ID=REF,Number=1,Type=Integer,Description="Reference copy number">\n',
+             '##INFO=<ID=RU,Number=1,Type=String,Description="Repeat unit in the reference orientation">\n',
+             '##INFO=<ID=SVLEN,Number=1,Type=Integer,Description="Alternate length - Reference length">\n',
+             '##INFO=<ID=SVTYPE,Number=1,Type=String,Description="Type of structural variant">\n',
+             '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tsample\n']
 
     records: list[str] = []
     for i, row in df.iterrows():
@@ -469,7 +475,7 @@ def chr_and_pos(line: str) -> tuple[int, int]:
         "chr13": 13, "chr14": 14, "chr15": 15, "chr16": 16, "chr17": 17, "chr18": 18,
         "chr19": 19, "chr20": 20, "chr21": 21, "chr22": 22, "chrX": 23,  "chrY": 24
     }[chrom]
-    return (chrom2, int(pos))
+    return chrom2, int(pos)
 
 
 if __name__ == '__main__':
@@ -512,7 +518,7 @@ if __name__ == '__main__':
     report.log_str(f'Kept {filtered_len:4d}/{input_len:4d} ({filtered_len / input_len * 100.0:5.1f}%) reads.')
 
     #  write the dataframe to stdout
-    out_file = args.output_dir + "/variants.tsv"
+    out_file = f'{args.output_dir}/variants.tsv'
     report.log_str(f'Writing output to {out_file}: {datetime.now():%Y-%m-%d %H:%M:%S}')
     rl_df.to_csv(out_file, sep='\t')
     write_vcf(rl_df, args.output_dir)
