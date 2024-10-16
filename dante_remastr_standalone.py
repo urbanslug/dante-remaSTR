@@ -774,31 +774,7 @@ def too_complex_function_inferring_and_creating_reports(
     read_distribution: npt.NDArray[np.int64],
     result_lines: list,
     prev_module: tuple[int, str, int] | None,
-    file_pcolor: str | None,
-    file_output: str | None,
-    is_monoallelic: bool
 ):
-    anns_spanning, rest = postfilter_class.get_filtered(annotations1, module_number, both_primers=True)
-    anns_flanking, anns_filtered = postfilter_class.get_filtered(rest, module_number, both_primers=False)
-    del rest
-
-    # why is this a class?
-    # run inference - this takes most of the time (for no --verbose)
-    model = Inference(read_distribution, None)
-    predicted1, confidence1 = model.genotype(  # this should return lh_dict
-        anns_spanning, anns_flanking, module_number, file_pcolor, file_output,
-        motif_str, is_monoallelic
-    )
-
-    # append to the result line
-    result_lines.append(generate_result_line(
-        motif_class, predicted1, confidence1,
-        len(anns_spanning), len(anns_flanking), len(anns_filtered),
-        module_number, qual_annot=anns_spanning
-    ))
-
-    # TODO: split here
-    # infer phasing (if we are not on the first repeating module)
     last_num1 = None
     both_good_annot1 = None
     one_good_annot1 = None
@@ -832,9 +808,8 @@ def too_complex_function_inferring_and_creating_reports(
         ))
 
     return (
-        (anns_spanning, anns_flanking, anns_filtered),
         (both_good_annot1, one_good_annot1, none_good_annot1),
-        phasing1, supp_reads1, confidence1, predicted1, result_lines, last_num1
+        phasing1, supp_reads1, result_lines, last_num1
     )
 
 
@@ -920,27 +895,51 @@ def process_group(
     result_lines: list[dict] = []
     repeating_modules = motif_class.get_repeating_modules()
     for i, (module_number, _, _) in enumerate(repeating_modules):
-        prev_module = None if i == 0 else repeating_modules[i - 1]
-        file_pcolor, file_output = None, None
-        if args.verbose:
-            file_pcolor = f'{motif_dir}/pcolor_{module_number}'
-            file_output = f'{motif_dir}/allcall_{module_number}.txt'
 
-        result = too_complex_function_inferring_and_creating_reports(
-            annotations1=annotations, is_monoallelic=monoallelic1, module_number=module_number,
-            postfilter_class=postfilter_class, motif_class=motif_class, read_distribution=read_distribution,
-            motif_str=motif_str, result_lines=result_lines, prev_module=prev_module,
-            file_pcolor=file_pcolor, file_output=file_output
+        anns_spanning, rest = postfilter_class.get_filtered(annotations, module_number, both_primers=True)
+        anns_flanking, anns_filtered = postfilter_class.get_filtered(rest, module_number, both_primers=False)
+        del rest
+
+        # run inference - this takes most of the time (for no --verbose)
+        file_pcolor = None  # these should not exist
+        if args.verbose:
+            pass
+            file_pcolor = f'{motif_dir}/pcolor_{module_number}'
+            # file_output = f'{motif_dir}/allcall_{module_number}.txt'
+
+        # why is this a class?
+        model = Inference(read_distribution, None)
+        predicted1, confidence1 = model.genotype(  # this should return lh_dict, instead of printing to file
+            anns_spanning, anns_flanking, module_number, file_pcolor, motif_str, monoallelic1
         )
-        postfilter_counts, postfilter_counts_phasing, \
-            phasing, supp_reads, confidence, predicted, result_lines, last_num1 = result
+
+        # append to the result line
+        result_lines.append(generate_result_line(
+            motif_class, predicted1, confidence1,
+            len(anns_spanning), len(anns_flanking), len(anns_filtered),
+            module_number, qual_annot=anns_spanning
+        ))
+
+        prev_module = None if i == 0 else repeating_modules[i - 1]
+        result = too_complex_function_inferring_and_creating_reports(
+            annotations1=annotations,
+            module_number=module_number,
+            postfilter_class=postfilter_class,
+            motif_class=motif_class,
+            read_distribution=read_distribution,
+            motif_str=motif_str,
+            result_lines=result_lines,
+            prev_module=prev_module,
+        )
+
+        postfilter_counts_phasing, phasing, supp_reads, result_lines, last_num1 = result
 
         if args.verbose:
             report(
                 args.cutoff_alignments, motif_dir, motif_class, module_number, last_num1, prev_module,
-                postfilter_counts[0], postfilter_counts[1], postfilter_counts[2],
+                anns_spanning, anns_flanking, anns_filtered,
                 postfilter_counts_phasing[0], postfilter_counts_phasing[1], postfilter_counts_phasing[2],
-                phasing, supp_reads, confidence, predicted
+                phasing, supp_reads, confidence1, predicted1
             )
 
     if args.verbose:
@@ -2623,7 +2622,6 @@ class Inference:
     def genotype(
         self, annotations: list[Annotation], filt_annotations: list[Annotation], index_rep: int,
         file_pcolor: str | None,
-        file_output: str | None,
         name: str, monoallelic: bool = False
     ) -> tuple[tuple[str | int, str | int], tuple[float, float, float | str, float, float, float, float]]:
         """
@@ -2658,8 +2656,8 @@ class Inference:
         confidence = self.get_confidence(lh_array, predicted, monoallelic)
 
         # write output
-        if file_output is not None:
-            write_output(file_output, predicted_sym, confidence, name)
+        # if file_output is not None:
+        #     write_output(file_output, predicted_sym, confidence, name)
 
         # return predicted and confidence
         return predicted_sym, confidence
