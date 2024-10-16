@@ -48,7 +48,7 @@ motif_summary = """
 """
 
 row_string = """  <tr>
-    <td class="tg-s6z2">{name}</td>
+    <td class="tg-s6z2"><a href="#{name}">{name}</a></td>
     <td class="tg-s6z2">{allele1}</td>
     <td class="tg-s6z2">{allele1_conf}%</td>
     <td class="tg-s6z2">{allele2}</td>
@@ -73,7 +73,7 @@ summary_plot_string = """
 </script>
 """
 
-motif_plot_string = """<h3>{sample_name}</h3>
+motif_plot_string = """<h3 id="{sample_name}">{sample_name}</h3>
 alleles: {a1}  ({c1}%) {a2}  ({c2}%) total  {c}%<br>
 <table>
     <tr>
@@ -137,8 +137,9 @@ def load_arguments() -> argparse.Namespace:
     parser.add_argument('input_dir', help='Path to directory with Dante reports')
     parser.add_argument('output_dir', help='Path to directory where the output will be stored. Default=<input_dir>/result_files', nargs='?',
                         default=None)
-    parser.add_argument('--report_every', type=int, help='Specify how often a progress message should be printed (default=5)',
+    parser.add_argument('--report-every', type=int, help='Specify how often a progress message should be printed (default=5)',
                         default=5)
+    parser.add_argument('--max-reports', type=int, help='Specify maximal number of reports (default=All)', default=None)
     parser.add_argument('-q', '--quiet', help='Don\'t print any progress messages', action='store_true')
 
     args = parser.parse_args()
@@ -247,6 +248,9 @@ def create_reports(arg_list: argparse.Namespace):
         if not arg_list.quiet and cnt % arg_list.report_every == 0:
             print("INFO\tParsing file\t%d/%d" % (cnt, len(paths)))
         cnt += 1
+
+        if arg_list.max_reports is not None and cnt >= arg_list.max_reports:
+            break
 
         file = BeautifulSoup(open(path, 'r'), 'html.parser')
         try:
