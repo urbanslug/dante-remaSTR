@@ -136,8 +136,7 @@ def search_array(array: list[tuple[int, int]], key: int, up_to: bool = False) ->
     :param up_to: bool - if counting all up to or just equal
     :return: int - count of a specific rep or 0 if not found
     """
-    counts = [count for (reps, count) in array if (reps <= key and up_to) or (reps == key and not up_to)]
-    return counts[0] if len(counts) > 0 else 0
+    return sum([count for (reps, count) in array if (reps <= key and up_to) or (reps == key and not up_to)])
 
 
 if __name__ == '__main__':
@@ -203,4 +202,6 @@ if __name__ == '__main__':
         print(html_template.format(body=body), file=f)
 
     # write into a tsv table
-    table.drop('FigFile', axis=1).to_csv(f'{args.output_dir}/results.tsv', sep='\t')
+    int_columns = ['AlleleCount', 'Reads (flanking)', 'Reads (spanning)', 'Allele 1 confirming reads (flanking)',
+                   'Allele 2 confirming reads (flanking)', 'Allele 1 confirming reads (spanning)', 'Allele 2 confirming reads (spanning)']
+    table.drop('FigFile', axis=1).astype({k: int for k in int_columns}).to_csv(f'{args.output_dir}/results.tsv', sep='\t')
