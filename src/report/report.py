@@ -798,4 +798,4 @@ def write_report(motifs: list[Motif], result_table: pd.DataFrame, post_filter: P
     shutil.copy2(f'{script_dir}/datatables.min.js', f'{report_dir}/datatables.min.js')
 
     # save the table(s) - we already generate a table in main file TODO unify
-    # result_table.rename(columns=columns_to_rename).to_csv(f'{report_dir}/table.tsv', sep='\t')
+    result_table.rename(columns=columns_to_rename).to_csv(f'{report_dir}/table.tsv', sep='\t')
