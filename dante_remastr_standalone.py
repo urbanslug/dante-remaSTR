@@ -19,7 +19,6 @@ import functools
 import itertools
 
 import numpy as np
-import numpy.typing as npt
 import pandas as pd
 
 import plotly.graph_objects as go  # type: ignore
@@ -69,16 +68,21 @@ def main() -> None:
     for motif_table in generate_groups(args.input_tsv):
         motif = create_motif(motif_table)
         motif_monoallelic = args.male and chrom_from_string(motif.chrom) in [ChromEnum.X, ChromEnum.Y]
-        motif_dir = f'{args.output_dir}/{motif.dir_name()}'
-        os.makedirs(motif_dir, exist_ok=True)
+
         annotations = create_annotations(motif_table, motif)
 
-        rls = process_group(args, motif, motif_monoallelic, annotations)
+        result_genotypes, result_phasing = process_group(motif, motif_monoallelic, annotations)
+        del motif_monoallelic
+        rls = generate_all_result_lines(motif, result_genotypes, result_phasing)
+
         all_motifs.append(motif)
         all_result_lines.extend(rls)
 
         if args.verbose:
+            motif_dir = f'{args.output_dir}/{motif.dir_name()}'
+            os.makedirs(motif_dir, exist_ok=True)
             generate_nomenclature_files(motif, annotations, motif_dir)
+            write_all_files(motif, result_genotypes, result_phasing, motif_dir, args.cutoff_alignments)
 
     rl_df = pd.DataFrame.from_records(all_result_lines)
     del all_result_lines
@@ -92,9 +96,7 @@ def main() -> None:
     if args.verbose:
         all_motifs = sorted(all_motifs)
         merge_all_profiles(args.output_dir, all_motifs, rl_df)
-
-        post_filter = PostFilter()
-        write_report(all_motifs, rl_df, post_filter, args.output_dir, args.nomenclatures)
+        write_report(all_motifs, rl_df, args.output_dir, args.nomenclatures)
 
     end_time = datetime.now()
     print(f'DANTE_remaSTR Stopping : {end_time:%Y-%m-%d %H:%M:%S}')
@@ -689,6 +691,30 @@ def errors_per_read(
     )
 
 
+def generate_all_result_lines(motif: Motif, result_genotypes: list, result_phasing: list) -> list[dict]:
+    result_lines = []
+    for gt, ph in zip(result_genotypes, result_phasing):
+
+        (module_number, anns_spanning, anns_flanking, anns_filtered, predicted, confidence, _, _) = gt
+        rl_gt = generate_result_line(
+            motif,
+            predicted, confidence, len(anns_spanning), len(anns_flanking), len(anns_filtered), module_number,
+            qual_annot=anns_spanning
+        )
+        result_lines.append(rl_gt)
+
+        if ph is not None:
+            (module_number, anns_2good, anns_1good, anns_0good, phasing, supp_reads, prev_module_num) = ph
+            rl_ph = generate_result_line(
+                motif,
+                phasing, supp_reads, len(anns_2good), len(anns_1good), len(anns_0good), prev_module_num,
+                second_module_number=module_number
+            )
+            result_lines.append(rl_ph)
+
+    return result_lines
+
+
 def generate_result_line(
     motif_class: Motif, predicted: tuple[str | int, str | int], confidence: tuple[float | str, ...],
     qual_num: int, primer_num: int, filt_num: int, module_number: int,
@@ -773,32 +799,6 @@ def generate_result_line(
     }
 
 
-def phase_modules(
-    annotations: list[Annotation],
-    postfilter: PostFilter,
-    curr_module_number: int,
-    prev_module_number: int,
-):
-    # post filtering
-    both_good_annot1, filtered_annot1 = postfilter.get_filtered_list(
-        annotations, [prev_module_number, curr_module_number], both_primers=[True, True]
-    )
-    left_good_annot1, left_bad_annot1 = postfilter.get_filtered_list(
-        filtered_annot1, [prev_module_number, curr_module_number], both_primers=[False, True]
-    )
-    right_good_annot1, none_good_annot1 = postfilter.get_filtered_list(
-        left_bad_annot1, [prev_module_number, curr_module_number], both_primers=[True, False]
-    )
-    one_good_annot1 = left_good_annot1 + right_good_annot1
-
-    # infer phasing
-    phasing1, supp_reads1 = phase(both_good_annot1, prev_module_number, curr_module_number)
-
-    return (
-        (both_good_annot1, one_good_annot1, none_good_annot1), phasing1, supp_reads1
-    )
-
-
 def create_motif(df: pd.DataFrame) -> Motif:
     motif_str = df[MOTIF_COLUMN_NAME].iloc[0]
     name = None if 'name' not in df.columns or df.iloc[0]['name'] in ['None', ''] else df.iloc[0]['name']
@@ -818,105 +818,124 @@ def create_annotations(df: pd.DataFrame, motif: Motif) -> list[Annotation]:
 
 
 def process_group(
-    args: Namespace,  # TODO: remove this
-    motif: Motif,
-    monoallelic: bool,  # this could be included in Motif
+    motif: Motif, monoallelic: bool,  # this could be included in Motif
     annotations: list[Annotation]  # I would prefer to get dataframe here
-) -> list[dict]:
-    result_lines: list[dict] = []
+) -> tuple[list, list]:
+    result_genotypes: list[tuple] = []
+    result_phasing: list[tuple | None] = [None]
+
+    postfilter = PostFilter()
     read_distribution = np.bincount([len(ann.read_seq) for ann in annotations], minlength=100)
-
-    # create report for each repeating module
-    postfilter_class = PostFilter()
     repeating_modules = motif.get_repeating_modules()
-    for i, (module_number, _, _) in enumerate(repeating_modules):
+    for i, (curr_module_num, _, _) in enumerate(repeating_modules):
 
-        anns_spanning, rest = postfilter_class.get_filtered(annotations, module_number, both_primers=True)
-        anns_flanking, anns_filtered = postfilter_class.get_filtered(rest, module_number, both_primers=False)
+        anns_spanning, rest = postfilter.get_filtered(annotations, curr_module_num, both_primers=True)
+        anns_flanking, anns_filtered = postfilter.get_filtered(rest, curr_module_num, both_primers=False)
         del rest
 
-        # run inference - this takes most of the time (for no --verbose)
-        # why is this a class?
         model = Inference(read_distribution, None)
-        lh_array, predicted, confidence = model.genotype(anns_spanning, anns_flanking, module_number, monoallelic)
-
-        # append to the result line
-        rl_gt = generate_result_line(
-            motif, predicted, confidence,
-            len(anns_spanning), len(anns_flanking), len(anns_filtered),
-            module_number, qual_annot=anns_spanning
+        lh_array, predicted, confidence = model.genotype(anns_spanning, anns_flanking, curr_module_num, monoallelic)
+        result_genotypes.append(
+            (curr_module_num, anns_spanning, anns_flanking, anns_filtered, predicted, confidence, lh_array, model)
         )
-        result_lines.append(rl_gt)
 
-        prev_module_num = None
-        postfilter_counts_phasing: tuple[list[Annotation], list[Annotation], list[Annotation]] = ([], [], [])
-        phasing = ('-|-', '-|-')
-        supp_reads = ('-/0', '-/0', '-/0')
         if i != 0:
             prev_module_num = repeating_modules[i - 1][0]
-            postfilter_counts_phasing, phasing, supp_reads = phase_modules(
-                annotations, postfilter_class, module_number, prev_module_num
+            mod_nums = [prev_module_num, curr_module_num]
+            anns_2good, _filtered = postfilter.get_filtered_list(annotations, mod_nums, both_primers=[True, True])
+            _left_good, _left_bad = postfilter.get_filtered_list(_filtered, mod_nums, both_primers=[False, True])
+            _right_good, anns_0good = postfilter.get_filtered_list(_left_bad, mod_nums, both_primers=[True, False])
+            anns_1good = _left_good + _right_good
+            del _filtered, _left_good, _left_bad, _right_good
+
+            phasing, supp_reads = phase(anns_2good, prev_module_num, curr_module_num)
+
+            result_phasing.append(
+                (curr_module_num, anns_2good, anns_1good, anns_0good, phasing, supp_reads, prev_module_num)
             )
-            anns_2good, anns_1good, anns_0good = postfilter_counts_phasing
 
-            rl_ph = generate_result_line(
-                motif, phasing, supp_reads,
-                len(anns_2good), len(anns_1good), len(anns_0good),
-                prev_module_num, second_module_number=module_number
-            )
-            result_lines.append(rl_ph)
+    return result_genotypes, result_phasing
 
-        if args.verbose:
-            cutoff_alignments = args.cutoff_alignments
-            motif_dir = f'{args.output_dir}/{motif.dir_name()}'
 
+def phase(
+    annotations: list[Annotation], module_number1: int, module_number2: int
+) -> tuple[tuple[str, str], tuple[str, str, str]]:
+    """
+    Infer phasing based on the Annotations.
+    :param annotations: list(Annotation) - good (blue) annotations
+    :param module_number1: int - index of a repetition
+    :param module_number2: int - index of the second repetition
+    :return: tuple - predicted symbols and confidences
+    """
+    # resolve trivial case
+    if len(annotations) == 0:
+        return ('-|-', '-|-'), ('-/0', '-/0', '-/0')
+
+    # gather module repetitions from annotations and count them
+    repetitions = Counter([
+        (ann.module_repetitions[module_number1], ann.module_repetitions[module_number2]) for ann in annotations
+    ])
+
+    # pick the highest two
+    most_common = repetitions.most_common(2)
+    rep1, cnt1 = most_common[0]
+    rep2, cnt2 = most_common[1] if len(most_common) >= 2 else (('-', '-'), 0)
+
+    # output phasing with number of supported reads
+    phasing = (f'{rep1[0]}|{rep1[1]}', f'{rep2[0]}|{rep2[1]}')
+    supported_reads = (f'{cnt1 + cnt2}/{len(annotations)}', f'{cnt1}/{len(annotations)}', f'{cnt2}/{len(annotations)}')
+    return phasing, supported_reads
+
+
+def write_all_files(
+    motif: Motif, result_genotypes: list, result_phasing: list, motif_dir: str, cutoff_alignments: int
+) -> None:
+    for gt, ph in zip(result_genotypes, result_phasing):
+        (module_number, anns_spanning, anns_flanking, anns_filtered, predicted, confidence, lh_array, model) = gt
+        write_all(
+            anns_spanning, anns_flanking, anns_filtered, motif_dir, motif, module_number,
+            zip_it=False, cutoff_alignments=cutoff_alignments
+        )
+
+        if lh_array is not None:
+            file_pcolor = f'{motif_dir}/pcolor_{module_number}'
+            model.draw_pcolor(file_pcolor, lh_array, motif.motif)
+
+        # write the alignments
+        if confidence is not None:
+            # get number of precise alignments for each allele
+            a1 = int(predicted[0]) if isinstance(predicted[0], int) else None
+            a2 = int(predicted[1]) if isinstance(predicted[1], int) else None
+
+            if a1 is not None and a1 > 0:
+                write_alignment(
+                    f'{motif_dir}/alignment_{module_number}_a{a1}.fasta',
+                    anns_spanning, module_number, a1,
+                    zip_it=False, cutoff_after=cutoff_alignments
+                )
+            if a2 is not None and a2 != a1 and a2 != 0:
+                write_alignment(
+                    f'{motif_dir}/alignment_{module_number}_a{a2}.fasta',
+                    anns_spanning, module_number, a2,
+                    zip_it=False, cutoff_after=cutoff_alignments
+                )
+
+        if ph is not None:
+            (module_number, anns_2good, anns_1good, anns_0good, phasing, supp_reads, prev_module_num) = ph
+            # write files
             write_all(
-                anns_spanning, anns_flanking, anns_filtered, motif_dir, motif, module_number,
+                anns_2good, anns_1good, anns_0good, motif_dir, motif, prev_module_num,
+                second_module_number=module_number,
                 zip_it=False, cutoff_alignments=cutoff_alignments
             )
 
-            if lh_array is not None:
-                file_pcolor = f'{motif_dir}/pcolor_{module_number}'
-                model.draw_pcolor(file_pcolor, lh_array, motif.motif)
-
-            if prev_module_num is not None:
-                # write files
-                write_all(
-                    anns_2good, anns_1good, anns_0good, motif_dir, motif, prev_module_num,
-                    second_module_number=module_number,
-                    zip_it=False, cutoff_alignments=cutoff_alignments
-                )
-
-                # write phasing into a file
-                save_phasing(
-                    f'{motif_dir}/phasing_{prev_module_num}_{module_number}.txt', phasing, supp_reads
-                )
-
-            # write the alignments
-            if confidence is not None:
-                # get number of precise alignments for each allele
-                a1 = int(predicted[0]) if isinstance(predicted[0], int) else None
-                a2 = int(predicted[1]) if isinstance(predicted[1], int) else None
-
-                if a1 is not None and a1 > 0:
-                    write_alignment(
-                        f'{motif_dir}/alignment_{module_number}_a{a1}.fasta',
-                        anns_spanning, module_number, a1,
-                        zip_it=False, cutoff_after=cutoff_alignments
-                    )
-                if a2 is not None and a2 != a1 and a2 != 0:
-                    write_alignment(
-                        f'{motif_dir}/alignment_{module_number}_a{a2}.fasta',
-                        anns_spanning, module_number, a2,
-                        zip_it=False, cutoff_after=cutoff_alignments
-                    )
-
-    return result_lines
+            # write phasing into a file
+            save_phasing(
+                f'{motif_dir}/phasing_{prev_module_num}_{module_number}.txt', phasing, supp_reads
+            )
 
 
-def generate_nomenclature_files(motif_class: Motif, annotations: list[Annotation], outdir: str):
-    motif_dir = outdir
-    # motif_dir = f'{args.output_dir}/{motif_class.dir_name()}'
+def generate_nomenclature_files(motif_class: Motif, annotations: list[Annotation], motif_dir: str):
     postfilter_class = PostFilter()
     # generate nomenclatures for all modules:
     for i, (_seq, reps) in enumerate(motif_class.modules):
@@ -1121,8 +1140,9 @@ class PostFilter:
 
         return is_right and has_primers and has_less_errors and has_flanks and (has_repetitions or reps == 1)
 
-    def get_filtered_list(self, annotations: list[Annotation], module_number: list[int],
-                          both_primers: list[bool] | None = None) -> tuple[list[Annotation], list[Annotation]]:
+    def get_filtered_list(
+        self, annotations: list[Annotation], module_number: list[int], both_primers: list[bool] | None = None
+    ) -> tuple[list[Annotation], list[Annotation]]:
         """
         Get filtered annotations (list of modules).
         :param annotations: list(Annotation) - annotations
@@ -1146,9 +1166,9 @@ class PostFilter:
 
         return quality_annotations, filtered_annotations
 
+    # TODO: is this just a specialized version of the previous method? Do we need this?
     def get_filtered(
-        self, annotations: list[Annotation], module_number: int,
-        both_primers: bool = True
+        self, annotations: list[Annotation], module_number: int, both_primers: bool = True
     ) -> tuple[list[Annotation], list[Annotation]]:
         """
         Get filtered annotations.
@@ -1165,10 +1185,6 @@ class PostFilter:
                 quality_annotations.append(an)
             else:
                 filtered_annotations.append(an)
-
-        # quality_annotations = [an for an in annotations if self.quality_annotation(
-        #    an, module_number, both_primers=both_primers)]
-        # filtered_annotations = [an for an in annotations if an not in quality_annotations]
 
         return quality_annotations, filtered_annotations
 
@@ -1858,7 +1874,7 @@ def merge_all_profiles(report_dir: str, motifs: list[Motif], result_table: pd.Da
 
 
 def write_report(
-    motifs: list[Motif], result_table: pd.DataFrame, post_filter: PostFilter, report_dir: str, nomenclature_limit: int
+    motifs: list[Motif], result_table: pd.DataFrame, report_dir: str, nomenclature_limit: int
 ) -> None:
     """
     Generate and write a report.
@@ -1870,6 +1886,7 @@ def write_report(
     :return: None
     """
     alignments: dict[str, tuple] = {}
+    post_filter = PostFilter()
 
     mcs: dict[str, str] = {}  # first table in html, one value, one row
     ms: dict[str, list[str]] = {}  # graphs, starts at data
@@ -2645,36 +2662,6 @@ def write_output(
             write_output_fd(f, predicted, conf, name)
     else:
         write_output_fd(file_desc, predicted, conf, name)
-
-
-def phase(
-    annotations: list[Annotation], module_number1: int, module_number2: int
-) -> tuple[tuple[str, str], tuple[str, str, str]]:
-    """
-    Infer phasing based on the Annotations.
-    :param annotations: list(Annotation) - good (blue) annotations
-    :param module_number1: int - index of a repetition
-    :param module_number2: int - index of the second repetition
-    :return: tuple - predicted symbols and confidences
-    """
-    # resolve trivial case
-    if len(annotations) == 0:
-        return ('-|-', '-|-'), ('-/0', '-/0', '-/0')
-
-    # gather module repetitions from annotations and count them
-    repetitions = Counter([
-        (ann.module_repetitions[module_number1], ann.module_repetitions[module_number2]) for ann in annotations
-    ])
-
-    # pick the highest two
-    most_common = repetitions.most_common(2)
-    rep1, cnt1 = most_common[0]
-    rep2, cnt2 = most_common[1] if len(most_common) >= 2 else (('-', '-'), 0)
-
-    # output phasing with number of supported reads
-    phasing = (f'{rep1[0]}|{rep1[1]}', f'{rep2[0]}|{rep2[1]}')
-    supported_reads = (f'{cnt1 + cnt2}/{len(annotations)}', f'{cnt1}/{len(annotations)}', f'{cnt2}/{len(annotations)}')
-    return phasing, supported_reads
 
 
 def save_phasing(phasing_file: str, phasing: tuple[str, str], supp_reads: tuple[str, str, str]) -> None:
