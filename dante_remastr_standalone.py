@@ -67,9 +67,18 @@ def main() -> None:
     all_motifs: list[Motif] = []
     all_result_lines: list[dict[Any, Any]] = []
     for motif_table in generate_groups(args.input_tsv):
-        motif, rls = process_group(args, motif_table)
+        motif = create_motif(motif_table)
+        motif_monoallelic = args.male and chrom_from_string(motif.chrom) in [ChromEnum.X, ChromEnum.Y]
+        motif_dir = f'{args.output_dir}/{motif.dir_name()}'
+        os.makedirs(motif_dir, exist_ok=True)
+        annotations = create_annotations(motif_table, motif)
+
+        rls = process_group(args, motif, motif_monoallelic, annotations)
         all_motifs.append(motif)
         all_result_lines.extend(rls)
+
+        if args.verbose:
+            generate_nomenclature_files(motif, annotations, motif_dir)
 
     rl_df = pd.DataFrame.from_records(all_result_lines)
     del all_result_lines
@@ -790,84 +799,36 @@ def phase_modules(
     )
 
 
-def report(
-    cutoff_alignments, motif_dir, motif_class, module_number, prev_module_num,
-    ann_qual, ann_primer, ann_filter, ann_2good, ann_1good, ann_0good,
-    phasing, supp_reads, confidence, predicted
-):
-    # TODO: merge meaning prev_module and last_num1
-
-    # write files if needed
-    write_all(
-        ann_qual, ann_primer, ann_filter,
-        motif_dir, motif_class, module_number,
-        zip_it=False, cutoff_alignments=cutoff_alignments
-    )
-
-    if prev_module_num is not None:
-        # write files
-        write_all(
-            ann_2good, ann_1good, ann_0good,
-            motif_dir, motif_class, prev_module_num, second_module_number=module_number,
-            zip_it=False, cutoff_alignments=cutoff_alignments
-        )
-
-        # write phasing into a file
-        save_phasing(
-            f'{motif_dir}/phasing_{prev_module_num}_{module_number}.txt', phasing, supp_reads
-        )
-
-    # write the alignments
-    if confidence is not None:
-        # get number of precise alignments for each allele
-        a1 = int(predicted[0]) if isinstance(predicted[0], int) else None
-        a2 = int(predicted[1]) if isinstance(predicted[1], int) else None
-
-        if a1 is not None and a1 > 0:
-            write_alignment(
-                f'{motif_dir}/alignment_{module_number}_a{a1}.fasta',
-                ann_qual, module_number, a1,
-                zip_it=False, cutoff_after=cutoff_alignments
-            )
-        if a2 is not None and a2 != a1 and a2 != 0:
-            write_alignment(
-                f'{motif_dir}/alignment_{module_number}_a{a2}.fasta',
-                ann_qual, module_number, a2,
-                zip_it=False, cutoff_after=cutoff_alignments
-            )
-
-
-def process_group(args: Namespace, df: pd.DataFrame) -> tuple[Motif, list[dict]]:
-    """
-    Process the group as pandas Dataframe.
-    :param args: argparse.Namespace - namespace of program arguments
-    :param df: pd.DataFrame - contains information about annotated reads for a single motif to process
-    :param motif_str: str - motif nomenclature
-    :return: motif, result lines, input length, length of filtered intput
-    """
+def create_motif(df: pd.DataFrame) -> Motif:
     motif_str = df[MOTIF_COLUMN_NAME].iloc[0]
     name = None if 'name' not in df.columns or df.iloc[0]['name'] in ['None', ''] else df.iloc[0]['name']
     motif_class = Motif(motif_str, name)
-    motif_dir = f'{args.output_dir}/{motif_class.dir_name()}'
-    monoallelic = args.male and chrom_from_string(motif_class.chrom) in [ChromEnum.X, ChromEnum.Y]
+    return motif_class
 
+
+def create_annotations(df: pd.DataFrame, motif: Motif) -> list[Annotation]:
     annotations: list[Annotation] = []
-    rd: list = []
     for _, row in df.iterrows():
         ann = Annotation(
-            row['read_id'], row['mate_order'], row['read'], row['reference'], row['modules'],
-            row['log_likelihood'], motif_class
+            row['read_id'], row['mate_order'], row['read'], row['reference'],
+            row['modules'], row['log_likelihood'], motif
         )
         annotations.append(ann)
-        rd.append(len(ann.read_seq))
+    return annotations
 
-    # infer read distribution
-    read_distribution = np.bincount(rd, minlength=100)
+
+def process_group(
+    args: Namespace,  # TODO: remove this
+    motif: Motif,
+    monoallelic: bool,  # this could be included in Motif
+    annotations: list[Annotation]  # I would prefer to get dataframe here
+) -> list[dict]:
+    result_lines: list[dict] = []
+    read_distribution = np.bincount([len(ann.read_seq) for ann in annotations], minlength=100)
 
     # create report for each repeating module
     postfilter_class = PostFilter()
-    result_lines: list[dict] = []
-    repeating_modules = motif_class.get_repeating_modules()
+    repeating_modules = motif.get_repeating_modules()
     for i, (module_number, _, _) in enumerate(repeating_modules):
 
         anns_spanning, rest = postfilter_class.get_filtered(annotations, module_number, both_primers=True)
@@ -877,14 +838,15 @@ def process_group(args: Namespace, df: pd.DataFrame) -> tuple[Motif, list[dict]]
         # run inference - this takes most of the time (for no --verbose)
         # why is this a class?
         model = Inference(read_distribution, None)
-        lh_array, predicted1, confidence1 = model.genotype(anns_spanning, anns_flanking, module_number, monoallelic)
+        lh_array, predicted, confidence = model.genotype(anns_spanning, anns_flanking, module_number, monoallelic)
 
         # append to the result line
-        result_lines.append(generate_result_line(
-            motif_class, predicted1, confidence1,
+        rl_gt = generate_result_line(
+            motif, predicted, confidence,
             len(anns_spanning), len(anns_flanking), len(anns_filtered),
             module_number, qual_annot=anns_spanning
-        ))
+        )
+        result_lines.append(rl_gt)
 
         prev_module_num = None
         postfilter_counts_phasing: tuple[list[Annotation], list[Annotation], list[Annotation]] = ([], [], [])
@@ -895,48 +857,84 @@ def process_group(args: Namespace, df: pd.DataFrame) -> tuple[Motif, list[dict]]
             postfilter_counts_phasing, phasing, supp_reads = phase_modules(
                 annotations, postfilter_class, module_number, prev_module_num
             )
+            anns_2good, anns_1good, anns_0good = postfilter_counts_phasing
 
-            result_lines.append(generate_result_line(
-                motif_class, phasing, supp_reads,
-                len(postfilter_counts_phasing[0]), len(postfilter_counts_phasing[1]), len(postfilter_counts_phasing[2]),
+            rl_ph = generate_result_line(
+                motif, phasing, supp_reads,
+                len(anns_2good), len(anns_1good), len(anns_0good),
                 prev_module_num, second_module_number=module_number
-            ))
+            )
+            result_lines.append(rl_ph)
 
         if args.verbose:
-            os.makedirs(motif_dir, exist_ok=True)
-            file_pcolor = f'{motif_dir}/pcolor_{module_number}'
+            cutoff_alignments = args.cutoff_alignments
+            motif_dir = f'{args.output_dir}/{motif.dir_name()}'
 
-            if lh_array is not None:
-                model.draw_pcolor(file_pcolor, lh_array, motif_str)
-
-            report(
-                args.cutoff_alignments, motif_dir, motif_class, module_number, prev_module_num,
-                anns_spanning, anns_flanking, anns_filtered,
-                postfilter_counts_phasing[0], postfilter_counts_phasing[1], postfilter_counts_phasing[2],
-                phasing, supp_reads, confidence1, predicted1
+            write_all(
+                anns_spanning, anns_flanking, anns_filtered, motif_dir, motif, module_number,
+                zip_it=False, cutoff_alignments=cutoff_alignments
             )
 
-    # what does this do?
-    if args.verbose:
-        # generate nomenclatures for all modules:
-        for i, (_seq, reps) in enumerate(motif_class.modules):
-            # write files if needed
-            if reps == 1:
-                # setup post filtering - no primers, insufficient quality, ...
-                qual_annot, _ = postfilter_class.get_filtered(annotations, i, both_primers=True)
+            if lh_array is not None:
+                file_pcolor = f'{motif_dir}/pcolor_{module_number}'
+                model.draw_pcolor(file_pcolor, lh_array, motif.motif)
 
-                # gather and write nomenclatures
-                if len(qual_annot) > 0:
-                    write_histogram_nomenclature(
-                        f'{motif_dir}/nomenclatures_{i}.txt', qual_annot, index_rep=i
+            if prev_module_num is not None:
+                # write files
+                write_all(
+                    anns_2good, anns_1good, anns_0good, motif_dir, motif, prev_module_num,
+                    second_module_number=module_number,
+                    zip_it=False, cutoff_alignments=cutoff_alignments
+                )
+
+                # write phasing into a file
+                save_phasing(
+                    f'{motif_dir}/phasing_{prev_module_num}_{module_number}.txt', phasing, supp_reads
+                )
+
+            # write the alignments
+            if confidence is not None:
+                # get number of precise alignments for each allele
+                a1 = int(predicted[0]) if isinstance(predicted[0], int) else None
+                a2 = int(predicted[1]) if isinstance(predicted[1], int) else None
+
+                if a1 is not None and a1 > 0:
+                    write_alignment(
+                        f'{motif_dir}/alignment_{module_number}_a{a1}.fasta',
+                        anns_spanning, module_number, a1,
+                        zip_it=False, cutoff_after=cutoff_alignments
                     )
-        # try to get the overall nomenclature:
-        for module_number, _, _ in repeating_modules:
-            annotations, _ = postfilter_class.get_filtered(annotations, module_number, both_primers=True)
-        write_histogram_nomenclature(f'{motif_dir}/nomenclature.txt', annotations)
+                if a2 is not None and a2 != a1 and a2 != 0:
+                    write_alignment(
+                        f'{motif_dir}/alignment_{module_number}_a{a2}.fasta',
+                        anns_spanning, module_number, a2,
+                        zip_it=False, cutoff_after=cutoff_alignments
+                    )
 
-    # return motif name in case it was processed normally
-    return motif_class, result_lines
+    return result_lines
+
+
+def generate_nomenclature_files(motif_class: Motif, annotations: list[Annotation], outdir: str):
+    motif_dir = outdir
+    # motif_dir = f'{args.output_dir}/{motif_class.dir_name()}'
+    postfilter_class = PostFilter()
+    # generate nomenclatures for all modules:
+    for i, (_seq, reps) in enumerate(motif_class.modules):
+        # write files if needed
+        if reps == 1:
+            # setup post filtering - no primers, insufficient quality, ...
+            qual_annot, _ = postfilter_class.get_filtered(annotations, i, both_primers=True)
+
+            # gather and write nomenclatures
+            if len(qual_annot) > 0:
+                write_histogram_nomenclature(
+                    f'{motif_dir}/nomenclatures_{i}.txt', qual_annot, index_rep=i
+                )
+    # try to get the overall nomenclature:
+    repeating_modules = motif_class.get_repeating_modules()
+    for module_number, _, _ in repeating_modules:
+        annotations, _ = postfilter_class.get_filtered(annotations, module_number, both_primers=True)
+    write_histogram_nomenclature(f'{motif_dir}/nomenclature.txt', annotations)
 
 
 def generate_groups(input_stream: TextIO, chunk_size: int = 1000000) -> Iterator[pd.DataFrame]:
