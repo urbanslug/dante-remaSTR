@@ -4,7 +4,6 @@ from argparse import ArgumentParser, Namespace, RawDescriptionHelpFormatter, Arg
 from datetime import datetime
 from typing import TextIO, Iterator, Any
 from collections import Counter
-from copy import copy
 
 import csv
 import gzip
@@ -25,8 +24,6 @@ import plotly.graph_objects as go  # type: ignore
 from scipy.stats import binom  # type: ignore
 import matplotlib
 matplotlib.use('Agg')
-import matplotlib.pyplot as plt  # noqa
-import matplotlib.patheffects as patheffects  # noqa
 
 VERSION = "0.9.0"
 DANTE_DESCRIPTION = '''
@@ -89,8 +86,7 @@ def main() -> None:
     rl_df.sort_values(by=['motif_name'], kind='stable')
 
     print(f'Writing outputs: {datetime.now():%Y-%m-%d %H:%M:%S}')
-    out_file = args.output_dir + "/variants.tsv"
-    rl_df.to_csv(out_file, sep='\t')
+    rl_df.to_csv(args.output_dir + "/variants.tsv", sep='\t')
     write_vcf(rl_df, args.output_dir)
 
     if args.verbose:
@@ -191,13 +187,14 @@ class Motif:
         :param name: optional name of the motif
         """
         # remove whitespace
-        self.motif = motif.strip().replace(' ', '')
-        self.name = (name if name is not None else self.motif).replace(':', '-').replace('.', '_').replace('/', '_')
+        self.nomenclature = motif.strip().replace(' ', '')
+        self.name = (name if name is not None else self.nomenclature)\
+            .replace(':', '-').replace('.', '_').replace('/', '_')
 
         # extract prefix, first number, second number
-        tmp = re.match(r'([^:]+):g\.(\d+)_(\d+)(.*)', self.motif)
+        tmp = re.match(r'([^:]+):g\.(\d+)_(\d+)(.*)', self.nomenclature)
         if tmp is None:
-            raise ValueError(f"{self.motif} has incorrect format")
+            raise ValueError(f"{self.nomenclature} has incorrect format")
         self.chrom, start, end, remainder = tmp.groups()
 
         # extract sequence and repetition count
@@ -307,8 +304,6 @@ class Annotation:
         # Store arguments into instance variables
         self.read_id = read_id
         self.mate_order = mate_order
-        self.ordered = mate_order > 0
-        self.left_pair = mate_order == 1
         self.read_seq = read_seq
         self.expected_seq = expected_seq
         self.states = states
@@ -434,21 +429,6 @@ class Annotation:
         # return indels, mismatches, and length
         return indels, mismatches, end - start
 
-    def info_value(self) -> tuple[int, int]:
-        """
-        Evaluate the info value of the Annotation.
-        :return: int, int
-        """
-        return sum(self.module_repetitions), sum(self.module_bases)
-
-    def info_value_str(self, index_str: int) -> tuple[int, int, int]:
-        """
-        Evaluate the info value of the Annotation at the STR location
-        :param index_str: int - index of the STR
-        :return: int, int, int
-        """
-        return self.primers(index_str), self.module_repetitions[index_str], self.module_bases[index_str]
-
     def has_less_errors(self, max_errors: float | int | None, relative=False) -> bool:
         """
         Check if this annotation has fewer errors than max_errors.
@@ -508,24 +488,6 @@ class Annotation:
         # pass?
         return True
 
-    def same_start_fragment(self, annotation: Annotation) -> bool:
-        """
-        Return True if both sequences can be produced from the same start of a fragment.
-        :param annotation: Annotation - second annotation
-        :return: bool - True if both sequences can be produced from the same start of a fragment
-        """
-        comp_length = min(len(self.read_seq), len(annotation.read_seq))
-        return self.read_seq[:comp_length] == annotation.read_seq[:comp_length]
-
-    def same_end_fragment(self, annotation: Annotation) -> bool:
-        """
-        Return True if both sequences can be produced from the same end of a fragment.
-        :param annotation: Annotation | None - second annotation
-        :return: bool - True if both sequences can be produced from the same end of a fragment
-        """
-        comp_length = min(len(self.read_seq), len(annotation.read_seq))
-        return self.read_seq[-comp_length:] == annotation.read_seq[-comp_length:]
-
     def get_str_repetitions(self, index_str: int) -> tuple[bool, int] | None:
         """
         Get the number of str repetitions for a particular index.
@@ -560,6 +522,7 @@ class Annotation:
         # return the start position if a match is found, else return -1
         return match.start() if match else -1
 
+    # TODO: this is too comples
     def get_nomenclature(
         self, index_rep: int | None = None, index_rep2: int | None = None, include_flanking: bool = True
     ) -> str:
@@ -691,14 +654,14 @@ def errors_per_read(
     )
 
 
-def generate_all_result_lines(motif: Motif, result_genotypes: list, result_phasing: list) -> list[dict]:
+# TODO: I don't particularly like mixing of genotyping and phasing
+def generate_all_result_lines(motif: Motif, result_genotypes: list[tuple], result_phasing: list[tuple]) -> list[dict]:
     result_lines = []
     for gt, ph in zip(result_genotypes, result_phasing):
 
         (module_number, anns_spanning, anns_flanking, anns_filtered, predicted, confidence, _, _) = gt
         rl_gt = generate_result_line(
-            motif,
-            predicted, confidence, len(anns_spanning), len(anns_flanking), len(anns_filtered), module_number,
+            motif, predicted, confidence, len(anns_spanning), len(anns_flanking), len(anns_filtered), module_number,
             qual_annot=anns_spanning
         )
         result_lines.append(rl_gt)
@@ -706,8 +669,7 @@ def generate_all_result_lines(motif: Motif, result_genotypes: list, result_phasi
         if ph is not None:
             (module_number, anns_2good, anns_1good, anns_0good, phasing, supp_reads, prev_module_num) = ph
             rl_ph = generate_result_line(
-                motif,
-                phasing, supp_reads, len(anns_2good), len(anns_1good), len(anns_0good), prev_module_num,
+                motif, phasing, supp_reads, len(anns_2good), len(anns_1good), len(anns_0good), prev_module_num,
                 second_module_number=module_number
             )
             result_lines.append(rl_ph)
@@ -716,7 +678,7 @@ def generate_all_result_lines(motif: Motif, result_genotypes: list, result_phasi
 
 
 def generate_result_line(
-    motif_class: Motif, predicted: tuple[str | int, str | int], confidence: tuple[float | str, ...],
+    motif: Motif, predicted: tuple[str | int, str | int], confidence: tuple[float | str, ...],
     qual_num: int, primer_num: int, filt_num: int, module_number: int,
     qual_annot: list[Annotation] | None = None,
     second_module_number: int | None = None
@@ -735,13 +697,13 @@ def generate_result_line(
     :return: dict - result dictionary
     """
     # setup motif info
-    start, end = motif_class.get_location_subpart(module_number)
-    motif_seq = motif_class.module_str(module_number)
+    start, end = motif.get_location_subpart(module_number)
+    motif_seq = motif.module_str(module_number)
+    repetition_index: int | str = module_number
     if second_module_number is not None:
-        _, end = motif_class.get_location_subpart(second_module_number)
-        motif_seq = ','.join(
-            [motif_class.module_str(i) for i in range(module_number, second_module_number + 1)]
-        )
+        _, end = motif.get_location_subpart(second_module_number)
+        motif_seq = ','.join([motif.module_str(i) for i in range(module_number, second_module_number + 1)])
+        repetition_index = f'{module_number}_{second_module_number}'
 
     reads_a1: int | str
     reads_a2: int | str
@@ -760,12 +722,8 @@ def generate_result_line(
         # get info about number of reads
         a1 = int(predicted[0]) if isinstance(predicted[0], int) else None
         a2 = int(predicted[1]) if isinstance(predicted[1], int) else None
-        reads_a1 = 0 if a1 is None else len(
-            [a for a in qual_annot if a.module_repetitions[module_number] == a1]
-        )
-        reads_a2 = 0 if a2 is None else len(
-            [a for a in qual_annot if a.module_repetitions[module_number] == a2]
-        )
+        reads_a1 = 0 if a1 is None else len([a for a in qual_annot if a.module_repetitions[module_number] == a1])
+        reads_a2 = 0 if a2 is None else len([a for a in qual_annot if a.module_repetitions[module_number] == a2])
 
         # get info about errors
         errors = [a.get_module_errors(module_number) for a in qual_annot]
@@ -780,22 +738,20 @@ def generate_result_line(
         indels_rel1, mismatches_rel1 = errors_per_read(errors_a1, relative=True)
         indels_rel2, mismatches_rel2 = errors_per_read(errors_a2, relative=True)
 
-    # return dictionary
     return {
-        'motif_name': motif_class.name, 'motif_nomenclature': motif_class.motif, 'motif_sequence': motif_seq,
-        'chromosome': motif_class.chrom, 'start': start, 'end': end, 'allele1': predicted[0],
-        'allele2': predicted[1], 'confidence': confidence[0], 'conf_allele1': confidence[1],
-        'conf_allele2': confidence[2], 'reads_a1': reads_a1, 'reads_a2': reads_a2, 'indels': indels_rel,
-        'mismatches': mismatches_rel, 'indels_a1': indels_rel1, 'indels_a2': indels_rel2,
-        'mismatches_a1': mismatches_rel1, 'mismatches_a2': mismatches_rel2, 'quality_reads': qual_num,
-        'one_primer_reads': primer_num, 'filtered_reads': filt_num,
+        'motif_name': motif.name, 'motif_nomenclature': motif.nomenclature, 'motif_sequence': motif_seq,
+        'chromosome': motif.chrom, 'start': start, 'end': end,
+        'allele1': predicted[0], 'allele2': predicted[1],
+        'confidence': confidence[0], 'conf_allele1': confidence[1], 'conf_allele2': confidence[2],
+        'reads_a1': reads_a1, 'reads_a2': reads_a2,
+        'indels': indels_rel, 'indels_a1': indels_rel1, 'indels_a2': indels_rel2,
+        'mismatches': mismatches_rel, 'mismatches_a1': mismatches_rel1, 'mismatches_a2': mismatches_rel2,
+        'quality_reads': qual_num, 'one_primer_reads': primer_num, 'filtered_reads': filt_num,
         'conf_background': confidence[3] if len(confidence) > 3 else '---',
         'conf_background_all': confidence[4] if len(confidence) > 4 else '---',
         'conf_extended': confidence[5] if len(confidence) > 5 else '---',
         'conf_extended_all': confidence[6] if len(confidence) > 6 else '---',
-        'repetition_index': module_number
-        if second_module_number is None
-        else f'{module_number}_{second_module_number}'
+        'repetition_index': repetition_index
     }
 
 
@@ -817,6 +773,7 @@ def create_annotations(df: pd.DataFrame, motif: Motif) -> list[Annotation]:
     return annotations
 
 
+# TODO: split into genotype_group and phase_group
 def process_group(
     motif: Motif, monoallelic: bool,  # this could be included in Motif
     annotations: list[Annotation]  # I would prefer to get dataframe here
@@ -899,7 +856,7 @@ def write_all_files(
 
         if lh_array is not None:
             file_pcolor = f'{motif_dir}/pcolor_{module_number}'
-            model.draw_pcolor(file_pcolor, lh_array, motif.motif)
+            model.draw_pcolor(file_pcolor, lh_array, motif.nomenclature)
 
         # write the alignments
         if confidence is not None:
@@ -935,10 +892,10 @@ def write_all_files(
             )
 
 
-def generate_nomenclature_files(motif_class: Motif, annotations: list[Annotation], motif_dir: str):
+def generate_nomenclature_files(motif: Motif, annotations: list[Annotation], motif_dir: str):
     postfilter_class = PostFilter()
     # generate nomenclatures for all modules:
-    for i, (_seq, reps) in enumerate(motif_class.modules):
+    for i, (_seq, reps) in enumerate(motif.modules):
         # write files if needed
         if reps == 1:
             # setup post filtering - no primers, insufficient quality, ...
@@ -950,7 +907,7 @@ def generate_nomenclature_files(motif_class: Motif, annotations: list[Annotation
                     f'{motif_dir}/nomenclatures_{i}.txt', qual_annot, index_rep=i
                 )
     # try to get the overall nomenclature:
-    repeating_modules = motif_class.get_repeating_modules()
+    repeating_modules = motif.get_repeating_modules()
     for module_number, _, _ in repeating_modules:
         annotations, _ = postfilter_class.get_filtered(annotations, module_number, both_primers=True)
     write_histogram_nomenclature(f'{motif_dir}/nomenclature.txt', annotations)
@@ -1496,54 +1453,7 @@ def write_histogram_image2d(
     str1 = 'STR %d [%s]' % (index_rep + 1, seq.split('-')[-1])
     str2 = 'STR %d [%s]' % (index_rep2 + 1, seq2.split('-')[-1])
 
-    # plot_histogram_image2d_matplotlib(out_prefix, data, data_primer, str1, str2, max_ticks)
     plot_histogram_image2d_plotly(out_prefix, data, data_primer, str1, str2, max_ticks)
-
-
-def plot_histogram_image2d_matplotlib(
-    out_prefix: str, data: np.ndarray, data_primer: np.ndarray,
-    str1: str, str2: str, max_ticks: int,
-) -> None:
-    cmblue = matplotlib.colormaps['Blues']
-    cmap_blue = cmblue(np.arange(int(cmblue.N * 0.15), int(cmblue.N * 0.8)))  # start from light blue to deep blue
-    cmap_blue[0, -1] = 0.0  # Set alpha on the lowest element only
-
-    cmgrey = matplotlib.colormaps['Greys']
-    cmap_grey = cmgrey(np.arange(int(cmgrey.N * 0.15), int(cmgrey.N * 0.6)))  # start from light grey to deep grey
-    cmap_grey[0, -1] = 0.0  # Set alpha on the lowest element only
-
-    # plot pcolor
-    plt.figure(figsize=(12, 8))
-    img2 = plt.pcolor(
-        data_primer[:max_ticks, :max_ticks], cmap=matplotlib.colors.ListedColormap(cmap_grey), alpha=0.4,
-        edgecolor=(1.0, 1.0, 1.0, 0.0), lw=0, vmin=np.min(data_primer), vmax=np.max(data_primer) + 0.01
-    )
-    img1 = plt.pcolor(
-        data[:max_ticks, :max_ticks], cmap=matplotlib.colors.ListedColormap(cmap_blue),
-        vmin=np.min(data), vmax=np.max(data) + 0.01
-    )
-    plt.xticks()
-    plt.ylabel(str1)
-    plt.xlabel(str2)
-    plt.colorbar(img1)
-    plt.colorbar(img2)
-
-    # setup ticks
-    start_ticks = 5
-    step_ticks = 5
-    plt.xticks(
-        np.array(range(start_ticks, max_ticks + 1, step_ticks)) + 0.5,
-        [str(x) for x in range(start_ticks, max_ticks + 1, step_ticks)]
-    )
-    plt.yticks(
-        np.array(range(start_ticks, max_ticks + 1, step_ticks)) + 0.5,
-        [str(x) for x in range(start_ticks, max_ticks + 1, step_ticks)]
-    )
-
-    # output it
-    plt.savefig(out_prefix + '.pdf')
-    plt.savefig(out_prefix + '.png')
-    plt.close()
 
 
 def plot_histogram_image2d_plotly(
@@ -1641,46 +1551,7 @@ def write_histogram_image(
     for r, c in inread_counts:
         dist_inread[r] += c
 
-    # print(dist, dist_filt, dist_inread, sep="\n", end="\n\n")
-    # plot_histogram_image_matplotlib(out_prefix, dist, dist_filt, dist_inread, xm)
     plot_histogram_image_plotly(out_prefix, dist, dist_filt, dist_inread)
-
-
-def plot_histogram_image_matplotlib(
-    out_prefix: str, spanning: list[int], flanking: list[int], inread: list[int], xm: int
-) -> None:
-    width = 0.9
-    plt.figure(figsize=(20, 8))
-    # create barplots
-    rects_inread = plt.bar(np.arange(xm + 1), inread, width, color='orange', alpha=0.4)
-    rects_filt = plt.bar(np.arange(xm + 1), flanking, width, color='lightgrey')
-    rects = plt.bar(np.arange(xm + 1), spanning, width)
-    plt.xticks(np.arange(1, xm + 1))
-    plt.ylabel('Counts')
-    plt.xlabel('STR repetitions')
-    _, max_y = plt.ylim()
-    plt.xlim((0, xm + 1))
-
-    # label numbers
-    for rect, rect_filt, rect_inread in zip(rects, rects_filt, rects_inread):
-        if rect.get_height() > 0:
-            plt.text(
-                rect.get_x() + rect.get_width() / 2.,
-                rect.get_height() + max_y / 100.0,
-                '%d' % int(rect.get_height()), ha='center', va='bottom'
-            )
-        if rect_filt.get_height() != rect.get_height():
-            plt.text(rect_filt.get_x() + rect_filt.get_width() / 2., rect_filt.get_height() + max_y / 100.0,
-                     '%d' % int(rect_filt.get_height() - rect.get_height()), ha='center', va='bottom', color='grey')
-        if rect_inread is not None and rect_inread.get_height() != rect_filt.get_height():
-            plt.text(rect_inread.get_x() + rect_inread.get_width() / 2., rect_inread.get_height() + max_y / 100.0,
-                     '%d' % int(rect_inread.get_height() - rect_filt.get_height()),
-                     ha='center', va='bottom', color='orange')
-
-    # output it
-    plt.savefig(out_prefix + '.pdf')
-    plt.savefig(out_prefix + '.png')
-    plt.close()
 
 
 def plot_histogram_image_plotly(
@@ -1730,9 +1601,6 @@ def write_all(
     :param cutoff_alignments: int - how many bases to keep beyond annotated modules in alignments
     :return: None
     """
-    # create dir if not exists
-    os.makedirs(motif_dir, exist_ok=True)
-
     # create suffix for files:
     suffix = str(module_number) if second_module_number is None else f'{module_number}_{second_module_number}'
 
@@ -2264,23 +2132,11 @@ class Inference:
         p_bckg = self.p_bckg_closed if closed else self.p_bckg_open
         bckgrnd_likelihood = p_bckg * self.likelihood_read_allele(self.models['B'], observed, rl, closed)
 
-        # alleles_intersection = min(
-        #   model_prob_j, model_prob_i)
-        #   * self.likelihood_read_intersection(model_i, model_j, observed, rl, closed)
-        # if alleles_intersection > 0.0:
-        #    print('%g %g %g %s %s %d' % (alleles_intersection, allele2_likelihood, allele1_likelihood,
-        #    str(model_index1), str(model_index2), observed))
-
         assert not np.isnan(allele2_likelihood)
         assert not np.isnan(allele1_likelihood)
         assert not np.isnan(bckgrnd_likelihood)
-        # assert alleles_intersection <= max(allele1_likelihood, allele2_likelihood), '%g %g %g %s %s %d' % (
-        #    alleles_intersection, allele2_likelihood, allele1_likelihood, str(model_index1), str(model_index2),
-        #    observed)
 
-        # print('read_%s' % (str(closed)), observed, 'all1_lh', allele1_likelihood, 'all2_lh', allele2_likelihood)
-
-        return allele1_likelihood + allele2_likelihood + bckgrnd_likelihood  # - alleles_intersection
+        return allele1_likelihood + allele2_likelihood + bckgrnd_likelihood
 
     def infer(
         self, annotations: list[Annotation], filt_annotations: list[Annotation],
@@ -2349,8 +2205,6 @@ class Inference:
             models = generate_models_one_allele(min_rep, max_rep)
         else:
             models = generate_models(min_rep, max_rep, multiple_backgrounds=True)
-        # for m1, m2 in generate_models_one_allele(min_rep, max_rep)
-        # if monoallelic else generate_models(min_rep, max_rep, multiple_backgrounds=True):
         for m1, m2 in models:
             evaluated_models[(m1, m2)] = 0.0
             # go through every read
@@ -2360,65 +2214,6 @@ class Inference:
                 evaluated_models[(m1, m2)] += np.log(lh)
 
         return evaluated_models
-
-    def save_pcolor_file(
-        self, display_file: str,
-        lh_view: np.ndarray, z_min: float, z_max: float,
-        title: str, max_str: int, start_ticks: int = 5, step_ticks: int = 5
-    ):
-        # background (B,B)
-        bg_size = max(2, (len(lh_view) - self.min_rep) // 6)
-        if len(lh_view) - self.min_rep <= 6:
-            bg_size = 1
-        lh_view[-bg_size:, self.min_rep:self.min_rep + bg_size] = lh_view[0, 0]
-        # expanded (E,E)
-        lh_view[-bg_size:, self.min_rep + bg_size:self.min_rep + 2 * bg_size] = lh_view[0, self.max_rep]
-
-        # plotting
-        plt.figure()
-        plt.title(title)
-        plt.xlabel('2nd allele')
-        plt.ylabel('1st allele')
-        plt.xticks(
-            np.concatenate([
-                np.array(range(start_ticks - self.min_rep, max_str - self.min_rep, step_ticks)),
-                [max_str - self.min_rep]
-            ]) + 0.5,
-            [str(x) for x in range(start_ticks, max_str, step_ticks)] + ['E(>%d)' % (self.max_with_e - 2)]
-        )
-        plt.yticks(
-            np.concatenate([
-                np.array(range(start_ticks - self.min_rep + 1, max_str - self.min_rep + 1, step_ticks)), [0]
-            ]) + 0.5,
-            [str(x) for x in range(start_ticks, max_str, step_ticks)] + ['B'])
-
-        # palette = copy(plt.cm.jet)
-        palette = copy(plt.colormaps["jet"])
-        palette.set_under('gray', 1.0)
-        plt.pcolor(lh_view[self.min_rep - 1:, self.min_rep:], cmap=palette, vmin=z_min, vmax=z_max)
-        # plt.colorbar()
-
-        # draw dividing line(s):
-        plt.plot(
-            [max_str - self.min_rep, max_str - self.min_rep],
-            [0, max_str - self.min_rep + 1], 'k', linewidth=3
-        )
-        plt.plot([0, max_str - self.min_rep + 1], [1, 1], 'k', linewidth=3)
-
-        # text background:
-        plt.text(
-            float(bg_size) / 2.0, max_str - self.min_rep + 1 - float(bg_size) / 2.0,
-            'BG', size=20, horizontalalignment='center',
-            verticalalignment='center', path_effects=[patheffects.withStroke(linewidth=2.5, foreground="w")])
-        # text expanded
-        plt.text(
-            bg_size + float(bg_size) / 2.0, max_str - self.min_rep + 1 - float(bg_size) / 2.0,
-            'Exp', size=20, horizontalalignment='center',
-            verticalalignment='center', path_effects=[patheffects.withStroke(linewidth=2.5, foreground="w")])
-
-        # save
-        plt.savefig(display_file)
-        plt.close()
 
     def save_pcolor_plotly_file(
         self, display_file: str,
@@ -2523,8 +2318,6 @@ class Inference:
             lh_copy[-1, self.min_rep + 1] = lh_copy[0, self.max_rep]
 
             title = '%s likelihood of options (%s)' % ('Loglog' if lognorm else 'Log', name)
-            # self.save_pcolor_file(display_file + '.pdf', lh_view, z_min, z_max, title, max_str)
-            # self.save_pcolor_file(display_file + '.png', lh_view, z_min, z_max, title, max_str)
             self.save_pcolor_plotly_file(display_file + '.json', lh_copy, lognorm, title, max_str)
 
     def convert_to_sym(self, best: tuple[int, int], monoallelic: bool) -> tuple[int | str, int | str]:
@@ -2550,7 +2343,7 @@ class Inference:
 
     def get_confidence(
         self, lh_array: np.ndarray, predicted: tuple[int, int], monoallelic: bool = False
-    ) -> tuple[float, float, float | str, float, float, float, float]:
+    ) -> tuple[float, float, float, float, float, float, float]:
         """
         Get confidence of a prediction.
         :param lh_array: 2D-ndarray - log likelihoods of the prediction
@@ -2600,8 +2393,8 @@ class Inference:
         )
 
     def genotype(
-        self, annotations: list[Annotation], filt_annotations: list[Annotation], index_rep: int, monoallelic: bool = False
-    ) -> tuple[np.ndarray | None, tuple[str | int, str | int], tuple[float, float, float | str, float, float, float, float]]:
+        self, spanning: list[Annotation], partial: list[Annotation], index_rep: int, monoallelic: bool = False
+    ) -> tuple[np.ndarray | None, tuple[str | int, str | int], tuple[float, float, float, float, float, float, float]]:
         """
         Genotype based on all annotations - infer likelihoods, print pcolor and write output
         :param annotations: list(Annotation) - good (blue) annotations
@@ -2614,15 +2407,15 @@ class Inference:
         :return: tuple - predicted symbols and confidences
         """
         # if we do not have any good annotations, then quit
-        if len(annotations) == 0 and len(filt_annotations) == 0:
+        if len(spanning) == 0 and len(partial) == 0:
             return None, ('B', 'B'), (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 
         # infer likelihoods
-        lh_dict = self.infer(annotations, filt_annotations, index_rep, monoallelic=monoallelic)
+        lh_dict = self.infer(spanning, partial, index_rep, monoallelic)
         lh_array, predicted = self.predict(lh_dict)
 
         # adjust for no spanning reads (should output Background)
-        if len(annotations) == 0:
+        if len(spanning) == 0:
             predicted = (0, 0)
 
         # convert numbers to symbols
@@ -2633,35 +2426,6 @@ class Inference:
 
         # return predicted and confidence
         return lh_array, predicted_sym, confidence
-
-
-def write_output(
-    file_desc: str | TextIO, predicted: tuple[int | str, int | str],
-    conf: tuple[float, float, float | str, float, float, float, float],
-    name: str | int
-):
-    """
-    Write result of one prediction.
-    :param file_desc: file descriptor - where to write to
-    :param predicted: tuple(int/char, int/char) - predicted alleles
-    :param conf: confidence of prediction (whole, 1st allele, 2nd allele, background and expanded alleles)
-    :param name: str/int - name/number of the sample
-    :return: None
-    """
-    def write_output_fd(f, predicted, conf, name):
-        print(f'Predicted alleles for {name}: (confidence = {float_to_str(conf[1], percents=True)})', file=f)
-        print(f'\t{str(predicted[0]):3s} (confidence = {float_to_str(conf[1], percents=True)})', file=f)
-        print(f'\t{str(predicted[1]):3s} (confidence = {float_to_str(conf[2], percents=True)})', file=f)
-        print(f'B   B   {float_to_str(conf[3], percents=True)}', file=f)
-        print(f'all B   {float_to_str(conf[4], percents=True)}', file=f)
-        print(f'B   E   {float_to_str(conf[5], percents=True)}', file=f)
-        print(f'all E   {float_to_str(conf[6], percents=True)}', file=f)
-
-    if type(file_desc) is str:
-        with open(file_desc, 'w') as f:
-            write_output_fd(f, predicted, conf, name)
-    else:
-        write_output_fd(file_desc, predicted, conf, name)
 
 
 def save_phasing(phasing_file: str, phasing: tuple[str, str], supp_reads: tuple[str, str, str]) -> None:
@@ -3146,5 +2910,4 @@ def generate_alignment(
 
 # %%
 if __name__ == '__main__':
-    # this is good practice so the variables do not pollute the global scope
     main()
