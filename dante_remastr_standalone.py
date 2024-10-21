@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from argparse import ArgumentParser, Namespace, RawDescriptionHelpFormatter, ArgumentTypeError
 from datetime import datetime
-from typing import TextIO, Iterator, Any
+from typing import TextIO, Iterator
 from collections import Counter
 
 import csv
@@ -60,43 +60,146 @@ def main() -> None:
     print('DANTE_remaSTR = "Da Amazing NucleoTide Exposer" (remastered)')
     print(f'DANTE_remaSTR Starting : {start_time:%Y-%m-%d %H:%M:%S}')
 
-    all_motifs: list[Motif] = []
-    all_result_lines: list[dict[Any, Any]] = []
+    all_motifs = []
+    all_annotations = []
+    all_genotypes = []
+    all_haplotypes = []
     for motif_table in generate_groups(args.input_tsv):
         motif = create_motif(motif_table)
         motif_monoallelic = args.male and chrom_from_string(motif.chrom) in [ChromEnum.X, ChromEnum.Y]
-
         annotations = create_annotations(motif_table, motif)
-
-        result_genotypes, result_phasing = process_group(motif, motif_monoallelic, annotations)
-        del motif_monoallelic
-        rls = generate_all_result_lines(motif, result_genotypes, result_phasing)
+        genotypes = genotype_group(motif, motif_monoallelic, annotations)
+        haplotypes = phase_group(motif, annotations)
 
         all_motifs.append(motif)
-        all_result_lines.extend(rls)
+        all_annotations.append(annotations)
+        all_genotypes.append(genotypes)
+        all_haplotypes.append(haplotypes)
+        del motif_table, motif, motif_monoallelic, annotations, genotypes, haplotypes
 
-        if args.verbose:
-            motif_dir = f'{args.output_dir}/{motif.dir_name()}'
-            os.makedirs(motif_dir, exist_ok=True)
-            generate_nomenclature_files(motif, annotations, motif_dir)
-            write_all_files(motif, result_genotypes, result_phasing, motif_dir, args.cutoff_alignments)
-
-    rl_df = pd.DataFrame.from_records(all_result_lines)
-    del all_result_lines
-    rl_df.sort_values(by=['motif_name'], kind='stable')
-
-    print(f'Writing outputs: {datetime.now():%Y-%m-%d %H:%M:%S}')
-    rl_df.to_csv(args.output_dir + "/variants.tsv", sep='\t')
-    write_vcf(rl_df, args.output_dir)
+    # core computation ends here
+    # next lines are only outputing things
+    print(f'Writing tsv output: {datetime.now():%Y-%m-%d %H:%M:%S}')
+    variants_df = construct_dataframe(all_motifs, all_genotypes, all_haplotypes)
+    variants_df.to_csv(args.output_dir + "/variants.tsv", sep='\t')
+    print(f'Writing vcf output: {datetime.now():%Y-%m-%d %H:%M:%S}')
+    write_vcf(variants_df, args.output_dir)
+    del variants_df
 
     if args.verbose:
-        all_motifs = sorted(all_motifs)
-        merge_all_profiles(args.output_dir, all_motifs, rl_df)
-        write_report(all_motifs, rl_df, args.output_dir, args.nomenclatures)
+        print(f'Writing all other outputs: {datetime.now():%Y-%m-%d %H:%M:%S}')
+        generate_all_htmls(
+            all_motifs, all_annotations, all_genotypes, all_haplotypes, args.output_dir, args.cutoff_alignments
+        )
 
     end_time = datetime.now()
     print(f'DANTE_remaSTR Stopping : {end_time:%Y-%m-%d %H:%M:%S}')
     print(f'Total time of run      : {end_time - start_time}')
+
+
+def generate_all_htmls(
+    all_motifs, all_annotations, all_genotypes, all_haplotypes, output_dir, flank_size, nomenclature_limit=5
+) -> None:
+    all_profiles = f'{output_dir}/all_profiles.txt'
+    all_true = f'{output_dir}/all_profiles.true'
+
+    alignments: dict[str, tuple] = {}
+    post_filter = PostFilter()
+
+    mcs: dict[str, str] = {}  # first table in html, one value, one row
+    ms: dict[str, list[str]] = {}  # graphs, starts at data
+    rows: dict[str, list[str]] = {}  # table with confidences
+
+    pf = open(all_profiles, "w")
+    tf = open(all_true, "w")
+    # all_motifs = sorted(all_motifs)  # this needs to be more sophisticated
+    for (motif, anns, genotype, phasing) in zip(all_motifs, all_annotations, all_genotypes, all_haplotypes):
+        motif_dir = f'{output_dir}/{motif.dir_name()}'
+        os.makedirs(motif_dir, exist_ok=True)
+
+        generate_nomenclature_files(motif, anns, motif_dir)
+        write_all_files(motif, genotype, phasing, motif_dir, flank_size)  # everything is written here
+
+        rls = generate_all_result_lines(motif, genotype, phasing)
+        rls_df = pd.DataFrame.from_records(rls)
+        seq = motif.modules_str(include_flanks=True)
+        for _, row in rls_df.iterrows():
+            phasing = '_' in str(row['repetition_index'])
+            suffix = row['repetition_index']
+
+            if not phasing:
+                # add to profiles
+                with open(f'{motif_dir}/profile_{suffix}.txt') as po:
+                    line = po.readline()
+                    pf.write(f'{motif.name}_{suffix}\t{line}\n')
+
+                # add to true
+                tf.write(f'{motif.name}_{suffix}\t{row["allele1"]}\t{row["allele2"]}\n')
+
+            # read files
+            rep_file = find_file(f'{motif_dir}/repetitions_{suffix}.json')
+            pcol_file = find_file(f'{motif_dir}/pcolor_{suffix}.json')
+            align_file = find_file(f'{motif_dir}/alignment_{suffix}.fasta')
+            filt_align_file = find_file(f'{motif_dir}/alignment_filtered_{suffix}.fasta')
+            filt_left_file = find_file(f'{motif_dir}/alignment_filtered_left_{suffix}.fasta')
+            filt_right_file = find_file(f'{motif_dir}/alignment_filtered_right_{suffix}.fasta')
+
+            nomenclature_file = f'{motif_dir}/nomenclatures_{suffix}.txt'
+            nomenclature_lines = generate_nomenclatures(nomenclature_file, motif, nomenclature_limit)
+
+            # generate rows of tables and images
+            row1 = generate_row(seq, row, post_filter)
+            rows[motif.name] = rows.get(motif.name, []) + [row1]
+
+            # add the tables
+            mc, m, a = generate_motifb64(  # everything is read here
+                seq, row,
+                rep_file, pcol_file, align_file, filt_align_file, filt_left_file, filt_right_file,
+                nomenclature_lines, post_filter
+            )
+            if motif.name in mcs:
+                ms[motif.name].append(m)
+                alignments[motif.dir_name()][1].append(a[1])
+            else:
+                mcs[motif.name] = mc
+                ms[motif.name] = [m]
+                alignments[motif.dir_name()] = (a[0], [a[1]])
+
+    script_dir = os.path.dirname(os.path.abspath(__file__)) + "/dante_remastr_standalone_templates"
+    template_file = f'{script_dir}/report.html'
+    generate_report_html(template_file, output_dir, all_motifs, nomenclature_limit, rows, mcs, ms)
+
+    # write alignments as html files
+    for motif_dir_name in alignments.keys():
+        # generate_html_alignment()
+        template_alignments = open(f'{script_dir}/alignments.html', 'r').read()
+        template_alignments = custom_format(
+            template_alignments, sample=motif_dir_name, motif_desc=alignments[motif_dir_name][0]
+        )
+        template_alignments = custom_format(template_alignments, alignments='\n'.join(alignments[motif_dir_name][1]))
+
+        with open(f'{output_dir}/{motif_dir_name}/alignments.html', 'w') as f:
+            f.write(template_alignments)
+
+    # copy javascript and css files
+    shutil.copy2(f'{script_dir}/msa.min.gz.js', f'{output_dir}/msa.min.gz.js')
+    shutil.copy2(f'{script_dir}/plotly-2.14.0.min.js', f'{output_dir}/plotly-2.14.0.min.js')
+    shutil.copy2(f'{script_dir}/jquery-3.6.1.min.js', f'{output_dir}/jquery-3.6.1.min.js')
+    shutil.copy2(f'{script_dir}/datatables.min.js', f'{output_dir}/datatables.min.js')
+    shutil.copy2(f'{script_dir}/styles.css', f'{output_dir}/styles.css')
+
+
+def construct_dataframe(
+    all_motifs: list[Motif], all_genotypes: list[list[tuple]], all_haplotypes: list[list[None | tuple]]
+) -> pd.DataFrame:
+    all_result_lines: list[dict] = []
+    for motif, genotype, phasing in zip(all_motifs, all_genotypes, all_haplotypes):
+        rls = generate_all_result_lines(motif, genotype, phasing)
+        all_result_lines.extend(rls)
+
+    variants_df = pd.DataFrame.from_records(all_result_lines)
+    variants_df.sort_values(by=['motif_name'], kind='stable')
+    return variants_df
 
 
 def load_arguments_fake() -> Namespace:
@@ -522,7 +625,7 @@ class Annotation:
         # return the start position if a match is found, else return -1
         return match.start() if match else -1
 
-    # TODO: this is too comples
+    # TODO: this is too complex
     def get_nomenclature(
         self, index_rep: int | None = None, index_rep2: int | None = None, include_flanking: bool = True
     ) -> str:
@@ -655,7 +758,9 @@ def errors_per_read(
 
 
 # TODO: I don't particularly like mixing of genotyping and phasing
-def generate_all_result_lines(motif: Motif, result_genotypes: list[tuple], result_phasing: list[tuple]) -> list[dict]:
+def generate_all_result_lines(
+    motif: Motif, result_genotypes: list[tuple], result_phasing: list[None | tuple]
+) -> list[dict]:
     result_lines = []
     for gt, ph in zip(result_genotypes, result_phasing):
 
@@ -773,18 +878,15 @@ def create_annotations(df: pd.DataFrame, motif: Motif) -> list[Annotation]:
     return annotations
 
 
-# TODO: split into genotype_group and phase_group
-def process_group(
+def genotype_group(
     motif: Motif, monoallelic: bool,  # this could be included in Motif
     annotations: list[Annotation]  # I would prefer to get dataframe here
-) -> tuple[list, list]:
-    result_genotypes: list[tuple] = []
-    result_phasing: list[tuple | None] = [None]
+) -> list[tuple]:
+    result_genotypes = []
 
     postfilter = PostFilter()
     read_distribution = np.bincount([len(ann.read_seq) for ann in annotations], minlength=100)
-    repeating_modules = motif.get_repeating_modules()
-    for i, (curr_module_num, _, _) in enumerate(repeating_modules):
+    for curr_module_num, _, _ in motif.get_repeating_modules():
 
         anns_spanning, rest = postfilter.get_filtered(annotations, curr_module_num, both_primers=True)
         anns_flanking, anns_filtered = postfilter.get_filtered(rest, curr_module_num, both_primers=False)
@@ -796,22 +898,31 @@ def process_group(
             (curr_module_num, anns_spanning, anns_flanking, anns_filtered, predicted, confidence, lh_array, model)
         )
 
-        if i != 0:
-            prev_module_num = repeating_modules[i - 1][0]
-            mod_nums = [prev_module_num, curr_module_num]
-            anns_2good, _filtered = postfilter.get_filtered_list(annotations, mod_nums, both_primers=[True, True])
-            _left_good, _left_bad = postfilter.get_filtered_list(_filtered, mod_nums, both_primers=[False, True])
-            _right_good, anns_0good = postfilter.get_filtered_list(_left_bad, mod_nums, both_primers=[True, False])
-            anns_1good = _left_good + _right_good
-            del _filtered, _left_good, _left_bad, _right_good
+    return result_genotypes
 
-            phasing, supp_reads = phase(anns_2good, prev_module_num, curr_module_num)
 
-            result_phasing.append(
-                (curr_module_num, anns_2good, anns_1good, anns_0good, phasing, supp_reads, prev_module_num)
-            )
+def phase_group(motif: Motif, annotations: list[Annotation]) -> list[None | tuple]:
+    result_phasing: list[None | tuple] = [None]
 
-    return result_genotypes, result_phasing
+    postfilter = PostFilter()
+    repeating_modules = motif.get_repeating_modules()
+    for i, (curr_module_num, _, _) in enumerate(repeating_modules[1:], start=1):
+        prev_module_num = repeating_modules[i - 1][0]
+        mod_nums = [prev_module_num, curr_module_num]
+
+        anns_2good, _filtered = postfilter.get_filtered_list(annotations, mod_nums, both_primers=[True, True])
+        _left_good, _left_bad = postfilter.get_filtered_list(_filtered, mod_nums, both_primers=[False, True])
+        _right_good, anns_0good = postfilter.get_filtered_list(_left_bad, mod_nums, both_primers=[True, False])
+        anns_1good = _left_good + _right_good
+        del _filtered, _left_good, _left_bad, _right_good
+
+        phasing, supp_reads = phase(anns_2good, prev_module_num, curr_module_num)
+
+        result_phasing.append(
+            (curr_module_num, anns_2good, anns_1good, anns_0good, phasing, supp_reads, prev_module_num)
+        )
+
+    return result_phasing
 
 
 def phase(
@@ -887,9 +998,7 @@ def write_all_files(
             )
 
             # write phasing into a file
-            save_phasing(
-                f'{motif_dir}/phasing_{prev_module_num}_{module_number}.txt', phasing, supp_reads
-            )
+            save_phasing(f'{motif_dir}/phasing_{prev_module_num}_{module_number}.txt', phasing, supp_reads)
 
 
 def generate_nomenclature_files(motif: Motif, annotations: list[Annotation], motif_dir: str):
@@ -1716,113 +1825,6 @@ def generate_nomenclatures(filename: str, motif: Motif, nomenclature_limit: int)
                 break
 
     return lines
-
-
-def merge_all_profiles(report_dir: str, motifs: list[Motif], result_table: pd.DataFrame):
-    all_profiles = f'{report_dir}/all_profiles.txt'
-    all_true = f'{report_dir}/all_profiles.true'
-
-    with open(all_profiles, 'w') as pf, open(all_true, 'w') as tf:
-        for motif in motifs:
-            for _, result in result_table[result_table['motif_name'] == motif.name].iterrows():
-
-                # adjust helper variables
-                phasing = '_' in str(result['repetition_index'])
-                suffix = result['repetition_index']
-                dir_name = f'{report_dir}/{motif.dir_name()}'
-
-                if not phasing:
-                    # add to profiles
-                    with open(f'{dir_name}/profile_{suffix}.txt') as po:
-                        line = po.readline()
-                        pf.write(f'{motif.name}_{suffix}\t{line}\n')
-
-                    # add to true
-                    tf.write(f'{motif.name}_{suffix}\t{result["allele1"]}\t{result["allele2"]}\n')
-
-
-def write_report(
-    motifs: list[Motif], result_table: pd.DataFrame, report_dir: str, nomenclature_limit: int
-) -> None:
-    """
-    Generate and write a report.
-    :param motifs - list of motifs to write results
-    :param result_table - table of results
-    :param post_filter - post-filter arguments
-    :param report_dir - dir name for reports
-    :param nomenclature_limit - number of lines from nomenclature.txt to print
-    :return: None
-    """
-    alignments: dict[str, tuple] = {}
-    post_filter = PostFilter()
-
-    mcs: dict[str, str] = {}  # first table in html, one value, one row
-    ms: dict[str, list[str]] = {}  # graphs, starts at data
-    rows: dict[str, list[str]] = {}  # table with confidences
-
-    for motif in motifs:
-        seq = motif.modules_str(include_flanks=True)
-        for _, result in result_table[result_table['motif_name'] == motif.name].iterrows():
-
-            # adjust helper variables
-            suffix = result['repetition_index']
-            dir_name = f'{report_dir}/{motif.dir_name()}'
-
-            # read files
-            rep_file = find_file(f'{dir_name}/repetitions_{suffix}.json')
-            pcol_file = find_file(f'{dir_name}/pcolor_{suffix}.json')
-            align_file = find_file(f'{dir_name}/alignment_{suffix}.fasta')
-            filt_align_file = find_file(f'{dir_name}/alignment_filtered_{suffix}.fasta')
-            filt_left_file = find_file(f'{dir_name}/alignment_filtered_left_{suffix}.fasta')
-            filt_right_file = find_file(f'{dir_name}/alignment_filtered_right_{suffix}.fasta')
-
-            nomenclature_lines = generate_nomenclatures(
-                f'{dir_name}/nomenclatures_{suffix}.txt', motif, nomenclature_limit
-            )
-
-            # generate rows of tables and images
-            row = generate_row(seq, result, post_filter)
-            rows[motif.name] = rows.get(motif.name, []) + [row]
-
-            # add the tables
-            mc, m, a = generate_motifb64(
-                seq, result,
-                rep_file, pcol_file, align_file, filt_align_file, filt_left_file, filt_right_file,
-                nomenclature_lines, post_filter
-            )
-            if motif.name in mcs:
-                ms[motif.name].append(m)
-                alignments[motif.dir_name()][1].append(a[1])
-            else:
-                mcs[motif.name] = mc
-                ms[motif.name] = [m]
-                alignments[motif.dir_name()] = (a[0], [a[1]])
-
-    script_dir = os.path.dirname(os.path.abspath(__file__)) + "/dante_remastr_standalone_templates"
-    template_file = f'{script_dir}/report.html'
-    generate_report_html(
-        template_file, report_dir, motifs, nomenclature_limit,
-        rows, mcs, ms
-    )
-
-    # write alignments as html files
-    for motif_dir_name in alignments.keys():
-        # generate_html_alignment()
-        template_alignments = open(f'{script_dir}/alignments.html', 'r').read()
-        template_alignments = custom_format(
-            template_alignments, sample=motif_dir_name, motif_desc=alignments[motif_dir_name][0]
-        )
-        template_alignments = custom_format(template_alignments, alignments='\n'.join(alignments[motif_dir_name][1]))
-
-        with open(f'{report_dir}/{motif_dir_name}/alignments.html', 'w') as f:
-            f.write(template_alignments)
-
-    # copy javascript and css files
-    shutil.copy2(f'{script_dir}/msa.min.gz.js', f'{report_dir}/msa.min.gz.js')
-    shutil.copy2(f'{script_dir}/plotly-2.14.0.min.js', f'{report_dir}/plotly-2.14.0.min.js')
-    shutil.copy2(f'{script_dir}/jquery-3.6.1.min.js', f'{report_dir}/jquery-3.6.1.min.js')
-    shutil.copy2(f'{script_dir}/datatables.min.js', f'{report_dir}/datatables.min.js')
-    shutil.copy2(f'{script_dir}/styles.css', f'{report_dir}/styles.css')
 
 
 def generate_report_html(
