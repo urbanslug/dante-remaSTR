@@ -52,6 +52,16 @@ BASE_MAPPING = {
 }
 
 
+# open(file: _OpenFile, mode: OpenTextMode=..., buffering: int=..., encoding: Optional[str]=...,
+#      errors: Optional[str]=..., newline: Optional[str]=..., closefd: bool=..., opener: Optional[_Opener]=...
+# ) -> TextIOWrapper
+
+# def open(file: str, mode="r", encoding="") -> TextIOWrapper:
+#     import builtins
+#     print("Opening")
+#     return builtins.open(file, mode, encoding)
+
+
 def main() -> None:
     start_time = datetime.now()
     args = load_arguments()
@@ -82,9 +92,9 @@ def main() -> None:
     print(f'Writing tsv output: {datetime.now():%Y-%m-%d %H:%M:%S}')
     variants_df = construct_dataframe(all_motifs, all_genotypes, all_haplotypes)
     variants_df.to_csv(args.output_dir + "/variants.tsv", sep='\t')
+
     print(f'Writing vcf output: {datetime.now():%Y-%m-%d %H:%M:%S}')
     write_vcf(variants_df, args.output_dir)
-    del variants_df
 
     if args.verbose:
         print(f'Writing all other outputs: {datetime.now():%Y-%m-%d %H:%M:%S}')
@@ -100,24 +110,38 @@ def main() -> None:
 def generate_all_htmls(
     all_motifs, all_annotations, all_genotypes, all_haplotypes, output_dir, flank_size, nomenclature_limit=5
 ) -> None:
+    post_filter = PostFilter()
+
     all_profiles = f'{output_dir}/all_profiles.txt'
     all_true = f'{output_dir}/all_profiles.true'
+    pf = open(all_profiles, "w")
+    tf = open(all_true, "w")
 
     alignments: dict[str, tuple] = {}
-    post_filter = PostFilter()
 
     mcs: dict[str, str] = {}  # first table in html, one value, one row
     ms: dict[str, list[str]] = {}  # graphs, starts at data
     rows: dict[str, list[str]] = {}  # table with confidences
 
-    pf = open(all_profiles, "w")
-    tf = open(all_true, "w")
+    script_dir = os.path.dirname(os.path.abspath(__file__)) + "/dante_remastr_standalone_templates"
+    template_file = f'{script_dir}/report.html'
+
+    template = open(template_file, 'r').read()
+    sample = os.path.basename(output_dir)
+    tabs = []
+
     # all_motifs = sorted(all_motifs)  # this needs to be more sophisticated
     for (motif, anns, genotype, phasing) in zip(all_motifs, all_annotations, all_genotypes, all_haplotypes):
         motif_dir = f'{output_dir}/{motif.dir_name()}'
         os.makedirs(motif_dir, exist_ok=True)
 
-        generate_nomenclature_files(motif, anns, motif_dir)
+        repeating_modules = motif.get_repeating_modules()
+        annotations = anns
+        for module_number, _, _ in repeating_modules:
+            annotations, _ = post_filter.get_filtered(annotations, module_number, both_primers=True)
+        write_histogram_nomenclature(f'{motif_dir}/nomenclature.txt', annotations)
+        del annotations
+
         write_all_files(motif, genotype, phasing, motif_dir, flank_size)  # everything is written here
 
         rls = generate_all_result_lines(motif, genotype, phasing)
@@ -126,6 +150,9 @@ def generate_all_htmls(
         for _, row in rls_df.iterrows():
             phasing = '_' in str(row['repetition_index'])
             suffix = row['repetition_index']
+
+            nomenclature_file = f'{motif_dir}/nomenclatures_{suffix}.txt'
+            nomenclature_lines = generate_nomenclatures(nomenclature_file, motif, nomenclature_limit)
 
             if not phasing:
                 # add to profiles
@@ -139,35 +166,45 @@ def generate_all_htmls(
             # read files
             rep_file = find_file(f'{motif_dir}/repetitions_{suffix}.json')
             pcol_file = find_file(f'{motif_dir}/pcolor_{suffix}.json')
-            align_file = find_file(f'{motif_dir}/alignment_{suffix}.fasta')
-            filt_align_file = find_file(f'{motif_dir}/alignment_filtered_{suffix}.fasta')
-            filt_left_file = find_file(f'{motif_dir}/alignment_filtered_left_{suffix}.fasta')
-            filt_right_file = find_file(f'{motif_dir}/alignment_filtered_right_{suffix}.fasta')
-
-            nomenclature_file = f'{motif_dir}/nomenclatures_{suffix}.txt'
-            nomenclature_lines = generate_nomenclatures(nomenclature_file, motif, nomenclature_limit)
 
             # generate rows of tables and images
             row1 = generate_row(seq, row, post_filter)
             rows[motif.name] = rows.get(motif.name, []) + [row1]
 
             # add the tables
-            mc, m, a = generate_motifb64(  # everything is read here
-                seq, row,
-                rep_file, pcol_file, align_file, filt_align_file, filt_left_file, filt_right_file,
-                nomenclature_lines, post_filter
-            )
+            mcontent, m = generate_motifb64(seq, row, rep_file, pcol_file, nomenclature_lines, post_filter)
+
+            align_file = f'{motif_dir}/alignment_{suffix}.fasta'
+            filt_align_file = f'{motif_dir}/alignment_filtered_{suffix}.fasta'
+            filt_left_file = f'{motif_dir}/alignment_filtered_left_{suffix}.fasta'
+            filt_right_file = f'{motif_dir}/alignment_filtered_right_{suffix}.fasta'
+            align = generate_alignment_string(seq, row, align_file, filt_align_file, filt_left_file, filt_right_file)
+
             if motif.name in mcs:
                 ms[motif.name].append(m)
-                alignments[motif.dir_name()][1].append(a[1])
+                alignments[motif.dir_name()][1].append(align[1])
             else:
-                mcs[motif.name] = mc
+                mcs[motif.name] = mcontent
                 ms[motif.name] = [m]
-                alignments[motif.dir_name()] = (a[0], [a[1]])
+                alignments[motif.dir_name()] = (align[0], [align[1]])
 
-    script_dir = os.path.dirname(os.path.abspath(__file__)) + "/dante_remastr_standalone_templates"
-    template_file = f'{script_dir}/report.html'
-    generate_report_html(template_file, output_dir, all_motifs, nomenclature_limit, rows, mcs, ms)
+        motif_clean = re.sub(r'[^\w_]', '', motif.name.replace('/', '_'))
+        nomenclature_file = f'{output_dir}/{motif.dir_name()}/nomenclature.txt'
+        nomenclature_lines = generate_nomenclatures(nomenclature_file, motif, nomenclature_limit)
+        tabs.append(MOTIF_SUMMARY.format(
+            motif_id=motif_clean, nomenclatures='\n'.join(nomenclature_lines),
+            table='\n'.join(rows[motif.name]), motifs='\n'.join(ms[motif.name])
+        ))
+
+    motifs_tab = '\n'.join(tabs)
+    contents_table = CONTENTS.format(table='\n'.join(sorted(mcs.values())))
+    motifs_content = contents_table + '\n' + MAKE_DATATABLE_STRING
+    template = custom_format(template, sample=sample, version=VERSION)
+    template = custom_format(template, motifs_content=motifs_content)
+    template = custom_format(template, table='', motifs=motifs_tab)
+
+    with open(f'{output_dir}/report.html', 'w') as f:
+        f.write(template)
 
     # write alignments as html files
     for motif_dir_name in alignments.keys():
@@ -1001,27 +1038,6 @@ def write_all_files(
             save_phasing(f'{motif_dir}/phasing_{prev_module_num}_{module_number}.txt', phasing, supp_reads)
 
 
-def generate_nomenclature_files(motif: Motif, annotations: list[Annotation], motif_dir: str):
-    postfilter_class = PostFilter()
-    # generate nomenclatures for all modules:
-    for i, (_seq, reps) in enumerate(motif.modules):
-        # write files if needed
-        if reps == 1:
-            # setup post filtering - no primers, insufficient quality, ...
-            qual_annot, _ = postfilter_class.get_filtered(annotations, i, both_primers=True)
-
-            # gather and write nomenclatures
-            if len(qual_annot) > 0:
-                write_histogram_nomenclature(
-                    f'{motif_dir}/nomenclatures_{i}.txt', qual_annot, index_rep=i
-                )
-    # try to get the overall nomenclature:
-    repeating_modules = motif.get_repeating_modules()
-    for module_number, _, _ in repeating_modules:
-        annotations, _ = postfilter_class.get_filtered(annotations, module_number, both_primers=True)
-    write_histogram_nomenclature(f'{motif_dir}/nomenclature.txt', annotations)
-
-
 def generate_groups(input_stream: TextIO, chunk_size: int = 1000000) -> Iterator[pd.DataFrame]:
     """
     Generate sub-parts of the input table according to "column_name".
@@ -1715,58 +1731,41 @@ def write_all(
 
     # write output files
     write_annotations(f'{motif_dir}/annotations_{suffix}.txt', quality_annotations, zip_it=zip_it)
-    if len(quality_annotations) and max(len(a.read_seq) for a in quality_annotations) > 200:
-        write_annotations(
-            f'{motif_dir}/annotations_{suffix}_short.txt',
-            [a.get_shortened_annotation(cutoff_alignments) for a in quality_annotations],
-            zip_it=zip_it
-        )
     write_annotations(f'{motif_dir}/filtered_{suffix}.txt', filtered_annotations, zip_it=zip_it)
-    if len(filtered_annotations) and max(len(a.read_seq) for a in filtered_annotations) > 200:
-        write_annotations(
-            f'{motif_dir}/filtered_{suffix}_short.txt',
-            [a.get_shortened_annotation(cutoff_alignments) for a in filtered_annotations],
-            zip_it=zip_it
-        )
     write_annotations(f'{motif_dir}/filtered_primer_{suffix}.txt', filt_primer, zip_it=zip_it)
+
+    if len(quality_annotations) and max(len(a.read_seq) for a in quality_annotations) > 200:
+        annotations = [a.get_shortened_annotation(cutoff_alignments) for a in quality_annotations]
+        write_annotations(f'{motif_dir}/annotations_{suffix}_short.txt', annotations, zip_it=zip_it)
+
+    if len(filtered_annotations) and max(len(a.read_seq) for a in filtered_annotations) > 200:
+        annotations = [a.get_shortened_annotation(cutoff_alignments) for a in filtered_annotations]
+        write_annotations(f'{motif_dir}/filtered_{suffix}_short.txt', annotations, zip_it=zip_it)
+
     if len(filt_primer) and max(len(a.read_seq) for a in filt_primer) > 200:
-        write_annotations(
-            f'{motif_dir}/filtered_primer_{suffix}_short.txt',
-            [a.get_shortened_annotation(cutoff_alignments) for a in filt_primer],
-            zip_it=zip_it
-        )
-    write_alignment(f'{motif_dir}/alignment_{suffix}.fasta', quality_annotations, module_number,
-                    index_rep2=second_module_number, zip_it=zip_it, cutoff_after=cutoff_alignments)
-    write_alignment(f'{motif_dir}/alignment_filtered_{suffix}.fasta', filt_primer, module_number,
-                    index_rep2=second_module_number, zip_it=zip_it, cutoff_after=cutoff_alignments)
-    write_alignment(f'{motif_dir}/alignment_filtered_left_{suffix}.fasta',
-                    [a for a in filt_primer if a.module_bases[0] > 0], module_number,
-                    index_rep2=second_module_number, zip_it=zip_it, cutoff_after=cutoff_alignments)
-    write_alignment(f'{motif_dir}/alignment_filtered_right_{suffix}.fasta',
-                    [a for a in filt_primer if a.module_bases[-1] > 0], module_number,
-                    index_rep2=second_module_number, zip_it=zip_it, cutoff_after=cutoff_alignments, right_align=True)
+        annotations = [a.get_shortened_annotation(cutoff_alignments) for a in filt_primer]
+        write_annotations(f'{motif_dir}/filtered_primer_{suffix}_short.txt', annotations, zip_it=zip_it)
+
+    write_alignment(f'{motif_dir}/alignment_{suffix}.fasta', quality_annotations, module_number, index_rep2=second_module_number, zip_it=zip_it, cutoff_after=cutoff_alignments)
+    write_alignment(f'{motif_dir}/alignment_filtered_{suffix}.fasta', filt_primer, module_number, index_rep2=second_module_number, zip_it=zip_it, cutoff_after=cutoff_alignments)
+
+    write_alignment(f'{motif_dir}/alignment_filtered_left_{suffix}.fasta', [a for a in filt_primer if a.module_bases[0] > 0], module_number, index_rep2=second_module_number, zip_it=zip_it, cutoff_after=cutoff_alignments)
+    write_alignment(f'{motif_dir}/alignment_filtered_right_{suffix}.fasta', [a for a in filt_primer if a.module_bases[-1] > 0], module_number, index_rep2=second_module_number, zip_it=zip_it, cutoff_after=cutoff_alignments, right_align=True)
 
     # write histogram image
     if second_module_number is not None:
-        write_histogram_image2d(
-            f'{motif_dir}/repetitions_{suffix}', quality_annotations + filt_primer, module_number, second_module_number,
-            motif_class.module_str(module_number), motif_class.module_str(second_module_number)
-        )
+        annotations = quality_annotations + filt_primer
+        write_histogram_image2d(f'{motif_dir}/repetitions_{suffix}', annotations, module_number, second_module_number, motif_class.module_str(module_number), motif_class.module_str(second_module_number))
     else:
         write_histogram_image(f'{motif_dir}/repetitions_{suffix}', quality_annotations, filt_primer, module_number)
         write_profile(f'{motif_dir}/profile_{suffix}.txt', quality_annotations, index_rep=module_number)
 
     # write histogram txt files
+    write_histogram_nomenclature(f'{motif_dir}/nomenclatures_{suffix}.txt', quality_annotations, index_rep=module_number, index_rep2=second_module_number)
+    write_histogram_nomenclature(f'{motif_dir}/nomenclatures_grey_{suffix}.txt', filt_primer, index_rep=module_number, index_rep2=second_module_number)
+
     write_histogram(f'{motif_dir}/repetitions_{suffix}.txt', quality_annotations)
-    write_histogram_nomenclature(
-        f'{motif_dir}/nomenclatures_{suffix}.txt', quality_annotations, index_rep=module_number,
-        index_rep2=second_module_number
-    )
     write_histogram(f'{motif_dir}/repetitions_grey_{suffix}.txt', filt_primer)
-    write_histogram_nomenclature(
-        f'{motif_dir}/nomenclatures_grey_{suffix}.txt', filt_primer, index_rep=module_number,
-        index_rep2=second_module_number
-    )
 
 
 def custom_format(template: str, **kwargs) -> str:
@@ -1806,6 +1805,7 @@ def generate_nomenclatures(filename: str, motif: Motif, nomenclature_limit: int)
     :return: list[str] - array of nomenclature lines
     """
     if not os.path.exists(filename):
+        print(f"{filename} does not exist")
         return []
 
     with open(filename, 'r') as noms:
@@ -1825,34 +1825,6 @@ def generate_nomenclatures(filename: str, motif: Motif, nomenclature_limit: int)
                 break
 
     return lines
-
-
-def generate_report_html(
-    template_file: str, data_dir: str, motifs: list[Motif], nomenclature_limit: int,
-    rows: dict[str, list[str]], mcs: dict[str, str], ms: dict[str, list[str]],
-) -> None:
-    template = open(template_file, 'r').read()
-    sample = os.path.basename(data_dir)
-    contents_table = CONTENTS.format(table='\n'.join(sorted(mcs.values())))
-    motifs_content = contents_table + '\n' + MAKE_DATATABLE_STRING
-
-    tabs = []
-    for motif in sorted(motifs, key=lambda x: x.name):
-        motif_clean = re.sub(r'[^\w_]', '', motif.name.replace('/', '_'))
-        nomenclature_file = f'{data_dir}/{motif.dir_name()}/nomenclature.txt'
-        nomenclature_lines = generate_nomenclatures(nomenclature_file, motif, nomenclature_limit)
-        tabs.append(MOTIF_SUMMARY.format(
-            motif_id=motif_clean, nomenclatures='\n'.join(nomenclature_lines),
-            table='\n'.join(rows[motif.name]), motifs='\n'.join(ms[motif.name])
-        ))
-    motifs_tab = '\n'.join(tabs)
-
-    template = custom_format(template, sample=sample, version=VERSION)
-    template = custom_format(template, motifs_content=motifs_content)
-    template = custom_format(template, table='', motifs=motifs_tab)
-
-    with open(f'{data_dir}/report.html', 'w') as f:
-        f.write(template)
 
 
 def combine_distribs(deletes, inserts):
@@ -2776,11 +2748,62 @@ def get_alignment_name(alignment_file: str, allele: int) -> str:
     return alignment_file[:fasta_index] + '_a' + str(allele) + alignment_file[fasta_index:]
 
 
+def generate_alignment_string(
+    sequence: str, result_in: pd.Series, spanning: str, partial: str, partial_left: str, partial_right: str,
+) -> tuple[str, str]:
+    highlight = list(map(int, str(result_in['repetition_index']).split('_')))
+    sequence, _subpart = highlight_subpart(sequence, highlight)
+    motif = result_in['motif_name']
+    motif_name_part1 = f'{motif.replace("/", "_")}'
+    motif_name_part2 = f'{",".join(map(str, highlight)) if highlight is not None else "mot"}'
+    motif_name = f'{motif_name_part1}_{motif_name_part2}'
+    motif_clean = re.sub(r'[^\w_]', '', motif_name)
+    motif_clean_split = motif_clean.split('_')[0]
+
+    a1 = result_in['allele1']
+    a2 = result_in['allele2']
+
+    align_html = generate_alignment(
+        motif_clean, spanning, motif_clean.split('_')[0],
+        'Spanning reads alignment visualization'
+    )
+
+    align_html_a1 = ''
+    align_html_a2 = ''
+    if (a1 == 'B' and a2 == 'B') or (a1 == 0 and a2 == 0):
+        pass
+    else:
+        align_html_a1 = generate_alignment(
+            f'{motif_clean}_{str(a1)}', get_alignment_name(spanning, a1), motif_clean_split,
+            f'Allele 1 ({str(a1):2s}) alignment visualization'
+        )
+        if a1 != a2:
+            align_html_a2 = generate_alignment(
+                f'{motif_clean}_{str(a2)}', get_alignment_name(spanning, a2), motif_clean.split('_')[0],
+                f'Allele 2 ({str(a2):2s}) alignment visualization'
+            )
+
+    filt_align_html = generate_alignment(
+        motif_clean + '_filtered', partial, motif_clean.split('_')[0],
+        'Partial reads alignment visualization', seq_logo=False
+    )
+    left_align_html = generate_alignment(
+        motif_clean + '_filtered_left', partial_left, motif_clean.split('_')[0],
+        'Left flank reads alignment visualization'
+    )
+    right_align_html = generate_alignment(
+        motif_clean + '_filtered_right', partial_right, motif_clean.split('_')[0],
+        'Right flank reads alignment visualization'
+    )
+
+    alignment = align_html + align_html_a1 + align_html_a2 + filt_align_html + left_align_html + right_align_html
+    return (motif, ALIGNMENT_STRING.format(sequence=sequence, alignment=alignment))
+
+
 def generate_motifb64(
-    sequence: str, result_in: pd.Series, repetition: str | None, pcolor: str | None, alignment: str | None,
-    filtered_alignment: str | None, filtered_left_alignment: str | None, filtered_right_alignment: str | None,
+    sequence: str, result_in: pd.Series, repetition: str | None, pcolor: str | None,
     nomenclature_lines: list[str], postfilter: PostFilter
-) -> tuple[str, str, tuple[str, str]]:
+) -> tuple[str, str]:
     """
     Generate part of a html report for each motif.
     :param sequence: str - motif sequence
@@ -2795,17 +2818,17 @@ def generate_motifb64(
     :param static: bool - generate static code?
     :return: (str, str) - content and main part of the html report for motifs
     """
-    # prepare and generate alignments
+    if repetition is None:
+        return (CONTENT_STRING_EMPTY, MOTIF_STRING_EMPTY)
+
     highlight = list(map(int, str(result_in['repetition_index']).split('_')))
     sequence, _subpart = highlight_subpart(sequence, highlight)
     motif = result_in['motif_name']
-    motif_name_part1 = f'{result_in["motif_name"].replace("/", "_")}'
+    motif_name_part1 = f'{motif.replace("/", "_")}'
     motif_name_part2 = f'{",".join(map(str, highlight)) if highlight is not None else "mot"}'
     motif_name = f'{motif_name_part1}_{motif_name_part2}'
     motif_clean = re.sub(r'[^\w_]', '', motif_name)
     motif_clean_id = motif_clean.rsplit('_', 1)[0] if highlight == [1] else motif_clean  # trick to solve static html
-    align_html_a1 = ''
-    align_html_a2 = ''
 
     a1 = result_in['allele1']
     a2 = result_in['allele2']
@@ -2816,14 +2839,6 @@ def generate_motifb64(
         result = f'BG {conf_total}'
     else:
         result = f'{str(a1):2s} ({conf_a1}) {str(a2):2s} ({conf_a2}) total {conf_total}'
-        if alignment is not None:
-            align_html_a1 = generate_alignment(
-                f'{motif_clean}_{str(a1)}', get_alignment_name(alignment, a1), motif_clean.split('_')[0],
-                f'Allele 1 ({str(a1):2s}) alignment visualization')
-            if a1 != a2:
-                align_html_a2 = generate_alignment(
-                    f'{motif_clean}_{str(a2)}', get_alignment_name(alignment, a2), motif_clean.split('_')[0],
-                    f'Allele 2 ({str(a2):2s}) alignment visualization')
 
     # errors:
     errors = f'{postfilter.max_rel_error * 100:.0f}%'
@@ -2833,30 +2848,7 @@ def generate_motifb64(
     # return content and picture parts:
     motif_templates = {'pcol': MOTIF_STRINGB64, 'no-pcol': MOTIF_STRINGB64_REPONLY}
 
-    if repetition is None:
-        return (
-            CONTENT_STRING_EMPTY,
-            MOTIF_STRING_EMPTY,
-            (motif, '')
-        )
-
     reps = open(repetition, 'r').read()
-    align_html = generate_alignment(
-        motif_clean, alignment, motif_clean.split('_')[0],
-        'Spanning reads alignment visualization'
-    )
-    filt_align_html = generate_alignment(
-        motif_clean + '_filtered', filtered_alignment, motif_clean.split('_')[0],
-        'Partial reads alignment visualization', seq_logo=False
-    )
-    left_align_html = generate_alignment(
-        motif_clean + '_filtered_left', filtered_left_alignment, motif_clean.split('_')[0],
-        'Left flank reads alignment visualization'
-    )
-    right_align_html = generate_alignment(
-        motif_clean + '_filtered_right', filtered_right_alignment, motif_clean.split('_')[0],
-        'Right flank reads alignment visualization'
-    )
 
     # select template
     motif_template = motif_templates['no-pcol' if pcolor is None else 'pcol']
@@ -2865,18 +2857,24 @@ def generate_motifb64(
     pcol = '' if pcolor is None else open(pcolor, 'r').read()
 
     # return filled valid template
+    # alignment = f'{motif_name.replace(" ", "%20")}/alignments.html'
+    alignment = f"{motif}/alignments.html"
     return (
         CONTENT_STRING.format(motif_name=motif_clean.rsplit('_', 1)[0], motif=motif),
         motif_template.format(
-            post_bases=postfilter.min_rep_len, post_reps=postfilter.min_rep_cnt, motif_name=motif_clean_id,
-            motif_id=motif_clean.rsplit('_', 1)[0], motif=motif, motif_reps=reps, result=result,
-            motif_pcolor=pcol, alignment=f'{motif_name.replace(" ", "%20")}/alignments.html', sequence=sequence,
-            errors=errors, nomenclatures='\n'.join(nomenclature_lines)
-        ),
-        (motif, ALIGNMENT_STRING.format(
-            sequence=sequence, alignment=align_html + align_html_a1 + align_html_a2
-            + filt_align_html + left_align_html + right_align_html
-        ))
+            post_bases=postfilter.min_rep_len,
+            post_reps=postfilter.min_rep_cnt,
+            motif_name=motif_clean_id,
+            motif_id=motif_clean.rsplit('_', 1)[0],
+            motif=motif,
+            motif_reps=reps,
+            result=result,
+            motif_pcolor=pcol,
+            alignment=alignment,
+            sequence=sequence,
+            errors=errors,
+            nomenclatures='\n'.join(nomenclature_lines)
+        )
     )
 
 
