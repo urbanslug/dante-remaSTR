@@ -6,7 +6,6 @@ from typing import TextIO, Iterator
 from collections import Counter
 
 import csv
-import gzip
 import os
 import re
 import sys
@@ -97,17 +96,128 @@ def main() -> None:
     write_vcf(variants_df, args.output_dir)
 
     if args.verbose:
-        print(f'Writing all other outputs: {datetime.now():%Y-%m-%d %H:%M:%S}')
-        generate_all_htmls(
-            all_motifs, all_annotations, all_genotypes, all_haplotypes, args.output_dir, args.cutoff_alignments
-        )
+        print(f'Writing alignment htmls: {datetime.now():%Y-%m-%d %H:%M:%S}')
+        generate_alignment_htmls(all_motifs, all_genotypes, all_haplotypes, args.output_dir, args.cutoff_alignments)
+
+        print(f'Writing html report: {datetime.now():%Y-%m-%d %H:%M:%S}')
+        write_report(all_motifs, all_annotations, all_genotypes, all_haplotypes, args.output_dir, args.cutoff_alignments)
+        pass
 
     end_time = datetime.now()
     print(f'DANTE_remaSTR Stopping : {end_time:%Y-%m-%d %H:%M:%S}')
     print(f'Total time of run      : {end_time - start_time}')
 
 
-def generate_all_htmls(
+def generate_alignment_htmls(
+    all_motifs, all_genotypes, all_haplotypes, output_dir, flank_size
+) -> None:
+    alignments: dict[str, tuple] = {}
+    script_dir = os.path.dirname(os.path.abspath(__file__)) + "/dante_remastr_standalone_templates"
+
+    # all_motifs = sorted(all_motifs)  # this needs to be more sophisticated
+    for (motif, genotype, phasing) in zip(all_motifs, all_genotypes, all_haplotypes):
+        motif_dir = f'{output_dir}/{motif.dir_name()}'
+        os.makedirs(motif_dir, exist_ok=True)
+        rls = generate_all_result_lines(motif, genotype, phasing)
+        rls_df = pd.DataFrame.from_records(rls)
+
+        for gt, ph in zip(genotype, phasing):
+            (module_number, anns_spanning, anns_flanking, _anns_filtered, predicted, confidence, _, _) = gt
+            suffix = str(module_number)
+            anns_flanking_left = [a for a in anns_flanking if a.module_bases[0] > 0]
+            anns_flanking_right = [a for a in anns_flanking if a.module_bases[-1] > 0]
+            write_alignment(
+                f'{motif_dir}/alignment_{suffix}.fasta',
+                anns_spanning, module_number, index_rep2=None, cutoff_after=flank_size
+            )
+            write_alignment(
+                f'{motif_dir}/alignment_filtered_{suffix}.fasta',
+                anns_flanking, module_number, index_rep2=None, cutoff_after=flank_size
+            )
+            write_alignment(
+                f'{motif_dir}/alignment_filtered_left_{suffix}.fasta',
+                anns_flanking_left, module_number, index_rep2=None, cutoff_after=flank_size
+            )
+            write_alignment(
+                f'{motif_dir}/alignment_filtered_right_{suffix}.fasta',
+                anns_flanking_right, module_number, index_rep2=None, cutoff_after=flank_size, right_align=True
+            )
+
+            # write the alignments
+            if confidence is not None:
+                # get number of precise alignments for each allele
+                a1 = int(predicted[0]) if isinstance(predicted[0], int) else None
+                a2 = int(predicted[1]) if isinstance(predicted[1], int) else None
+
+                if a1 is not None and a1 > 0:
+                    write_alignment(
+                        f'{motif_dir}/alignment_{module_number}_a{a1}.fasta',
+                        anns_spanning, module_number, a1, cutoff_after=flank_size
+                    )
+                if a2 is not None and a2 != a1 and a2 != 0:
+                    write_alignment(
+                        f'{motif_dir}/alignment_{module_number}_a{a2}.fasta',
+                        anns_spanning, module_number, a2, cutoff_after=flank_size
+                    )
+
+            if ph is not None:
+                (module_number, anns_2good, anns_1good, _anns_0good, phasing, _, prev_module_num) = ph
+                suffix = f'{prev_module_num}_{module_number}'
+                anns_1good_left = [a for a in anns_1good if a.module_bases[0] > 0]
+                anns_1good_right = [a for a in anns_1good if a.module_bases[-1] > 0]
+                write_alignment(
+                    f'{motif_dir}/alignment_{suffix}.fasta', anns_2good,
+                    prev_module_num, index_rep2=module_number, cutoff_after=flank_size
+                )
+                write_alignment(
+                    f'{motif_dir}/alignment_filtered_{suffix}.fasta', anns_1good,
+                    prev_module_num, index_rep2=module_number, cutoff_after=flank_size
+                )
+                write_alignment(
+                    f'{motif_dir}/alignment_filtered_left_{suffix}.fasta', anns_1good_left,
+                    prev_module_num, index_rep2=module_number, cutoff_after=flank_size
+                )
+                write_alignment(
+                    f'{motif_dir}/alignment_filtered_right_{suffix}.fasta', anns_1good_right,
+                    prev_module_num, index_rep2=module_number, cutoff_after=flank_size, right_align=True
+                )
+
+        seq = motif.modules_str(include_flanks=True)
+        for _, row in rls_df.iterrows():
+            phasing = '_' in str(row['repetition_index'])
+            suffix = row['repetition_index']
+
+            align_file = f'{motif_dir}/alignment_{suffix}.fasta'
+            filt_align_file = f'{motif_dir}/alignment_filtered_{suffix}.fasta'
+            filt_left_file = f'{motif_dir}/alignment_filtered_left_{suffix}.fasta'
+            filt_right_file = f'{motif_dir}/alignment_filtered_right_{suffix}.fasta'
+            align = generate_alignment_string(seq, row, align_file, filt_align_file, filt_left_file, filt_right_file)
+
+            if motif.dir_name() in alignments:
+                alignments[motif.dir_name()][1].append(align[1])
+            else:
+                alignments[motif.dir_name()] = (align[0], [align[1]])
+
+    # write alignments as html files
+    for motif in alignments.keys():
+        # generate_html_alignment()
+        template_alignments = open(f'{script_dir}/alignments.html', 'r').read()
+        template_alignments = custom_format(template_alignments, sample=motif, motif_desc=alignments[motif][0])
+        template_alignments = custom_format(template_alignments, alignments='\n'.join(alignments[motif][1]))
+
+        with open(f'{output_dir}/{motif}/alignments.html', 'w') as f:
+            f.write(template_alignments)
+
+    # copy javascript and css files
+    shutil.copy2(f'{script_dir}/msa.min.gz.js', f'{output_dir}/msa.min.gz.js')
+    shutil.copy2(f'{script_dir}/plotly-2.14.0.min.js', f'{output_dir}/plotly-2.14.0.min.js')
+    shutil.copy2(f'{script_dir}/jquery-3.6.1.min.js', f'{output_dir}/jquery-3.6.1.min.js')
+    shutil.copy2(f'{script_dir}/datatables.min.js', f'{output_dir}/datatables.min.js')
+    shutil.copy2(f'{script_dir}/styles.css', f'{output_dir}/styles.css')
+    return
+
+
+def write_report(
     all_motifs, all_annotations, all_genotypes, all_haplotypes, output_dir, flank_size, nomenclature_limit=5
 ) -> None:
     post_filter = PostFilter()
@@ -116,8 +226,6 @@ def generate_all_htmls(
     all_true = f'{output_dir}/all_profiles.true'
     pf = open(all_profiles, "w")
     tf = open(all_true, "w")
-
-    alignments: dict[str, tuple] = {}
 
     mcs: dict[str, str] = {}  # first table in html, one value, one row
     ms: dict[str, list[str]] = {}  # graphs, starts at data
@@ -174,19 +282,11 @@ def generate_all_htmls(
             # add the tables
             mcontent, m = generate_motifb64(seq, row, rep_file, pcol_file, nomenclature_lines, post_filter)
 
-            align_file = f'{motif_dir}/alignment_{suffix}.fasta'
-            filt_align_file = f'{motif_dir}/alignment_filtered_{suffix}.fasta'
-            filt_left_file = f'{motif_dir}/alignment_filtered_left_{suffix}.fasta'
-            filt_right_file = f'{motif_dir}/alignment_filtered_right_{suffix}.fasta'
-            align = generate_alignment_string(seq, row, align_file, filt_align_file, filt_left_file, filt_right_file)
-
             if motif.name in mcs:
                 ms[motif.name].append(m)
-                alignments[motif.dir_name()][1].append(align[1])
             else:
                 mcs[motif.name] = mcontent
                 ms[motif.name] = [m]
-                alignments[motif.dir_name()] = (align[0], [align[1]])
 
         motif_clean = re.sub(r'[^\w_]', '', motif.name.replace('/', '_'))
         nomenclature_file = f'{output_dir}/{motif.dir_name()}/nomenclature.txt'
@@ -205,18 +305,6 @@ def generate_all_htmls(
 
     with open(f'{output_dir}/report.html', 'w') as f:
         f.write(template)
-
-    # write alignments as html files
-    for motif_dir_name in alignments.keys():
-        # generate_html_alignment()
-        template_alignments = open(f'{script_dir}/alignments.html', 'r').read()
-        template_alignments = custom_format(
-            template_alignments, sample=motif_dir_name, motif_desc=alignments[motif_dir_name][0]
-        )
-        template_alignments = custom_format(template_alignments, alignments='\n'.join(alignments[motif_dir_name][1]))
-
-        with open(f'{output_dir}/{motif_dir_name}/alignments.html', 'w') as f:
-            f.write(template_alignments)
 
     # copy javascript and css files
     shutil.copy2(f'{script_dir}/msa.min.gz.js', f'{output_dir}/msa.min.gz.js')
@@ -993,49 +1081,28 @@ def phase(
 
 
 def write_all_files(
-    motif: Motif, result_genotypes: list, result_phasing: list, motif_dir: str, cutoff_alignments: int
+    motif: Motif, genotype: list, phasing: list, motif_dir: str, flank_size: int
 ) -> None:
-    for gt, ph in zip(result_genotypes, result_phasing):
-        (module_number, anns_spanning, anns_flanking, anns_filtered, predicted, confidence, lh_array, model) = gt
+    for gt, ph in zip(genotype, phasing):
+        (module_number, anns_spanning, anns_flanking, anns_filtered, _, _, lh_array, model) = gt
         write_all(
-            anns_spanning, anns_flanking, anns_filtered, motif_dir, motif, module_number,
-            zip_it=False, cutoff_alignments=cutoff_alignments
+            anns_spanning, anns_flanking, anns_filtered, motif_dir, motif, module_number, cutoff_alignments=flank_size
         )
 
         if lh_array is not None:
             file_pcolor = f'{motif_dir}/pcolor_{module_number}'
             model.draw_pcolor(file_pcolor, lh_array, motif.nomenclature)
 
-        # write the alignments
-        if confidence is not None:
-            # get number of precise alignments for each allele
-            a1 = int(predicted[0]) if isinstance(predicted[0], int) else None
-            a2 = int(predicted[1]) if isinstance(predicted[1], int) else None
-
-            if a1 is not None and a1 > 0:
-                write_alignment(
-                    f'{motif_dir}/alignment_{module_number}_a{a1}.fasta',
-                    anns_spanning, module_number, a1,
-                    zip_it=False, cutoff_after=cutoff_alignments
-                )
-            if a2 is not None and a2 != a1 and a2 != 0:
-                write_alignment(
-                    f'{motif_dir}/alignment_{module_number}_a{a2}.fasta',
-                    anns_spanning, module_number, a2,
-                    zip_it=False, cutoff_after=cutoff_alignments
-                )
-
         if ph is not None:
-            (module_number, anns_2good, anns_1good, anns_0good, phasing, supp_reads, prev_module_num) = ph
+            (module_number, anns_2good, anns_1good, anns_0good, phasing1, supp_reads, prev_module_num) = ph
             # write files
             write_all(
                 anns_2good, anns_1good, anns_0good, motif_dir, motif, prev_module_num,
-                second_module_number=module_number,
-                zip_it=False, cutoff_alignments=cutoff_alignments
+                second_module_number=module_number, cutoff_alignments=flank_size
             )
 
             # write phasing into a file
-            save_phasing(f'{motif_dir}/phasing_{prev_module_num}_{module_number}.txt', phasing, supp_reads)
+            save_phasing(f'{motif_dir}/phasing_{prev_module_num}_{module_number}.txt', phasing1, supp_reads)
 
 
 def generate_groups(input_stream: TextIO, chunk_size: int = 1000000) -> Iterator[pd.DataFrame]:
@@ -1290,23 +1357,21 @@ def chrom_from_string(chrom_str: str) -> ChromEnum:
     )
 
 
-def write_annotations(out_file: str, annotations: list[Annotation], zip_it: bool = True) -> None:
+def write_annotations(out_file: str, annotations: list[Annotation]) -> None:
     """
     Stores annotations in alignment format into output text file
     :param out_file: Alignment file
     :param annotations: Annotated reads
     :param zip_it: bool - whether to gzip the resulting file
     """
-    if zip_it and not out_file.endswith('.gz'):
-        out_file += '.gz'
-    with gzip.open(out_file, 'wt') if zip_it else open(out_file, 'w') as fw:
+    with open(out_file, 'w') as fw:
         for annot in annotations:
             fw.write(str(annot) + '\n')
 
 
 def write_alignment(
     out_file: str, annotations: list[Annotation], index_rep: int, allele: int | None = None,
-    index_rep2: int | None = None, allele2: int | None = None, zip_it: bool = True,
+    index_rep2: int | None = None, allele2: int | None = None,
     cutoff_after: int | None = None, right_align: bool = False
 ) -> None:
     # TODO this needs complete rework
@@ -1454,9 +1519,7 @@ def write_alignment(
         annot_names = annot_names[:first_zero_idx] + ['empty_line'] + annot_names[first_zero_idx:]
 
     # print to file
-    if zip_it and not out_file.endswith('.gz'):
-        out_file += '.gz'
-    with gzip.open(out_file, 'wt') if zip_it else open(out_file, 'w') as fw:
+    with open(out_file, 'w') as fw:
         # print alignments
         for annot_name, align in zip(annot_names, alignments):
             print(f'>{annot_name}', file=fw)
@@ -1710,7 +1773,7 @@ def plot_histogram_image_plotly(
 def write_all(
     quality_annotations: list[Annotation], filt_primer: list[Annotation], filtered_annotations: list[Annotation],
     motif_dir: str, motif_class: Motif, module_number: int, cutoff_alignments: int,
-    second_module_number: int | None = None, zip_it: bool = True
+    second_module_number: int | None = None
 ) -> None:
     """
     Write all output files: quality annotations, one-primer annotations, filtered annotations, statistics,
@@ -1730,27 +1793,21 @@ def write_all(
     suffix = str(module_number) if second_module_number is None else f'{module_number}_{second_module_number}'
 
     # write output files
-    write_annotations(f'{motif_dir}/annotations_{suffix}.txt', quality_annotations, zip_it=zip_it)
-    write_annotations(f'{motif_dir}/filtered_{suffix}.txt', filtered_annotations, zip_it=zip_it)
-    write_annotations(f'{motif_dir}/filtered_primer_{suffix}.txt', filt_primer, zip_it=zip_it)
+    write_annotations(f'{motif_dir}/annotations_{suffix}.txt', quality_annotations)
+    write_annotations(f'{motif_dir}/filtered_{suffix}.txt', filtered_annotations)
+    write_annotations(f'{motif_dir}/filtered_primer_{suffix}.txt', filt_primer)
 
     if len(quality_annotations) and max(len(a.read_seq) for a in quality_annotations) > 200:
         annotations = [a.get_shortened_annotation(cutoff_alignments) for a in quality_annotations]
-        write_annotations(f'{motif_dir}/annotations_{suffix}_short.txt', annotations, zip_it=zip_it)
+        write_annotations(f'{motif_dir}/annotations_{suffix}_short.txt', annotations)
 
     if len(filtered_annotations) and max(len(a.read_seq) for a in filtered_annotations) > 200:
         annotations = [a.get_shortened_annotation(cutoff_alignments) for a in filtered_annotations]
-        write_annotations(f'{motif_dir}/filtered_{suffix}_short.txt', annotations, zip_it=zip_it)
+        write_annotations(f'{motif_dir}/filtered_{suffix}_short.txt', annotations)
 
     if len(filt_primer) and max(len(a.read_seq) for a in filt_primer) > 200:
         annotations = [a.get_shortened_annotation(cutoff_alignments) for a in filt_primer]
-        write_annotations(f'{motif_dir}/filtered_primer_{suffix}_short.txt', annotations, zip_it=zip_it)
-
-    write_alignment(f'{motif_dir}/alignment_{suffix}.fasta', quality_annotations, module_number, index_rep2=second_module_number, zip_it=zip_it, cutoff_after=cutoff_alignments)
-    write_alignment(f'{motif_dir}/alignment_filtered_{suffix}.fasta', filt_primer, module_number, index_rep2=second_module_number, zip_it=zip_it, cutoff_after=cutoff_alignments)
-
-    write_alignment(f'{motif_dir}/alignment_filtered_left_{suffix}.fasta', [a for a in filt_primer if a.module_bases[0] > 0], module_number, index_rep2=second_module_number, zip_it=zip_it, cutoff_after=cutoff_alignments)
-    write_alignment(f'{motif_dir}/alignment_filtered_right_{suffix}.fasta', [a for a in filt_primer if a.module_bases[-1] > 0], module_number, index_rep2=second_module_number, zip_it=zip_it, cutoff_after=cutoff_alignments, right_align=True)
+        write_annotations(f'{motif_dir}/filtered_primer_{suffix}_short.txt', annotations)
 
     # write histogram image
     if second_module_number is not None:
@@ -1781,7 +1838,7 @@ def custom_format(template: str, **kwargs) -> str:
     return template
 
 
-def find_file(filename: str, include_gzip: bool = False) -> str | None:
+def find_file(filename: str) -> str | None:
     """
     Find if we have a file with the provided filename.
     :param filename: str - file name
@@ -1790,9 +1847,6 @@ def find_file(filename: str, include_gzip: bool = False) -> str | None:
     """
     if os.path.exists(filename):
         return filename
-    gzipped = filename + '.gz'
-    if include_gzip and os.path.exists(gzipped):
-        return gzipped
     return None
 
 
@@ -2189,6 +2243,7 @@ class Inference:
 
         return evaluated_models
 
+    # TODO: make this function taking model instead of method of model
     def save_pcolor_plotly_file(
         self, display_file: str,
         lh_copy: np.ndarray, lognorm: bool,
@@ -2272,6 +2327,7 @@ class Inference:
         # output best option
         return lh_array, prediction
 
+    # TODO: make this function taking model instead of method of model
     def draw_pcolor(self, display_file: str | None, lh_array: np.ndarray, name: str, lognorm: bool = True) -> None:
         if display_file is not None:
             ind_good = (lh_array < 0.0) & (lh_array > -1e10) & (lh_array != np.nan)
@@ -2896,7 +2952,7 @@ def generate_alignment(
         return ''
 
     try:
-        with gzip.open(alignment_file, 'rt') if alignment_file.endswith('.gz') else open(alignment_file) as f:
+        with open(alignment_file) as f:
             string = f.read()
         string = string[:string.find('#')]
 
