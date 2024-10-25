@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from argparse import ArgumentParser, Namespace, RawDescriptionHelpFormatter, ArgumentTypeError
 from datetime import datetime
-from typing import TextIO, Iterator
+from typing import TextIO, Iterator, TypeAlias, Any
 from collections import Counter
 
 import csv
@@ -50,6 +50,11 @@ BASE_MAPPING = {
     'N': '[ACGT]'
 }
 
+# vocabulary:
+# Motif
+# Nomenclature
+# Locus - repetitive module of a Motif
+# Allele
 
 # open(file: _OpenFile, mode: OpenTextMode=..., buffering: int=..., encoding: Optional[str]=...,
 #      errors: Optional[str]=..., newline: Optional[str]=..., closefd: bool=..., opener: Optional[_Opener]=...
@@ -99,10 +104,14 @@ def main() -> None:
         script_dir = os.path.dirname(os.path.abspath(__file__)) + "/dante_remastr_standalone_templates"
 
         print(f'Writing alignment htmls: {datetime.now():%Y-%m-%d %H:%M:%S}')
-        generate_alignment_htmls(all_motifs, all_genotypes, all_haplotypes, script_dir, args.output_dir, args.cutoff_alignments)
+        for (motif, genotype, phasing) in zip(all_motifs, all_genotypes, all_haplotypes):
+            write_alignment_html(motif, genotype, phasing, script_dir, args.output_dir, args.cutoff_alignments)
 
         print(f'Writing html report: {datetime.now():%Y-%m-%d %H:%M:%S}')
-        write_report(all_motifs, all_annotations, all_genotypes, all_haplotypes, script_dir, args.output_dir, args.cutoff_alignments)
+        write_report(
+            all_motifs, all_annotations, all_genotypes, all_haplotypes, script_dir, args.output_dir,
+            args.cutoff_alignments
+        )
 
         # copy javascript and css files
         shutil.copy2(f'{script_dir}/msa.min.gz.js',         f'{args.output_dir}/msa.min.gz.js')
@@ -117,158 +126,145 @@ def main() -> None:
     print(f'Total time of run      : {end_time - start_time}')
 
 
-def generate_alignment_htmls(
-    all_motifs, all_genotypes, all_haplotypes, script_dir, output_dir, flank_size
+def write_alignment_html(
+    motif: Motif, genotype: list[GenotypeInfo], phasing: list[None | tuple],
+    script_dir: str, output_dir: str, flank_size: int
 ) -> None:
-    for (motif, genotype, phasing) in zip(all_motifs, all_genotypes, all_haplotypes):
-        seq = motif.modules_str(include_flanks=True)
-        motif_dir = f'{output_dir}/{motif.dir_name()}'
-        os.makedirs(motif_dir, exist_ok=True)
+    seq = motif.modules_str(include_flanks=True)
+    motif_dir = f'{output_dir}/{motif.dir_name()}'
+    os.makedirs(motif_dir, exist_ok=True)
+    motif_desc = motif.name
 
-        rls = []
-        for gt in genotype:
-            (module_number, anns_spanning, anns_flanking, anns_filtered, predicted, confidence, _, _) = gt
-            suffix = str(module_number)
-            anns_flanking_left = [a for a in anns_flanking if a.module_bases[0] > 0]
-            anns_flanking_right = [a for a in anns_flanking if a.module_bases[-1] > 0]
-            write_alignment(
-                f'{motif_dir}/alignment_{suffix}.fasta',
-                anns_spanning, module_number, index_rep2=None, cutoff_after=flank_size
-            )
-            write_alignment(
-                f'{motif_dir}/alignment_filtered_{suffix}.fasta',
-                anns_flanking, module_number, index_rep2=None, cutoff_after=flank_size
-            )
-            write_alignment(
-                f'{motif_dir}/alignment_filtered_left_{suffix}.fasta',
-                anns_flanking_left, module_number, index_rep2=None, cutoff_after=flank_size
-            )
-            write_alignment(
-                f'{motif_dir}/alignment_filtered_right_{suffix}.fasta',
-                anns_flanking_right, module_number, index_rep2=None, cutoff_after=flank_size, right_align=True
-            )
+    alignments = []
+    for gt in genotype:
+        (module_number, anns_spanning, anns_flanking, _, predicted, _, _, _) = gt
 
-            # write the alignments
-            if confidence is not None:
-                a1 = int(predicted[0]) if isinstance(predicted[0], int) else None
-                a2 = int(predicted[1]) if isinstance(predicted[1], int) else None
+        suffix = str(module_number)
+        highlight = list(map(int, str(module_number).split('_')))
+        sequence, _subpart = highlight_subpart(seq, highlight)
+        motif_name_part1 = f'{motif_desc.replace("/", "_")}'
+        motif_name_part2 = f'{",".join(map(str, highlight)) if highlight is not None else "mot"}'
+        motif_name = f'{motif_name_part1}_{motif_name_part2}'
+        motif_clean = re.sub(r'[^\w_]', '', motif_name)
+        motif_clean_split = motif_clean.split('_')[0]
 
-                if a1 is not None and a1 > 0:
-                    write_alignment(
-                        f'{motif_dir}/alignment_{module_number}_a{a1}.fasta',
-                        anns_spanning, module_number, a1, cutoff_after=flank_size
-                    )
-                if a2 is not None and a2 != a1 and a2 != 0:
-                    write_alignment(
-                        f'{motif_dir}/alignment_{module_number}_a{a2}.fasta',
-                        anns_spanning, module_number, a2, cutoff_after=flank_size
-                    )
+        a1 = int(predicted[0]) if isinstance(predicted[0], int) else None
+        a2 = int(predicted[1]) if isinstance(predicted[1], int) else None
 
-            rl_gt = generate_result_line(
-                motif, predicted, confidence, len(anns_spanning), len(anns_flanking), len(anns_filtered), module_number,
-                qual_annot=anns_spanning
-            )
-            rls.append(rl_gt)
+        anns_flanking_left = [a for a in anns_flanking if a.module_bases[0] > 0]
+        anns_flanking_right = [a for a in anns_flanking if a.module_bases[-1] > 0]
 
-        for ph in phasing[1:]:  # first phasing is None
-            (module_number, anns_2good, anns_1good, anns_0good, phasing1, supp_reads, prev_module_num) = ph
-            suffix = f'{prev_module_num}_{module_number}'
-            anns_1good_left = [a for a in anns_1good if a.module_bases[0] > 0]
-            anns_1good_right = [a for a in anns_1good if a.module_bases[-1] > 0]
-            write_alignment(
-                f'{motif_dir}/alignment_{suffix}.fasta', anns_2good,
-                prev_module_num, index_rep2=module_number, cutoff_after=flank_size
+        align_file = f'{motif_dir}/alignment_{suffix}.fasta'
+        write_alignment(align_file, anns_spanning, module_number, index_rep2=None, cutoff_after=flank_size)
+        align_html = generate_alignment(
+            motif_clean, align_file, motif_clean_split, 'Spanning reads alignment visualization'
+        )
+
+        filt_align_file = f'{motif_dir}/alignment_filtered_{suffix}.fasta'
+        write_alignment(filt_align_file, anns_flanking, module_number, index_rep2=None, cutoff_after=flank_size)
+        filt_align_html = generate_alignment(
+            motif_clean + '_filtered', filt_align_file, motif_clean_split, 'Partial reads alignment visualization', seq_logo=False
+        )
+
+        filt_left_file = f'{motif_dir}/alignment_filtered_left_{suffix}.fasta'
+        write_alignment(filt_left_file, anns_flanking_left, module_number, index_rep2=None, cutoff_after=flank_size)
+        left_align_html = generate_alignment(
+            motif_clean + '_filtered_left', filt_left_file, motif_clean_split,
+            'Left flank reads alignment visualization'
+        )
+
+        filt_right_file = f'{motif_dir}/alignment_filtered_right_{suffix}.fasta'
+        write_alignment(filt_right_file, anns_flanking_right, module_number, index_rep2=None, cutoff_after=flank_size, right_align=True)
+        right_align_html = generate_alignment(
+            motif_clean + '_filtered_right', filt_right_file, motif_clean.split('_')[0],
+            'Right flank reads alignment visualization'
+        )
+
+        align_html_a1 = ''
+        align_html_a2 = ''
+        if a1 is not None and a1 > 0:
+            align_a1_file = f'{motif_dir}/alignment_{module_number}_a{a1}.fasta'
+            write_alignment(align_a1_file, anns_spanning, module_number, a1, cutoff_after=flank_size)
+            align_html_a1 = generate_alignment(
+                f'{motif_clean}_{str(a1)}', align_a1_file, motif_clean_split,
+                f'Allele 1 ({str(a1):2s}) alignment visualization'
             )
-            write_alignment(
-                f'{motif_dir}/alignment_filtered_{suffix}.fasta', anns_1good,
-                prev_module_num, index_rep2=module_number, cutoff_after=flank_size
-            )
-            write_alignment(
-                f'{motif_dir}/alignment_filtered_left_{suffix}.fasta', anns_1good_left,
-                prev_module_num, index_rep2=module_number, cutoff_after=flank_size
-            )
-            write_alignment(
-                f'{motif_dir}/alignment_filtered_right_{suffix}.fasta', anns_1good_right,
-                prev_module_num, index_rep2=module_number, cutoff_after=flank_size, right_align=True
+        if a2 is not None and a2 != a1 and a2 != 0:
+            align_a2_file = f'{motif_dir}/alignment_{module_number}_a{a2}.fasta'
+            write_alignment(align_a2_file, anns_spanning, module_number, a2, cutoff_after=flank_size)
+            align_html_a2 = generate_alignment(
+                f'{motif_clean}_{str(a2)}', get_alignment_name(align_file, a2), motif_clean.split('_')[0],
+                f'Allele 2 ({str(a2):2s}) alignment visualization'
             )
 
-            rl_ph = generate_result_line(
-                motif, phasing1, supp_reads, len(anns_2good), len(anns_1good), len(anns_0good), prev_module_num,
-                second_module_number=module_number
-            )
-            rls.append(rl_ph)
+        alignment = align_html + align_html_a1 + align_html_a2 + filt_align_html + left_align_html + right_align_html
+        align = ALIGNMENT_STRING.format(sequence=sequence, alignment=alignment)
 
-        rls_df = pd.DataFrame.from_records(rls)
-        alignments = []
-        for _, row in rls_df.iterrows():
-            phasing = '_' in str(row['repetition_index'])
-            suffix = row['repetition_index']
+        alignments.append(align)
 
-            highlight = list(map(int, str(row['repetition_index']).split('_')))
-            sequence, _subpart = highlight_subpart(seq, highlight)
-            motif1 = row['motif_name']
-            motif_name_part1 = f'{motif1.replace("/", "_")}'
-            motif_name_part2 = f'{",".join(map(str, highlight)) if highlight is not None else "mot"}'
-            motif_name = f'{motif_name_part1}_{motif_name_part2}'
-            motif_clean = re.sub(r'[^\w_]', '', motif_name)
-            motif_clean_split = motif_clean.split('_')[0]
+    for ph in phasing[1:]:  # first phasing is None
+        if ph is None:
+            raise ValueError
+        (module_number, anns_2good, anns_1good, _, _, _, prev_module_num) = ph
 
-            align_file = f'{motif_dir}/alignment_{suffix}.fasta'
-            align_html = generate_alignment(
-                motif_clean, align_file, motif_clean.split('_')[0],
-                'Spanning reads alignment visualization'
-            )
+        suffix = f'{prev_module_num}_{module_number}'
 
-            filt_align_file = f'{motif_dir}/alignment_filtered_{suffix}.fasta'
-            filt_align_html = generate_alignment(
-                motif_clean + '_filtered', filt_align_file, motif_clean.split('_')[0],
-                'Partial reads alignment visualization', seq_logo=False
-            )
+        highlight = list(map(int, str(suffix).split('_')))
+        sequence, _subpart = highlight_subpart(seq, highlight)
+        motif_name_part1 = f'{motif_desc.replace("/", "_")}'
+        motif_name_part2 = f'{",".join(map(str, highlight)) if highlight is not None else "mot"}'
+        motif_name = f'{motif_name_part1}_{motif_name_part2}'
+        motif_clean = re.sub(r'[^\w_]', '', motif_name)
+        motif_clean_split = motif_clean.split('_')[0]
 
-            filt_left_file = f'{motif_dir}/alignment_filtered_left_{suffix}.fasta'
-            left_align_html = generate_alignment(
-                motif_clean + '_filtered_left', filt_left_file, motif_clean.split('_')[0],
-                'Left flank reads alignment visualization'
-            )
+        anns_1good_left = [a for a in anns_1good if a.module_bases[0] > 0]
+        anns_1good_right = [a for a in anns_1good if a.module_bases[-1] > 0]
 
-            filt_right_file = f'{motif_dir}/alignment_filtered_right_{suffix}.fasta'
-            right_align_html = generate_alignment(
-                motif_clean + '_filtered_right', filt_right_file, motif_clean.split('_')[0],
-                'Right flank reads alignment visualization'
-            )
+        align_file = f'{motif_dir}/alignment_{suffix}.fasta'
+        write_alignment(align_file, anns_2good, prev_module_num, index_rep2=module_number, cutoff_after=flank_size)
+        align_html = generate_alignment(
+            motif_clean, align_file, motif_clean.split('_')[0],
+            'Spanning reads alignment visualization'
+        )
 
-            a1 = row['allele1']
-            a2 = row['allele2']
+        filt_align_file = f'{motif_dir}/alignment_filtered_{suffix}.fasta'
+        write_alignment(
+            filt_align_file, anns_1good, prev_module_num, index_rep2=module_number, cutoff_after=flank_size
+        )
+        filt_align_html = generate_alignment(
+            motif_clean + '_filtered', filt_align_file, motif_clean.split('_')[0],
+            'Partial reads alignment visualization', seq_logo=False
+        )
 
-            align_html_a1 = ''
-            align_html_a2 = ''
-            if (a1 == 'B' and a2 == 'B') or (a1 == 0 and a2 == 0):
-                pass
-            else:
-                align_html_a1 = generate_alignment(
-                    f'{motif_clean}_{str(a1)}', get_alignment_name(align_file, a1), motif_clean_split,
-                    f'Allele 1 ({str(a1):2s}) alignment visualization'
-                )
-                if a1 != a2:
-                    align_html_a2 = generate_alignment(
-                        f'{motif_clean}_{str(a2)}', get_alignment_name(align_file, a2), motif_clean.split('_')[0],
-                        f'Allele 2 ({str(a2):2s}) alignment visualization'
-                    )
+        filt_left_file = f'{motif_dir}/alignment_filtered_left_{suffix}.fasta'
+        write_alignment(
+            filt_left_file, anns_1good_left, prev_module_num, index_rep2=module_number, cutoff_after=flank_size
+        )
+        left_align_html = generate_alignment(
+            motif_clean + '_filtered_left', filt_left_file, motif_clean.split('_')[0],
+            'Left flank reads alignment visualization'
+        )
 
-            alignment = align_html + align_html_a1 + align_html_a2 + filt_align_html + left_align_html + right_align_html
-            align = (motif1, ALIGNMENT_STRING.format(sequence=sequence, alignment=alignment))
+        filt_right_file = f'{motif_dir}/alignment_filtered_right_{suffix}.fasta'
+        write_alignment(
+            filt_right_file, anns_1good_right, prev_module_num, index_rep2=module_number, cutoff_after=flank_size, right_align=True
+        )
+        right_align_html = generate_alignment(
+            motif_clean + '_filtered_right', filt_right_file, motif_clean.split('_')[0],
+            'Right flank reads alignment visualization'
+        )
 
-            alignments.append(align[1])
+        alignment = align_html + align_html_a1 + align_html_a2 + filt_align_html + left_align_html + right_align_html
+        align = ALIGNMENT_STRING.format(sequence=sequence, alignment=alignment)
 
-        motif_desc = align[0]
-        mt = motif.dir_name()
-        template_alignments = open(f'{script_dir}/alignments.html', 'r').read()
-        template_alignments = custom_format(template_alignments, sample=mt, motif_desc=motif_desc)
-        template_alignments = custom_format(template_alignments, alignments='\n'.join(alignments))
+        alignments.append(align)
 
-        with open(f'{output_dir}/{mt}/alignments.html', 'w') as f:
-            f.write(template_alignments)
+    mt = motif.dir_name()
+    template_alignments = open(f'{script_dir}/alignments.html', 'r').read()
+    template_alignments = custom_format(template_alignments, sample=mt, motif_desc=motif_desc, alignments='\n'.join(alignments))
 
+    with open(f'{output_dir}/{mt}/alignments.html', 'w') as f:
+        f.write(template_alignments)
     return
 
 
@@ -1054,7 +1050,7 @@ def create_annotations(df: pd.DataFrame, motif: Motif) -> list[Annotation]:
 def genotype_group(
     motif: Motif, monoallelic: bool,  # this could be included in Motif
     annotations: list[Annotation]  # I would prefer to get dataframe here
-) -> list[tuple]:
+) -> list[GenotypeInfo]:
     result_genotypes = []
 
     postfilter = PostFilter()
@@ -2421,7 +2417,7 @@ class Inference:
 
     def get_confidence(
         self, lh_array: np.ndarray, predicted: tuple[int, int], monoallelic: bool = False
-    ) -> tuple[float, float, float, float, float, float, float]:
+    ) -> Confidences:
         """
         Get confidence of a prediction.
         :param lh_array: 2D-ndarray - log likelihoods of the prediction
@@ -2433,7 +2429,9 @@ class Inference:
         # get confidence
         lh_corr_array = lh_array - np.max(lh_array)
         lh_sum = np.sum(np.exp(lh_corr_array))
-        confidence = np.exp(lh_corr_array[predicted[0], predicted[1]]) / lh_sum
+        confidence: float = np.exp(lh_corr_array[predicted[0], predicted[1]]) / lh_sum
+        confidence1: float
+        confidence2: float
         if predicted[0] == predicted[1]:  # same alleles - we compute the probability per allele
             confidence1 = np.sum(np.exp(lh_corr_array[predicted[0], :])) / lh_sum
             confidence2 = np.sum(np.exp(lh_corr_array[:, predicted[1]])) / lh_sum
@@ -2456,13 +2454,13 @@ class Inference:
                 - np.exp(lh_corr_array[predicted[1], predicted[1]])
             ) / lh_sum
 
-        confidence_back = np.exp(lh_corr_array[0, 0]) / lh_sum
-        confidence_back_all = np.sum(np.exp(lh_corr_array[0, :])) / lh_sum
-        confidence_exp = np.exp(lh_corr_array[0, self.max_rep]) / lh_sum
-        confidence_exp_all = np.sum(np.exp(lh_corr_array[:, self.max_rep])) / lh_sum
+        confidence_back: float = np.exp(lh_corr_array[0, 0]) / lh_sum
+        confidence_back_all: float = np.sum(np.exp(lh_corr_array[0, :])) / lh_sum
+        confidence_exp: float = np.exp(lh_corr_array[0, self.max_rep]) / lh_sum
+        confidence_exp_all: float = np.sum(np.exp(lh_corr_array[:, self.max_rep])) / lh_sum
 
         if monoallelic:
-            confidence2 = '---'
+            confidence2 = '---'  # TODO: fix this
 
         return (
             confidence, confidence1, confidence2,
@@ -2472,17 +2470,14 @@ class Inference:
 
     def genotype(
         self, spanning: list[Annotation], partial: list[Annotation], index_rep: int, monoallelic: bool = False
-    ) -> tuple[np.ndarray | None, tuple[str | int, str | int], tuple[float, float, float, float, float, float, float]]:
+    ) -> tuple[np.ndarray | None, tuple[str | int, str | int], Confidences]:
         """
-        Genotype based on all annotations - infer likelihoods, print pcolor and write output
-        :param annotations: list(Annotation) - good (blue) annotations
-        :param filt_annotations: list(Annotation) - (grey) annotations with one primer
+        Genotype based on all annotations - infer likelihoods
+        :param spanning: list(Annotation) - good (blue) annotations
+        :param partial: list(Annotation) - (grey) annotations with one primer
         :param index_rep: int - index of a repetition
-        :param file_pcolor: str - file prefix for a pcolor image
-        :param file_output: str - file for genotyping output
-        :param name: str - name of the sample
         :param monoallelic: bool - do we have a mono-allelic motif (i.e. chrX/chrY and male sample?)
-        :return: tuple - predicted symbols and confidences
+        :return: predicted symbols and confidences
         """
         # if we do not have any good annotations, then quit
         if len(spanning) == 0 and len(partial) == 0:
@@ -2931,7 +2926,7 @@ def generate_motifb64(
 
 
 def generate_alignment(
-    motif: str, alignment_file: str | None, motif_id: str,
+    motif: str, alignment_file: str, motif_id: str,
     display_text: str = 'Click to toggle alignment visualization',
     seq_logo: bool = True
 ) -> str:
@@ -2944,20 +2939,21 @@ def generate_alignment(
     :param seq_logo: bool - display sequence logo?
     :return: str - code of the fancy alignment
     """
-    if alignment_file is None:
-        return ''
+    with open(alignment_file) as f:
+        string = f.read()
+    string = string[:string.find('#')]
 
-    try:
-        with open(alignment_file) as f:
-            string = f.read()
-        string = string[:string.find('#')]
+    return ALIGN_VIS.format(
+        fasta=string, name=motif, motif_id=motif_id,
+        display_text=display_text, seq_logo='true' if seq_logo else 'false'
+    )
 
-        return ALIGN_VIS.format(
-            fasta=string, name=motif, motif_id=motif_id,
-            display_text=display_text, seq_logo='true' if seq_logo else 'false'
-        )
-    except (IOError, TypeError, AttributeError):
-        return ''
+
+Confidences: TypeAlias = tuple[float, float, float, float, float, float, float]
+GenotypeInfo: TypeAlias = tuple[
+    int, list[Annotation], list[Annotation], list[Annotation], tuple[str | int, str | int],
+    Confidences, np.ndarray[Any, Any] | None, Inference
+]
 
 
 # %%
