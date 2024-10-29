@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Dante alignments</title>
+
+    <script src="https://cdn.bio.sh/msa/latest/msa.min.gz.js"></script>
+    <script src="../msa.min.gz.js"></script>
+
+    <link rel="stylesheet" type="text/css" href="https://www.w3schools.com/w3css/4/w3.css">
+
+    <style>
+        body {
+            padding: 20px;
+            font-family: Verdana, sans-serif;
+            font-size: 15px;
+            line-height: 1.5
+        }
+
+        p {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body class="valo v-app">
+
+<div id="sample_name" style="display: none">{{ sample }}</div>
+
+<h2>{{ motif_desc }}</h2>
+
+<!-- Content -->
+{% for (sequence, motif_id, data) in data2 %}
+  <p>{{ sequence }}</p>
+  {% for (name, display_text, fasta, seq_logo) in data %}
+  <details>
+    <summary>{{ display_text }}</summary>
+    <div id="A{{ name }}" class="align">press "Run with JS"</div>
+    <script>
+        var fasta = `{{ fasta }}`;
+        var seqs = msa.io.fasta.parse(fasta);
+        var opts = {
+            el: document.getElementById("A{{ name }}"),
+            vis: {
+                conserv: false,
+                metaIdentity: true,
+                overviewbox: true,
+                seqlogo: {{ seq_logo }}
+            },
+            seqs: seqs,
+            colorscheme: {"scheme": "nucleotide"},
+            // smaller menu for JSBin
+            menu: "small",
+            bootstrapMenu: true
+        };
+        var m = new msa.msa(opts);
+        m.render()
+    </script>
+  </details>
+{% endfor %}
+  <hr>
+
+{% endfor %}</body>
+</html>

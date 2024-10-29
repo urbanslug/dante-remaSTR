@@ -4,6 +4,7 @@ from argparse import ArgumentParser, Namespace, RawDescriptionHelpFormatter, Arg
 from datetime import datetime
 from typing import TextIO, Iterator, TypeAlias, Any
 from collections import Counter
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 import csv
 import os
@@ -135,7 +136,7 @@ def write_alignment_html(
     os.makedirs(motif_dir, exist_ok=True)
     motif_desc = motif.name
 
-    alignments = []
+    data2 = []
     for gt in genotype:
         (module_number, anns_spanning, anns_flanking, _, predicted, _, _, _) = gt
 
@@ -154,54 +155,47 @@ def write_alignment_html(
         anns_flanking_left = [a for a in anns_flanking if a.module_bases[0] > 0]
         anns_flanking_right = [a for a in anns_flanking if a.module_bases[-1] > 0]
 
-        string = write_alignment(anns_spanning, module_number, index_rep2=None, cutoff_after=flank_size)
-        # align_file = f'{motif_dir}/alignment_{suffix}.fasta'
-        # with open(align_file, 'w') as fw:
-        #     fw.write(string)
+        data = []
+
+        name = motif_clean
         display_text = 'Spanning reads alignment visualization'
+        fasta = write_alignment(anns_spanning, module_number, index_rep2=None, cutoff_after=flank_size)
         seq_logo = 'true'
-        align_html = ALIGN_VIS.format(fasta=string, name=motif_clean, motif_id=motif_id, display_text=display_text, seq_logo=seq_logo)
+        data.append((name, display_text, fasta, seq_logo))
 
-        string = write_alignment(anns_flanking, module_number, index_rep2=None, cutoff_after=flank_size)
-        name = motif_clean + '_filtered'
-        display_text = 'Partial reads alignment visualization'
-        seq_logo = 'false'
-        # align_file = f'{motif_dir}/alignment_filtered_{suffix}.fasta'
-        filt_align_html = ALIGN_VIS.format(fasta=string, name=name, motif_id=motif_id, display_text=display_text, seq_logo=seq_logo)
-
-        string = write_alignment(anns_flanking_left, module_number, index_rep2=None, cutoff_after=flank_size)
-        name = motif_clean + '_filtered_left'
-        display_text = 'Left flank reads alignment visualization'
-        seq_logo = 'true'
-        # align_file = f'{motif_dir}/alignment_filtered_left_{suffix}.fasta'
-        left_align_html = ALIGN_VIS.format(fasta=string, name=name, motif_id=motif_id, display_text=display_text, seq_logo=seq_logo)
-
-        string = write_alignment(anns_flanking_right, module_number, index_rep2=None, cutoff_after=flank_size, right_align=True)
-        name = motif_clean + '_filtered_right'
-        display_text = 'Right flank reads alignment visualization'
-        # align_file = f'{motif_dir}/alignment_filtered_right_{suffix}.fasta'
-        right_align_html = ALIGN_VIS.format(fasta=string, name=name, motif_id=motif_id, display_text=display_text, seq_logo=seq_logo)
-
-        align_html_a1 = ''
         if a1 is not None and a1 > 0:
-            string = write_alignment(anns_spanning, module_number, a1, cutoff_after=flank_size)
             name = f'{motif_clean}_{str(a1)}'
             display_text = f'Allele 1 ({str(a1):2s}) alignment visualization'
-            # align_file = f'{motif_dir}/alignment_{module_number}_a{a1}.fasta'
-            align_html_a1 = ALIGN_VIS.format(fasta=string, name=name, motif_id=motif_id, display_text=display_text, seq_logo=seq_logo)
+            fasta = write_alignment(anns_spanning, module_number, a1, cutoff_after=flank_size)
+            seq_logo = 'true'
+            data.append((name, display_text, fasta, seq_logo))
 
-        align_html_a2 = ''
         if a2 is not None and a2 != a1 and a2 != 0:
-            string = write_alignment(anns_spanning, module_number, a2, cutoff_after=flank_size)
             name = f'{motif_clean}_{str(a2)}'
             display_text = f'Allele 2 ({str(a2):2s}) alignment visualization'
-            # align_file = f'{motif_dir}/alignment_{module_number}_a{a2}.fasta'
-            align_html_a2 = ALIGN_VIS.format(fasta=string, name=name, motif_id=motif_id, display_text=display_text, seq_logo=seq_logo)
+            fasta = write_alignment(anns_spanning, module_number, a2, cutoff_after=flank_size)
+            seq_logo = 'true'
+            data.append((name, display_text, fasta, seq_logo))
 
-        alignment = align_html + align_html_a1 + align_html_a2 + filt_align_html + left_align_html + right_align_html
-        align = ALIGNMENT_STRING.format(sequence=sequence, alignment=alignment)
+        name = motif_clean + '_filtered'
+        display_text = 'Partial reads alignment visualization'
+        fasta = write_alignment(anns_flanking, module_number, index_rep2=None, cutoff_after=flank_size)
+        seq_logo = 'false'
+        data.append((name, display_text, fasta, seq_logo))
 
-        alignments.append(align)
+        name = motif_clean + '_filtered_left'
+        display_text = 'Left flank reads alignment visualization'
+        fasta = write_alignment(anns_flanking_left, module_number, index_rep2=None, cutoff_after=flank_size)
+        seq_logo = 'true'
+        data.append((name, display_text, fasta, seq_logo))
+
+        name = motif_clean + '_filtered_right'
+        display_text = 'Right flank reads alignment visualization'
+        fasta = write_alignment(anns_flanking_right, module_number, index_rep2=None, cutoff_after=flank_size, right_align=True)
+        seq_logo = 'true'
+        data.append((name, display_text, fasta, seq_logo))
+
+        data2.append((sequence, motif_id, data))
 
     for ph in phasing[1:]:  # first phasing is None
         if ph is None:
@@ -221,41 +215,59 @@ def write_alignment_html(
         anns_1good_left = [a for a in anns_1good if a.module_bases[0] > 0]
         anns_1good_right = [a for a in anns_1good if a.module_bases[-1] > 0]
 
-        string = write_alignment(anns_2good, prev_module_num, index_rep2=module_number, cutoff_after=flank_size)
-        # align_file = f'{motif_dir}/alignment_{suffix}.fasta'
-        display_text = 'Spanning reads alignment visualization'
-        seq_logo = 'true'
-        align_html = ALIGN_VIS.format(fasta=string, name=motif_clean, motif_id=motif_id, display_text=display_text, seq_logo=seq_logo)
+        data = []
 
-        string = write_alignment(anns_1good, prev_module_num, index_rep2=module_number, cutoff_after=flank_size)
-        # align_file = f'{motif_dir}/alignment_filtered_{suffix}.fasta'
+        name = motif_clean
+        display_text = 'Spanning reads alignment visualization'
+        fasta = write_alignment(anns_2good, prev_module_num, index_rep2=module_number, cutoff_after=flank_size)
+        seq_logo = 'true'
+        data.append((name, display_text, fasta, seq_logo))
+
         name = motif_clean + '_filtered'
         display_text = 'Partial reads alignment visualization'
-        filt_align_html = ALIGN_VIS.format(fasta=string, name=name, motif_id=motif_id, display_text=display_text, seq_logo=seq_logo)
+        fasta = write_alignment(anns_1good, prev_module_num, index_rep2=module_number, cutoff_after=flank_size)
+        seq_logo = 'true'
+        data.append((name, display_text, fasta, seq_logo))
 
-        string = write_alignment(anns_1good_left, prev_module_num, index_rep2=module_number, cutoff_after=flank_size)
-        # align_file = f'{motif_dir}/alignment_filtered_left_{suffix}.fasta'
         name = motif_clean + '_filtered_left'
         display_text = 'Left flank reads alignment visualization'
-        left_align_html = ALIGN_VIS.format(fasta=string, name=name, motif_id=motif_id, display_text=display_text, seq_logo=seq_logo)
+        fasta = write_alignment(anns_1good_left, prev_module_num, index_rep2=module_number, cutoff_after=flank_size)
+        seq_logo = 'true'
+        data.append((name, display_text, fasta, seq_logo))
 
-        string = write_alignment(anns_1good_right, prev_module_num, index_rep2=module_number, cutoff_after=flank_size, right_align=True)
-        # align_file = f'{motif_dir}/alignment_filtered_right_{suffix}.fasta'
         name = motif_clean + '_filtered_right'
         display_text = 'Right flank reads alignment visualization'
-        right_align_html = ALIGN_VIS.format(fasta=string, name=name, motif_id=motif_id, display_text=display_text, seq_logo=seq_logo)
+        fasta = write_alignment(anns_1good_right, prev_module_num, index_rep2=module_number, cutoff_after=flank_size, right_align=True)
+        seq_logo = 'true'
+        data.append((name, display_text, fasta, seq_logo))
 
-        alignment = align_html + filt_align_html + left_align_html + right_align_html
-        align = ALIGNMENT_STRING.format(sequence=sequence, alignment=alignment)
-
-        alignments.append(align)
+        data2.append((sequence, motif_id, data))
 
     mt = motif.dir_name()
+
+    # --------------------------------------------------------------------------
+    alignments = []
+    for (sequence, motif_id, data) in data2:
+        aligns = []
+        for (name, display_text, fasta, seq_logo) in data:
+            a = ALIGN_VIS.format(motif_id=motif_id, name=name, display_text=display_text, fasta=fasta, seq_logo=seq_logo)
+            aligns.append(a)
+        align = ALIGNMENT_STRING.format(sequence=sequence, alignment="".join(aligns))
+        alignments.append(align)
+
     template_alignments = open(f'{script_dir}/alignments.html', 'r').read()
     template_alignments = custom_format(template_alignments, sample=mt, motif_desc=motif_desc, alignments='\n'.join(alignments))
-
     with open(f'{output_dir}/{mt}/alignments.html', 'w') as f:
         f.write(template_alignments)
+    # --------------------------------------------------------------------------
+
+    env = Environment(loader=FileSystemLoader([script_dir]))
+    # env = Environment(loader=FileSystemLoader([script_dir]), autoescape=select_autoescape())
+    template = env.get_template("alignments_template.html")
+    output = template.render(sample=mt, motif_desc=motif_desc, data2=data2)
+    with open(f"{output_dir}/{mt}/alignments_2.html", "w") as f:
+        f.write(output)
+
     return
 
 
