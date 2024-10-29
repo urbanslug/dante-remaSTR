@@ -146,7 +146,7 @@ def write_alignment_html(
         motif_name_part2 = f'{",".join(map(str, highlight)) if highlight is not None else "mot"}'
         motif_name = f'{motif_name_part1}_{motif_name_part2}'
         motif_clean = re.sub(r'[^\w_]', '', motif_name)
-        motif_clean_split = motif_clean.split('_')[0]
+        motif_id = motif_clean.split('_')[0]
 
         a1 = int(predicted[0]) if isinstance(predicted[0], int) else None
         a2 = int(predicted[1]) if isinstance(predicted[1], int) else None
@@ -154,48 +154,49 @@ def write_alignment_html(
         anns_flanking_left = [a for a in anns_flanking if a.module_bases[0] > 0]
         anns_flanking_right = [a for a in anns_flanking if a.module_bases[-1] > 0]
 
-        align_file = f'{motif_dir}/alignment_{suffix}.fasta'
-        write_alignment(align_file, anns_spanning, module_number, index_rep2=None, cutoff_after=flank_size)
-        align_html = generate_alignment(
-            motif_clean, align_file, motif_clean_split, 'Spanning reads alignment visualization'
-        )
+        string = write_alignment(anns_spanning, module_number, index_rep2=None, cutoff_after=flank_size)
+        # align_file = f'{motif_dir}/alignment_{suffix}.fasta'
+        # with open(align_file, 'w') as fw:
+        #     fw.write(string)
+        display_text = 'Spanning reads alignment visualization'
+        seq_logo = 'true'
+        align_html = ALIGN_VIS.format(fasta=string, name=motif_clean, motif_id=motif_id, display_text=display_text, seq_logo=seq_logo)
 
-        filt_align_file = f'{motif_dir}/alignment_filtered_{suffix}.fasta'
-        write_alignment(filt_align_file, anns_flanking, module_number, index_rep2=None, cutoff_after=flank_size)
-        filt_align_html = generate_alignment(
-            motif_clean + '_filtered', filt_align_file, motif_clean_split, 'Partial reads alignment visualization', seq_logo=False
-        )
+        string = write_alignment(anns_flanking, module_number, index_rep2=None, cutoff_after=flank_size)
+        name = motif_clean + '_filtered'
+        display_text = 'Partial reads alignment visualization'
+        seq_logo = 'false'
+        # align_file = f'{motif_dir}/alignment_filtered_{suffix}.fasta'
+        filt_align_html = ALIGN_VIS.format(fasta=string, name=name, motif_id=motif_id, display_text=display_text, seq_logo=seq_logo)
 
-        filt_left_file = f'{motif_dir}/alignment_filtered_left_{suffix}.fasta'
-        write_alignment(filt_left_file, anns_flanking_left, module_number, index_rep2=None, cutoff_after=flank_size)
-        left_align_html = generate_alignment(
-            motif_clean + '_filtered_left', filt_left_file, motif_clean_split,
-            'Left flank reads alignment visualization'
-        )
+        string = write_alignment(anns_flanking_left, module_number, index_rep2=None, cutoff_after=flank_size)
+        name = motif_clean + '_filtered_left'
+        display_text = 'Left flank reads alignment visualization'
+        seq_logo = 'true'
+        # align_file = f'{motif_dir}/alignment_filtered_left_{suffix}.fasta'
+        left_align_html = ALIGN_VIS.format(fasta=string, name=name, motif_id=motif_id, display_text=display_text, seq_logo=seq_logo)
 
-        filt_right_file = f'{motif_dir}/alignment_filtered_right_{suffix}.fasta'
-        write_alignment(filt_right_file, anns_flanking_right, module_number, index_rep2=None, cutoff_after=flank_size, right_align=True)
-        right_align_html = generate_alignment(
-            motif_clean + '_filtered_right', filt_right_file, motif_clean.split('_')[0],
-            'Right flank reads alignment visualization'
-        )
+        string = write_alignment(anns_flanking_right, module_number, index_rep2=None, cutoff_after=flank_size, right_align=True)
+        name = motif_clean + '_filtered_right'
+        display_text = 'Right flank reads alignment visualization'
+        # align_file = f'{motif_dir}/alignment_filtered_right_{suffix}.fasta'
+        right_align_html = ALIGN_VIS.format(fasta=string, name=name, motif_id=motif_id, display_text=display_text, seq_logo=seq_logo)
 
         align_html_a1 = ''
-        align_html_a2 = ''
         if a1 is not None and a1 > 0:
-            align_a1_file = f'{motif_dir}/alignment_{module_number}_a{a1}.fasta'
-            write_alignment(align_a1_file, anns_spanning, module_number, a1, cutoff_after=flank_size)
-            align_html_a1 = generate_alignment(
-                f'{motif_clean}_{str(a1)}', align_a1_file, motif_clean_split,
-                f'Allele 1 ({str(a1):2s}) alignment visualization'
-            )
+            string = write_alignment(anns_spanning, module_number, a1, cutoff_after=flank_size)
+            name = f'{motif_clean}_{str(a1)}'
+            display_text = f'Allele 1 ({str(a1):2s}) alignment visualization'
+            # align_file = f'{motif_dir}/alignment_{module_number}_a{a1}.fasta'
+            align_html_a1 = ALIGN_VIS.format(fasta=string, name=name, motif_id=motif_id, display_text=display_text, seq_logo=seq_logo)
+
+        align_html_a2 = ''
         if a2 is not None and a2 != a1 and a2 != 0:
-            align_a2_file = f'{motif_dir}/alignment_{module_number}_a{a2}.fasta'
-            write_alignment(align_a2_file, anns_spanning, module_number, a2, cutoff_after=flank_size)
-            align_html_a2 = generate_alignment(
-                f'{motif_clean}_{str(a2)}', get_alignment_name(align_file, a2), motif_clean.split('_')[0],
-                f'Allele 2 ({str(a2):2s}) alignment visualization'
-            )
+            string = write_alignment(anns_spanning, module_number, a2, cutoff_after=flank_size)
+            name = f'{motif_clean}_{str(a2)}'
+            display_text = f'Allele 2 ({str(a2):2s}) alignment visualization'
+            # align_file = f'{motif_dir}/alignment_{module_number}_a{a2}.fasta'
+            align_html_a2 = ALIGN_VIS.format(fasta=string, name=name, motif_id=motif_id, display_text=display_text, seq_logo=seq_logo)
 
         alignment = align_html + align_html_a1 + align_html_a2 + filt_align_html + left_align_html + right_align_html
         align = ALIGNMENT_STRING.format(sequence=sequence, alignment=alignment)
@@ -215,46 +216,36 @@ def write_alignment_html(
         motif_name_part2 = f'{",".join(map(str, highlight)) if highlight is not None else "mot"}'
         motif_name = f'{motif_name_part1}_{motif_name_part2}'
         motif_clean = re.sub(r'[^\w_]', '', motif_name)
-        motif_clean_split = motif_clean.split('_')[0]
+        motif_id = motif_clean.split('_')[0]
 
         anns_1good_left = [a for a in anns_1good if a.module_bases[0] > 0]
         anns_1good_right = [a for a in anns_1good if a.module_bases[-1] > 0]
 
-        align_file = f'{motif_dir}/alignment_{suffix}.fasta'
-        write_alignment(align_file, anns_2good, prev_module_num, index_rep2=module_number, cutoff_after=flank_size)
-        align_html = generate_alignment(
-            motif_clean, align_file, motif_clean.split('_')[0],
-            'Spanning reads alignment visualization'
-        )
+        string = write_alignment(anns_2good, prev_module_num, index_rep2=module_number, cutoff_after=flank_size)
+        # align_file = f'{motif_dir}/alignment_{suffix}.fasta'
+        display_text = 'Spanning reads alignment visualization'
+        seq_logo = 'true'
+        align_html = ALIGN_VIS.format(fasta=string, name=motif_clean, motif_id=motif_id, display_text=display_text, seq_logo=seq_logo)
 
-        filt_align_file = f'{motif_dir}/alignment_filtered_{suffix}.fasta'
-        write_alignment(
-            filt_align_file, anns_1good, prev_module_num, index_rep2=module_number, cutoff_after=flank_size
-        )
-        filt_align_html = generate_alignment(
-            motif_clean + '_filtered', filt_align_file, motif_clean.split('_')[0],
-            'Partial reads alignment visualization', seq_logo=False
-        )
+        string = write_alignment(anns_1good, prev_module_num, index_rep2=module_number, cutoff_after=flank_size)
+        # align_file = f'{motif_dir}/alignment_filtered_{suffix}.fasta'
+        name = motif_clean + '_filtered'
+        display_text = 'Partial reads alignment visualization'
+        filt_align_html = ALIGN_VIS.format(fasta=string, name=name, motif_id=motif_id, display_text=display_text, seq_logo=seq_logo)
 
-        filt_left_file = f'{motif_dir}/alignment_filtered_left_{suffix}.fasta'
-        write_alignment(
-            filt_left_file, anns_1good_left, prev_module_num, index_rep2=module_number, cutoff_after=flank_size
-        )
-        left_align_html = generate_alignment(
-            motif_clean + '_filtered_left', filt_left_file, motif_clean.split('_')[0],
-            'Left flank reads alignment visualization'
-        )
+        string = write_alignment(anns_1good_left, prev_module_num, index_rep2=module_number, cutoff_after=flank_size)
+        # align_file = f'{motif_dir}/alignment_filtered_left_{suffix}.fasta'
+        name = motif_clean + '_filtered_left'
+        display_text = 'Left flank reads alignment visualization'
+        left_align_html = ALIGN_VIS.format(fasta=string, name=name, motif_id=motif_id, display_text=display_text, seq_logo=seq_logo)
 
-        filt_right_file = f'{motif_dir}/alignment_filtered_right_{suffix}.fasta'
-        write_alignment(
-            filt_right_file, anns_1good_right, prev_module_num, index_rep2=module_number, cutoff_after=flank_size, right_align=True
-        )
-        right_align_html = generate_alignment(
-            motif_clean + '_filtered_right', filt_right_file, motif_clean.split('_')[0],
-            'Right flank reads alignment visualization'
-        )
+        string = write_alignment(anns_1good_right, prev_module_num, index_rep2=module_number, cutoff_after=flank_size, right_align=True)
+        # align_file = f'{motif_dir}/alignment_filtered_right_{suffix}.fasta'
+        name = motif_clean + '_filtered_right'
+        display_text = 'Right flank reads alignment visualization'
+        right_align_html = ALIGN_VIS.format(fasta=string, name=name, motif_id=motif_id, display_text=display_text, seq_logo=seq_logo)
 
-        alignment = align_html + align_html_a1 + align_html_a2 + filt_align_html + left_align_html + right_align_html
+        alignment = align_html + filt_align_html + left_align_html + right_align_html
         align = ALIGNMENT_STRING.format(sequence=sequence, alignment=alignment)
 
         alignments.append(align)
@@ -941,9 +932,9 @@ def generate_all_result_lines(
         result_lines.append(rl_gt)
 
         if ph is not None:
-            (module_number, anns_2good, anns_1good, anns_0good, phasing, supp_reads, prev_module_num) = ph
+            (module_number, anns_2good, anns_1good, anns_0good, phasing1, supp_reads, prev_module_num) = ph
             rl_ph = generate_result_line(
-                motif, phasing, supp_reads, len(anns_2good), len(anns_1good), len(anns_0good), prev_module_num,
+                motif, phasing1, supp_reads, len(anns_2good), len(anns_1good), len(anns_0good), prev_module_num,
                 second_module_number=module_number
             )
             result_lines.append(rl_ph)
@@ -1414,10 +1405,10 @@ def write_annotations(out_file: str, annotations: list[Annotation]) -> None:
 
 
 def write_alignment(
-    out_file: str, annotations: list[Annotation], index_rep: int, allele: int | None = None,
+    annotations: list[Annotation], index_rep: int, allele: int | None = None,
     index_rep2: int | None = None, allele2: int | None = None,
     cutoff_after: int | None = None, right_align: bool = False
-) -> None:
+) -> str:
     # TODO this needs complete rework
     """
     Creates a multi-alignment of all annotations into output text file
@@ -1562,12 +1553,12 @@ def write_alignment(
         alignments = alignments[:first_zero_idx] + ['_' * len(alignments[0])] + alignments[first_zero_idx:]
         annot_names = annot_names[:first_zero_idx] + ['empty_line'] + annot_names[first_zero_idx:]
 
-    # print to file
-    with open(out_file, 'w') as fw:
-        # print alignments
-        for annot_name, align in zip(annot_names, alignments):
-            print(f'>{annot_name}', file=fw)
-            print(align, file=fw)
+    string_tmp = []
+    for annot_name, align in zip(annot_names, alignments):
+        string_tmp.append(f">{annot_name}\n{align}\n")
+    string = "".join(string_tmp)
+
+    return string
 
 
 def sorted_repetitions(annotations: list[Annotation]) -> list[tuple[tuple[int, ...], int]]:
@@ -2925,10 +2916,11 @@ def generate_motifb64(
     )
 
 
+# align_html = generate_alignment(
+#     motif_clean, align_file, motif_clean_split, 'Spanning reads alignment visualization'
+# )
 def generate_alignment(
-    motif: str, alignment_file: str, motif_id: str,
-    display_text: str = 'Click to toggle alignment visualization',
-    seq_logo: bool = True
+    motif_clean: str, align_file: str, motif_clean_split: str, display_text: str = 'Click to toggle alignment visualization', seq_logo: bool = True
 ) -> str:
     """
     Generate HTML code for the fancy alignment.
@@ -2939,12 +2931,12 @@ def generate_alignment(
     :param seq_logo: bool - display sequence logo?
     :return: str - code of the fancy alignment
     """
-    with open(alignment_file) as f:
+    with open(align_file) as f:
         string = f.read()
     string = string[:string.find('#')]
 
     return ALIGN_VIS.format(
-        fasta=string, name=motif, motif_id=motif_id,
+        fasta=string, name=motif_clean, motif_id=motif_clean_split,
         display_text=display_text, seq_logo='true' if seq_logo else 'false'
     )
 
