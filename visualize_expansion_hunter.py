@@ -178,13 +178,14 @@ if __name__ == '__main__':
             spanning_reads = convert_to_array(var_value['CountsOfSpanningReads'])
             plot_histogram_image(f'{args.output_dir}/{motif_clean}', spanning_reads, flanking_reads, inrepeat_reads)
 
-            # identify allele confirming reads
+            # identify allele confirming reads ad count reads
             table.at[motif_clean, 'Reads (flanking)'] = sum(c for (r, c) in flanking_reads)
             table.at[motif_clean, 'Reads (spanning)'] = sum(c for (r, c) in spanning_reads)
             table.at[motif_clean, 'Allele 1 confirming reads (flanking)'] = search_array(flanking_reads, int(genotypes[0]), up_to=True)
             table.at[motif_clean, 'Allele 2 confirming reads (flanking)'] = search_array(flanking_reads, int(genotypes[1]), up_to=True)
             table.at[motif_clean, 'Allele 1 confirming reads (spanning)'] = search_array(spanning_reads, int(genotypes[0]))
             table.at[motif_clean, 'Allele 2 confirming reads (spanning)'] = search_array(spanning_reads, int(genotypes[1]))
+            table.at[motif_clean, 'Reads (inrepeat)'] = sum(c for (r, c) in inrepeat_reads)
 
     # plotting figures
     print(f'Plotting figures in {args.output_dir} ... ({datetime.now():%Y-%m-%d %H:%M:%S})')
@@ -202,6 +203,6 @@ if __name__ == '__main__':
         print(html_template.format(body=body), file=f)
 
     # write into a tsv table
-    int_columns = ['AlleleCount', 'Reads (flanking)', 'Reads (spanning)', 'Allele 1 confirming reads (flanking)',
+    int_columns = ['AlleleCount', 'Reads (flanking)', 'Reads (spanning)', 'Reads (inrepeat)', 'Allele 1 confirming reads (flanking)',
                    'Allele 2 confirming reads (flanking)', 'Allele 1 confirming reads (spanning)', 'Allele 2 confirming reads (spanning)']
     table.drop('FigFile', axis=1).astype({k: int for k in int_columns}).to_csv(f'{args.output_dir}/results.tsv', sep='\t')
