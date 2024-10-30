@@ -10,6 +10,8 @@ from plotly.io import to_json
 from bs4 import BeautifulSoup
 from natsort import natsorted
 
+from src.report.report import generate_nomenclatures
+
 motif_summary = """
 <h2 id="summary">Summary table</h2>
 <table class="tg" id="tg">
@@ -75,6 +77,12 @@ summary_plot_string = """
 
 motif_plot_string = """<h3 id="{sample_name}">{sample_name}</h3>
 alleles: {a1}  ({c1}%) {a2}  ({c2}%) total  {c}%<br>
+Nomenclatures:<br>
+<table class="nomtg">
+    <tbody>
+        {nomenclatures}
+    </tbody>
+</table>
 <table>
     <tr>
         <td colspan="1">
@@ -308,9 +316,14 @@ def create_reports(arg_list: argparse.Namespace):
                 rep_num = 1
             else:
                 rep_num += 1
+
+            nomenclature_lines = generate_nomenclatures(f'{os.path.dirname(path)}/{name}/nomenclatures_{rep_num}.txt')
+            nomenclatures = '\n'.join(nomenclature_lines)
+
             name += '_rep' + str(rep_num)
             data = motifs[name][-1]
-            temp = motif_plot_string.format(sample_name=sample, sample_id=name + '_' + sample,
+
+            temp = motif_plot_string.format(sample_name=sample, sample_id=name + '_' + sample, nomenclatures=nomenclatures,
                                             hist_plot=hist_data, pcol_plot=pcol_data, a1=data[1], c1=data[2], a2=data[3], c2=data[4], c=data[5])
 
             plots[name] = plots.get(name, []) + [temp]

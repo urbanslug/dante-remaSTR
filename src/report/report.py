@@ -634,7 +634,7 @@ def find_file(filename: str, include_gzip: bool = False) -> typing.Optional[str]
     return None
 
 
-def generate_nomenclatures(filename: str, motif: Motif, nomenclature_limit: int) -> list[str]:
+def generate_nomenclatures(filename: str, motif: Motif | None = None, nomenclature_limit: int = -1) -> list[str]:
     """
     Generate nomenclature string lines from nomenclature file. Maximally generate nomenclature_limit lines.
     :param filename: str - file name of the nomenclature file
@@ -653,12 +653,12 @@ def generate_nomenclatures(filename: str, motif: Motif, nomenclature_limit: int)
 
             line_split = line.split('\t')
             motif_parts = [f'<td>{s}</td>' for s in line_split[1:]]
-            ref = f'{motif.chrom}:g.{motif.start}_{motif.end}'
+            ref = f'{motif.chrom}:g.{motif.start}_{motif.end}' if motif is not None else ''
             nom_row = report.html_templates.nomenclature_string.format(count=line_split[0] + 'x', ref=ref, parts='\n    '.join(motif_parts))
             lines.append(nom_row)
 
             # end?
-            if len(lines) >= nomenclature_limit:
+            if 0 < nomenclature_limit <= len(lines):
                 break
 
     return lines
