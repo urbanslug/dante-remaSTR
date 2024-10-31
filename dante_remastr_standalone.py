@@ -4,7 +4,7 @@ from argparse import ArgumentParser, Namespace, RawDescriptionHelpFormatter, Arg
 from datetime import datetime
 from typing import TextIO, Iterator, TypeAlias, Any
 from collections import Counter
-from jinja2 import Environment, FileSystemLoader, select_autoescape
+from jinja2 import Environment, FileSystemLoader
 
 import csv
 import os
@@ -108,11 +108,11 @@ def main() -> None:
         for (motif, genotype, phasing) in zip(all_motifs, all_genotypes, all_haplotypes):
             write_alignment_html(motif, genotype, phasing, script_dir, args.output_dir, args.cutoff_alignments)
 
+        print(f'Writing profiles: {datetime.now():%Y-%m-%d %H:%M:%S}')
+        write_profiles(all_motifs, all_genotypes, args.output_dir)
+
         print(f'Writing html report: {datetime.now():%Y-%m-%d %H:%M:%S}')
-        write_report(
-            all_motifs, all_annotations, all_genotypes, all_haplotypes, script_dir, args.output_dir,
-            args.cutoff_alignments
-        )
+        write_report(all_motifs, all_annotations, all_genotypes, all_haplotypes, script_dir, args.output_dir, args.cutoff_alignments)
 
         # copy javascript and css files
         shutil.copy2(f'{script_dir}/msa.min.gz.js',         f'{args.output_dir}/msa.min.gz.js')
@@ -245,41 +245,36 @@ def write_alignment_html(
 
     mt = motif.dir_name()
 
-    # --------------------------------------------------------------------------
-    alignments = []
-    for (sequence, motif_id, data) in data2:
-        aligns = []
-        for (name, display_text, fasta, seq_logo) in data:
-            a = ALIGN_VIS.format(motif_id=motif_id, name=name, display_text=display_text, fasta=fasta, seq_logo=seq_logo)
-            aligns.append(a)
-        align = ALIGNMENT_STRING.format(sequence=sequence, alignment="".join(aligns))
-        alignments.append(align)
-
-    template_alignments = open(f'{script_dir}/alignments.html', 'r').read()
-    template_alignments = custom_format(template_alignments, sample=mt, motif_desc=motif_desc, alignments='\n'.join(alignments))
-    with open(f'{output_dir}/{mt}/alignments.html', 'w') as f:
-        f.write(template_alignments)
-    # --------------------------------------------------------------------------
-
     env = Environment(loader=FileSystemLoader([script_dir]))
-    # env = Environment(loader=FileSystemLoader([script_dir]), autoescape=select_autoescape())
     template = env.get_template("alignments_template.html")
     output = template.render(sample=mt, motif_desc=motif_desc, data2=data2)
-    with open(f"{output_dir}/{mt}/alignments_2.html", "w") as f:
+    with open(f"{output_dir}/{mt}/alignments.html", "w") as f:
         f.write(output)
 
     return
+
+
+def write_profiles(
+    all_motifs, all_genotypes, output_dir
+) -> None:
+    all_profiles = f'{output_dir}/all_profiles.txt'
+    all_true = f'{output_dir}/all_profiles.true'
+    pf = open(all_profiles, "w")
+    tf = open(all_true, "w")
+
+    for (motif, genotype) in zip(all_motifs, all_genotypes):
+        for gt in genotype:
+            (module_number, anns_spanning, _, _, predicted, _, _, _) = gt
+            profile = write_profile(anns_spanning, index_rep=module_number)
+            profile_str = '\t'.join(map(str, profile))
+            pf.write(f'{motif.name}_{module_number}\t{profile_str}\n')
+            tf.write(f'{motif.name}_{module_number}\t{predicted[0]}\t{predicted[1]}\n')
 
 
 def write_report(
     all_motifs, all_annotations, all_genotypes, all_haplotypes, script_dir, output_dir, flank_size, nomenclature_limit=5
 ) -> None:
     post_filter = PostFilter()
-
-    all_profiles = f'{output_dir}/all_profiles.txt'
-    all_true = f'{output_dir}/all_profiles.true'
-    pf = open(all_profiles, "w")
-    tf = open(all_true, "w")
 
     mcs: dict[str, str] = {}  # first table in html, one value, one row
     ms: dict[str, list[str]] = {}  # graphs, starts at data
@@ -314,15 +309,6 @@ def write_report(
 
             nomenclature_file = f'{motif_dir}/nomenclatures_{suffix}.txt'
             nomenclature_lines = generate_nomenclatures(nomenclature_file, motif, nomenclature_limit)
-
-            if not phasing:
-                # add to profiles
-                with open(f'{motif_dir}/profile_{suffix}.txt') as po:
-                    line = po.readline()
-                    pf.write(f'{motif.name}_{suffix}\t{line}\n')
-
-                # add to true
-                tf.write(f'{motif.name}_{suffix}\t{row["allele1"]}\t{row["allele2"]}\n')
 
             # read files
             rep_file = find_file(f'{motif_dir}/repetitions_{suffix}.json')
@@ -1599,7 +1585,7 @@ def write_histogram(out_file: str, annotations: list[Annotation], ) -> None:
             fw.write(f'{counts}\t{rep_code}\n')
 
 
-def write_profile(profile_file: str, annotations: list[Annotation], index_rep: int) -> None:
+def write_profile(annotations: list[Annotation], index_rep: int) -> np.ndarray:
     """
     Stores quantity of different combinations of module repetitions into text file
     :param profile_file: str - output file for repetitions
@@ -1616,8 +1602,7 @@ def write_profile(profile_file: str, annotations: list[Annotation], index_rep: i
     for repetitions, counts in sorted_reps:
         profile[repetitions[index_rep]] += counts
 
-    with open(profile_file, 'w') as f:
-        f.write('\t'.join(map(str, profile)))
+    return profile
 
 
 def write_histogram_nomenclature(
@@ -1817,6 +1802,7 @@ def plot_histogram_image_plotly(
     # fig.write_image(out_prefix + '_plotly.pdf')
 
 
+# write_all(anns_spanning, anns_flanking, anns_filtered, motif_dir, motif, module_number, cutoff_alignments=flank_size)
 def write_all(
     quality_annotations: list[Annotation], filt_primer: list[Annotation], filtered_annotations: list[Annotation],
     motif_dir: str, motif_class: Motif, module_number: int, cutoff_alignments: int,
@@ -1862,7 +1848,11 @@ def write_all(
         write_histogram_image2d(f'{motif_dir}/repetitions_{suffix}', annotations, module_number, second_module_number, motif_class.module_str(module_number), motif_class.module_str(second_module_number))
     else:
         write_histogram_image(f'{motif_dir}/repetitions_{suffix}', quality_annotations, filt_primer, module_number)
-        write_profile(f'{motif_dir}/profile_{suffix}.txt', quality_annotations, index_rep=module_number)
+        profile = write_profile(quality_annotations, index_rep=module_number)
+        with open(f'{motif_dir}/profile_{suffix}.txt', 'w') as f:
+            f.write('\t'.join(map(str, profile)))
+
+
 
     # write histogram txt files
     write_histogram_nomenclature(f'{motif_dir}/nomenclatures_{suffix}.txt', quality_annotations, index_rep=module_number, index_rep2=second_module_number)
@@ -2734,39 +2724,6 @@ alleles: {result}<br>
 
 MOTIF_STRING_EMPTY = ""
 
-ALIGNMENT_STRING = """
-  <p>{sequence}</p>
-  {alignment}
-  <hr>
-"""
-
-ALIGN_VIS = """
-  <details>
-    <summary>{display_text}</summary>
-    <div id="A{name}" class="align">press "Run with JS"</div>
-    <script>
-        var fasta = `{fasta}`;
-        var seqs = msa.io.fasta.parse(fasta);
-        var opts = {{
-            el: document.getElementById("A{name}"),
-            vis: {{
-                conserv: false,
-                metaIdentity: true,
-                overviewbox: true,
-                seqlogo: {seq_logo}
-            }},
-            seqs: seqs,
-            colorscheme: {{"scheme": "nucleotide"}},
-            // smaller menu for JSBin
-            menu: "small",
-            bootstrapMenu: true
-        }};
-        var m = new msa.msa(opts);
-        m.render()
-    </script>
-  </details>
-"""
-
 
 def highlight_subpart(seq: str, highlight: int | list[int]) -> tuple[str, str]:
     """
@@ -2925,31 +2882,6 @@ def generate_motifb64(
             errors=errors,
             nomenclatures='\n'.join(nomenclature_lines)
         )
-    )
-
-
-# align_html = generate_alignment(
-#     motif_clean, align_file, motif_clean_split, 'Spanning reads alignment visualization'
-# )
-def generate_alignment(
-    motif_clean: str, align_file: str, motif_clean_split: str, display_text: str = 'Click to toggle alignment visualization', seq_logo: bool = True
-) -> str:
-    """
-    Generate HTML code for the fancy alignment.
-    :param motif: str - name of the motif
-    :param alignment_file: str - filename of the alignment file
-    :param motif_id: str - motif identification
-    :param display_text: str - string to display when the alignment is hidden
-    :param seq_logo: bool - display sequence logo?
-    :return: str - code of the fancy alignment
-    """
-    with open(align_file) as f:
-        string = f.read()
-    string = string[:string.find('#')]
-
-    return ALIGN_VIS.format(
-        fasta=string, name=motif_clean, motif_id=motif_clean_split,
-        display_text=display_text, seq_logo='true' if seq_logo else 'false'
     )
 
 
