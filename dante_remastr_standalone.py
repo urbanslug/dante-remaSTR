@@ -271,6 +271,23 @@ def write_profiles(
             tf.write(f'{motif.name}_{module_number}\t{predicted[0]}\t{predicted[1]}\n')
 
 
+def write_superfluous_files(
+    all_motifs, all_annotations, all_genotypes, all_haplotypes, _script_dir, output_dir, flank_size, _nomenclature_limit=5
+) -> None:
+
+    for (motif, _anns, genotype, phasing) in zip(all_motifs, all_annotations, all_genotypes, all_haplotypes):
+        motif_dir = f'{output_dir}/{motif.dir_name()}'
+        for gt in genotype:
+            (module_number, anns_spanning, anns_flanking, anns_filtered, _predicted, _confidence, _lh_array, _model) = gt
+            write_all(anns_spanning, anns_flanking, anns_filtered, motif_dir, motif, module_number, cutoff_alignments=flank_size)
+
+        for ph in phasing:
+            if ph is not None:
+                (module_number, anns_2good, anns_1good, anns_0good, _phasing1, _supp_reads, prev_module_num) = ph
+                write_all(anns_2good, anns_1good, anns_0good, motif_dir, motif, prev_module_num, second_module_number=module_number, cutoff_alignments=flank_size)
+    return
+
+
 def write_report(
     all_motifs, all_annotations, all_genotypes, all_haplotypes, script_dir, output_dir, flank_size, nomenclature_limit=5
 ) -> None:
@@ -290,6 +307,7 @@ def write_report(
     for (motif, anns, genotype, phasing) in zip(all_motifs, all_annotations, all_genotypes, all_haplotypes):
         motif_dir = f'{output_dir}/{motif.dir_name()}'
         os.makedirs(motif_dir, exist_ok=True)
+        seq = motif.modules_str(include_flanks=True)
 
         repeating_modules = motif.get_repeating_modules()
         annotations = anns
@@ -298,27 +316,35 @@ def write_report(
         write_histogram_nomenclature(f'{motif_dir}/nomenclature.txt', annotations)
         del annotations
 
-        write_all_files(motif, genotype, phasing, motif_dir, flank_size)  # everything is written here
+        for gt in genotype:
+            (module_number, anns_spanning, anns_flanking, anns_filtered, predicted, confidence, lh_array, model) = gt
+            suffix = str(module_number)
 
-        rls = generate_all_result_lines(motif, genotype, phasing)
-        rls_df = pd.DataFrame.from_records(rls)
-        seq = motif.modules_str(include_flanks=True)
-        for _, row in rls_df.iterrows():
-            phasing = '_' in str(row['repetition_index'])
+            write_histogram_image(f'{motif_dir}/repetitions_{suffix}', anns_spanning, anns_flanking, module_number)
+            write_histogram_nomenclature(f'{motif_dir}/nomenclatures_{suffix}.txt', anns_spanning, index_rep=module_number, index_rep2=None)
+
+            if lh_array is not None:
+                file_pcolor = f'{motif_dir}/pcolor_{module_number}'
+                model.draw_pcolor(file_pcolor, lh_array, motif.nomenclature)
+
+            row = generate_result_line(
+                motif, predicted, confidence, len(anns_spanning), len(anns_flanking), len(anns_filtered), module_number,
+                qual_annot=anns_spanning
+            )
+            phasing2 = '_' in str(row['repetition_index'])
             suffix = row['repetition_index']
 
             nomenclature_file = f'{motif_dir}/nomenclatures_{suffix}.txt'
             nomenclature_lines = generate_nomenclatures(nomenclature_file, motif, nomenclature_limit)
 
-            # read files
             rep_file = find_file(f'{motif_dir}/repetitions_{suffix}.json')
-            pcol_file = find_file(f'{motif_dir}/pcolor_{suffix}.json')
+            pcol_file = None
+            if not phasing2:
+                pcol_file = find_file(f'{motif_dir}/pcolor_{suffix}.json')
 
-            # generate rows of tables and images
             row1 = generate_row(seq, row, post_filter)
             rows[motif.name] = rows.get(motif.name, []) + [row1]
 
-            # add the tables
             mcontent, m = generate_motifb64(seq, row, rep_file, pcol_file, nomenclature_lines, post_filter)
 
             if motif.name in mcs:
@@ -326,6 +352,42 @@ def write_report(
             else:
                 mcs[motif.name] = mcontent
                 ms[motif.name] = [m]
+
+        for ph in phasing:
+            if ph is not None:
+                (module_number, anns_2good, anns_1good, anns_0good, phasing1, supp_reads, prev_module_num) = ph
+                second_module_number = module_number
+                suffix = f'{prev_module_num}_{second_module_number}'
+
+                annotations = anns_2good + anns_1good
+                write_histogram_image2d(f'{motif_dir}/repetitions_{suffix}', annotations, prev_module_num, second_module_number, motif.module_str(prev_module_num), motif.module_str(second_module_number))
+                write_histogram_nomenclature(f'{motif_dir}/nomenclatures_{suffix}.txt', anns_2good, index_rep=prev_module_num, index_rep2=second_module_number)
+
+                row = generate_result_line(
+                    motif, phasing1, supp_reads, len(anns_2good), len(anns_1good), len(anns_0good), prev_module_num,
+                    second_module_number=module_number
+                )
+                phasing2 = '_' in str(row['repetition_index'])
+                suffix = row['repetition_index']
+
+                nomenclature_file = f'{motif_dir}/nomenclatures_{suffix}.txt'
+                nomenclature_lines = generate_nomenclatures(nomenclature_file, motif, nomenclature_limit)
+
+                rep_file = find_file(f'{motif_dir}/repetitions_{suffix}.json')
+                pcol_file = None
+                if not phasing2:
+                    pcol_file = find_file(f'{motif_dir}/pcolor_{suffix}.json')
+
+                row1 = generate_row(seq, row, post_filter)
+                rows[motif.name] = rows.get(motif.name, []) + [row1]
+
+                mcontent, m = generate_motifb64(seq, row, rep_file, pcol_file, nomenclature_lines, post_filter)
+
+                if motif.name in mcs:
+                    ms[motif.name].append(m)
+                else:
+                    mcs[motif.name] = mcontent
+                    ms[motif.name] = [m]
 
         motif_clean = re.sub(r'[^\w_]', '', motif.name.replace('/', '_'))
         nomenclature_file = f'{output_dir}/{motif.dir_name()}/nomenclature.txt'
@@ -916,6 +978,7 @@ def errors_per_read(
 
 
 # TODO: I don't particularly like mixing of genotyping and phasing
+# rls = generate_all_result_lines(motif, genotype, phasing)
 def generate_all_result_lines(
     motif: Motif, genotype: list[tuple], phasing: list[None | tuple]
 ) -> list[dict]:
@@ -1111,31 +1174,6 @@ def phase(
     phasing = (f'{rep1[0]}|{rep1[1]}', f'{rep2[0]}|{rep2[1]}')
     supported_reads = (f'{cnt1 + cnt2}/{len(annotations)}', f'{cnt1}/{len(annotations)}', f'{cnt2}/{len(annotations)}')
     return phasing, supported_reads
-
-
-def write_all_files(
-    motif: Motif, genotype: list, phasing: list, motif_dir: str, flank_size: int
-) -> None:
-    for gt, ph in zip(genotype, phasing):
-        (module_number, anns_spanning, anns_flanking, anns_filtered, _, _, lh_array, model) = gt
-        write_all(
-            anns_spanning, anns_flanking, anns_filtered, motif_dir, motif, module_number, cutoff_alignments=flank_size
-        )
-
-        if lh_array is not None:
-            file_pcolor = f'{motif_dir}/pcolor_{module_number}'
-            model.draw_pcolor(file_pcolor, lh_array, motif.nomenclature)
-
-        if ph is not None:
-            (module_number, anns_2good, anns_1good, anns_0good, phasing1, supp_reads, prev_module_num) = ph
-            # write files
-            write_all(
-                anns_2good, anns_1good, anns_0good, motif_dir, motif, prev_module_num,
-                second_module_number=module_number, cutoff_alignments=flank_size
-            )
-
-            # write phasing into a file
-            save_phasing(f'{motif_dir}/phasing_{prev_module_num}_{module_number}.txt', phasing1, supp_reads)
 
 
 def generate_groups(input_stream: TextIO, chunk_size: int = 1000000) -> Iterator[pd.DataFrame]:
@@ -1802,64 +1840,48 @@ def plot_histogram_image_plotly(
     # fig.write_image(out_prefix + '_plotly.pdf')
 
 
-# write_all(anns_spanning, anns_flanking, anns_filtered, motif_dir, motif, module_number, cutoff_alignments=flank_size)
+# write_all(anns_spanning, anns_flanking, anns_filtered,    motif_dir, motif, module_number, cutoff_alignments=flank_size)
+# write_all(anns_2good, anns_1good, anns_0good,             motif_dir, motif, prev_module_num, second_module_number=module_number, cutoff_alignments=flank_size)
 def write_all(
-    quality_annotations: list[Annotation], filt_primer: list[Annotation], filtered_annotations: list[Annotation],
-    motif_dir: str, motif_class: Motif, module_number: int, cutoff_alignments: int,
-    second_module_number: int | None = None
+    anns_2good: list[Annotation], anns_1good: list[Annotation], anns_0good: list[Annotation],
+    motif_dir: str, motif: Motif, prev_module_num: int, cutoff_alignments: int, second_module_number: int | None = None
 ) -> None:
-    """
-    Write all output files: quality annotations, one-primer annotations, filtered annotations, statistics,
-    repetitions + images.
-    :param quality_annotations: list(Annotation) - list of blue annotations
-    :param filt_primer: list(Annotation) - list of grey annotations
-    :param filtered_annotations: list(Annotation) - list of filtered out annotation
-    :param motif_dir: str - path to motif directory
-    :param motif_class: Motif - motif class
-    :param module_number: int - index of first studied repetition in modules
-    :param second_module_number: int - index of second studied repetition in modules (optional)
-    :param zip_it: bool - whether to gzip the resulting file
-    :param cutoff_alignments: int - how many bases to keep beyond annotated modules in alignments
-    :return: None
-    """
     # create suffix for files:
-    suffix = str(module_number) if second_module_number is None else f'{module_number}_{second_module_number}'
+    suffix = str(prev_module_num) if second_module_number is None else f'{prev_module_num}_{second_module_number}'
 
     # write output files
-    write_annotations(f'{motif_dir}/annotations_{suffix}.txt', quality_annotations)
-    write_annotations(f'{motif_dir}/filtered_{suffix}.txt', filtered_annotations)
-    write_annotations(f'{motif_dir}/filtered_primer_{suffix}.txt', filt_primer)
+    write_annotations(f'{motif_dir}/annotations_{suffix}.txt', anns_2good)
+    write_annotations(f'{motif_dir}/filtered_{suffix}.txt', anns_0good)
+    write_annotations(f'{motif_dir}/filtered_primer_{suffix}.txt', anns_1good)
 
-    if len(quality_annotations) and max(len(a.read_seq) for a in quality_annotations) > 200:
-        annotations = [a.get_shortened_annotation(cutoff_alignments) for a in quality_annotations]
+    if len(anns_2good) and max(len(a.read_seq) for a in anns_2good) > 200:
+        annotations = [a.get_shortened_annotation(cutoff_alignments) for a in anns_2good]
         write_annotations(f'{motif_dir}/annotations_{suffix}_short.txt', annotations)
 
-    if len(filtered_annotations) and max(len(a.read_seq) for a in filtered_annotations) > 200:
-        annotations = [a.get_shortened_annotation(cutoff_alignments) for a in filtered_annotations]
+    if len(anns_0good) and max(len(a.read_seq) for a in anns_0good) > 200:
+        annotations = [a.get_shortened_annotation(cutoff_alignments) for a in anns_0good]
         write_annotations(f'{motif_dir}/filtered_{suffix}_short.txt', annotations)
 
-    if len(filt_primer) and max(len(a.read_seq) for a in filt_primer) > 200:
-        annotations = [a.get_shortened_annotation(cutoff_alignments) for a in filt_primer]
+    if len(anns_1good) and max(len(a.read_seq) for a in anns_1good) > 200:
+        annotations = [a.get_shortened_annotation(cutoff_alignments) for a in anns_1good]
         write_annotations(f'{motif_dir}/filtered_primer_{suffix}_short.txt', annotations)
 
     # write histogram image
     if second_module_number is not None:
-        annotations = quality_annotations + filt_primer
-        write_histogram_image2d(f'{motif_dir}/repetitions_{suffix}', annotations, module_number, second_module_number, motif_class.module_str(module_number), motif_class.module_str(second_module_number))
+        annotations = anns_2good + anns_1good
+        write_histogram_image2d(f'{motif_dir}/repetitions_{suffix}', annotations, prev_module_num, second_module_number, motif.module_str(prev_module_num), motif.module_str(second_module_number))
     else:
-        write_histogram_image(f'{motif_dir}/repetitions_{suffix}', quality_annotations, filt_primer, module_number)
-        profile = write_profile(quality_annotations, index_rep=module_number)
+        write_histogram_image(f'{motif_dir}/repetitions_{suffix}', anns_2good, anns_1good, prev_module_num)
+        profile = write_profile(anns_2good, index_rep=prev_module_num)
         with open(f'{motif_dir}/profile_{suffix}.txt', 'w') as f:
             f.write('\t'.join(map(str, profile)))
 
-
-
     # write histogram txt files
-    write_histogram_nomenclature(f'{motif_dir}/nomenclatures_{suffix}.txt', quality_annotations, index_rep=module_number, index_rep2=second_module_number)
-    write_histogram_nomenclature(f'{motif_dir}/nomenclatures_grey_{suffix}.txt', filt_primer, index_rep=module_number, index_rep2=second_module_number)
+    write_histogram_nomenclature(f'{motif_dir}/nomenclatures_{suffix}.txt', anns_2good, index_rep=prev_module_num, index_rep2=second_module_number)
+    write_histogram_nomenclature(f'{motif_dir}/nomenclatures_grey_{suffix}.txt', anns_1good, index_rep=prev_module_num, index_rep2=second_module_number)
 
-    write_histogram(f'{motif_dir}/repetitions_{suffix}.txt', quality_annotations)
-    write_histogram(f'{motif_dir}/repetitions_grey_{suffix}.txt', filt_primer)
+    write_histogram(f'{motif_dir}/repetitions_{suffix}.txt', anns_2good)
+    write_histogram(f'{motif_dir}/repetitions_grey_{suffix}.txt', anns_1good)
 
 
 def custom_format(template: str, **kwargs) -> str:
@@ -1884,6 +1906,7 @@ def find_file(filename: str) -> str | None:
     """
     if os.path.exists(filename):
         return filename
+    print(f"{filename} does not exist.")
     return None
 
 
@@ -2757,7 +2780,7 @@ def float_to_str(c: float | str, percents: bool = False, decimals: int = 1) -> s
     return c
 
 
-def generate_row(sequence: str, result: pd.Series, postfilter: PostFilter) -> str:
+def generate_row(sequence: str, result: dict, postfilter: PostFilter) -> str:
     """
     Generate rows of a summary table in html report.
     :param sequence: str - motif sequence
@@ -2808,7 +2831,7 @@ def get_alignment_name(alignment_file: str, allele: int) -> str:
 
 
 def generate_motifb64(
-    sequence: str, result_in: pd.Series, repetition: str | None, pcolor: str | None,
+    sequence: str, result_in: dict, repetition: str | None, pcolor: str | None,
     nomenclature_lines: list[str], postfilter: PostFilter
 ) -> tuple[str, str]:
     """
@@ -2864,7 +2887,6 @@ def generate_motifb64(
     pcol = '' if pcolor is None else open(pcolor, 'r').read()
 
     # return filled valid template
-    # alignment = f'{motif_name.replace(" ", "%20")}/alignments.html'
     alignment = f"{motif}/alignments.html"
     return (
         CONTENT_STRING.format(motif_name=motif_clean.rsplit('_', 1)[0], motif=motif),
