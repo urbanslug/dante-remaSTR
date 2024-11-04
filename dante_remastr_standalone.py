@@ -108,8 +108,8 @@ def main() -> None:
         for (motif, genotype, phasing) in zip(all_motifs, all_genotypes, all_haplotypes):
             write_alignment_html(motif, genotype, phasing, script_dir, args.output_dir, args.cutoff_alignments)
 
-        print(f'Writing profiles: {datetime.now():%Y-%m-%d %H:%M:%S}')
-        write_profiles(all_motifs, all_genotypes, args.output_dir)
+        # print(f'Writing profiles: {datetime.now():%Y-%m-%d %H:%M:%S}')
+        # write_profiles(all_motifs, all_genotypes, args.output_dir)
 
         print(f'Writing html report: {datetime.now():%Y-%m-%d %H:%M:%S}')
         write_report(all_motifs, all_annotations, all_genotypes, all_haplotypes, script_dir, args.output_dir)
@@ -293,9 +293,6 @@ def write_report(
     script_dir: str, output_dir: str, nomenclature_limit: int = 5
 ) -> None:
     post_filter = PostFilter()
-    template_file = f'{script_dir}/report.html'
-    template = open(template_file, 'r').read()
-    sample = os.path.basename(output_dir)
 
     mcs: dict[str, str] = {}  # first table in html, one value, one row
     tabs = []
@@ -374,15 +371,17 @@ def write_report(
         motif_summary = MOTIF_SUMMARY.format(motif_id=motif_id, nomenclatures=nomenclatures, table=table, motifs=motifs)
         tabs.append(motif_summary)
 
+    sample = os.path.basename(output_dir)
+    motifs_content = CONTENTS.format(table='\n'.join(sorted(mcs.values()))) + '\n' + MAKE_DATATABLE_STRING
+    # motifs_content = motifs_content.format(table='')
     motifs_tab = '\n'.join(tabs)
-    contents_table = CONTENTS.format(table='\n'.join(sorted(mcs.values())))
-    motifs_content = contents_table + '\n' + MAKE_DATATABLE_STRING
-    template = custom_format(template, sample=sample, version=VERSION)
-    template = custom_format(template, motifs_content=motifs_content)
-    template = custom_format(template, table='', motifs=motifs_tab)
 
-    with open(f'{output_dir}/report.html', 'w') as f:
-        f.write(template)
+    env = Environment(loader=FileSystemLoader([script_dir]))
+    template = env.get_template("report_template.html")
+    output = template.render(sample=sample, version=VERSION, motifs_content=motifs_content, table='', motifs=motifs_tab)
+    with open(f"{output_dir}/report.html", "w") as f:
+        f.write(output)
+
     return
 
 
@@ -2811,20 +2810,6 @@ def generate_motifb64(
     sequence: str, result_in: dict, repetition: str | None, pcolor: str | None,
     nomenclature_lines: list[str], postfilter: PostFilter
 ) -> tuple[str, str]:
-    """
-    Generate part of a html report for each motif.
-    :param sequence: str - motif sequence
-    :param repetition: str - filename of repetitions figures
-    :param pcolor: str - filename of pcolor figures
-    :param alignment: str/None - filename of alignment file
-    :param filtered_alignment: str/None - filename of filtered alignment file
-    :param filtered_left_alignment: str/None - filename of filtered left alignment file
-    :param filtered_right_alignment: str/None - filename of filtered right alignment file
-    :param nomenclature_lines: list[str] - list of nomenclature strings
-    :param postfilter: PostFilter - postfilter arguments
-    :param static: bool - generate static code?
-    :return: (str, str) - content and main part of the html report for motifs
-    """
     if repetition is None:
         return (CONTENT_STRING_EMPTY, MOTIF_STRING_EMPTY)
 
