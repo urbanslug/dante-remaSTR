@@ -36,7 +36,14 @@
         </tr>
     </thead>
     <tbody>
-        {% for row in table %}{{ row }}{% endfor %}
+        {% for (motif_name, motif) in table %}
+<tr>
+    <td class="tg-s6z2">
+        <a href="#{{ motif_name }}" class="tablinks"
+        onclick="openTab(event, '{{ motif_name }}'); $('.{{ motif_name }}').trigger('content-change');">{{ motif }}</a>
+    </td>
+</tr>
+        {% endfor %}
     </tbody>
 </table>
 
@@ -50,7 +57,7 @@
 
 
 <!-- Tab content -->
-{% for (motif_id, nomenclatures, table, motifs) in tabs %}
+{% for (motif_id, nomenclatures, rows_list, ms_list) in tabs %}
 <div class="tabcontent" id="{{ motif_id }}" style="display: none">
 <h2 class="summary_nomenclatures">Nomenclatures</h2>
 <table class="nomtg">
@@ -92,7 +99,9 @@
         </tr>
     </thead>
     <tbody>
-        {{ table }}
+        {% for row in rows_list %}
+        {{ row }}
+        {% endfor %}
     </tbody>
 </table>
 
@@ -102,7 +111,9 @@
 } );
 </script>
 
-{{ motifs }}
+{% for row in ms_list %}
+{{ row }}
+{% endfor %}
 </div>
 {% endfor %}
 

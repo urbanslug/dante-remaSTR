@@ -299,7 +299,7 @@ def write_report(
     if post_filter.max_abs_error is not None:
         post_errors += f' (abs={post_filter.max_abs_error})'
 
-    mcs: dict[str, str] = {}
+    mcs_list = []
     tabs = []
     for (motif, anns, genotype, phasing) in zip(all_motifs, all_annotations, all_genotypes, all_haplotypes):
         motif_dir = f'{output_dir}/{motif.dir_name()}'
@@ -342,7 +342,7 @@ def write_report(
             row = generate_result_line(motif, predicted, confidence, len(anns_spanning), len(anns_flanking), len(anns_filtered), module_number, qual_annot=anns_spanning)
             row1 = generate_row(seq, row, post_filter)  # ROW_STRING
             tmp = generate_motifb64(seq, row)
-            (motif_clean_id, motif_id_local, motif_name, result, alignment, sequence) = tmp
+            (motif_clean_id, _, _motif_name, result, alignment, sequence) = tmp
             rows_list.append(row1)
             del row
 
@@ -351,23 +351,16 @@ def write_report(
             elif motif_pcol == "":
                 m = MOTIF_STRINGB64_REPONLY.format(
                     post_bases=post_bases, post_reps=post_reps, errors=post_errors,
-                    motif_name=motif_clean_id, motif_id=motif_id_local, motif=motif_name, motif_reps=motif_reps, motif_pcolor=motif_pcol,
+                    motif_name=motif_clean_id, motif_id=motif_id, motif=motif.name, motif_reps=motif_reps, motif_pcolor=motif_pcol,
                     result=result, alignment=alignment, sequence=sequence, nomenclatures=nomenclatures_local
                 )
             else:
                 m = MOTIF_STRINGB64.format(
                     post_bases=post_bases, post_reps=post_reps, errors=post_errors,
-                    motif_name=motif_clean_id, motif_id=motif_id_local, motif=motif_name, motif_reps=motif_reps, motif_pcolor=motif_pcol,
+                    motif_name=motif_clean_id, motif_id=motif_id, motif=motif.name, motif_reps=motif_reps, motif_pcolor=motif_pcol,
                     result=result, alignment=alignment, sequence=sequence, nomenclatures=nomenclatures_local
                 )
             ms_list.append(m)
-
-            if motif.name not in mcs:
-                if motif_reps == "":
-                    mcontent = CONTENT_STRING_EMPTY
-                else:
-                    mcontent = CONTENT_STRING.format(motif_name=motif_id_local, motif=motif_name)
-                mcs[motif.name] = mcontent
 
         for ph in phasing[1:]:
             if ph is None:
@@ -376,12 +369,22 @@ def write_report(
             second_module_number = module_number
             suffix = f'{prev_module_num}_{second_module_number}'
 
+            row = generate_result_line(motif, phasing1, supp_reads, len(anns_2good), len(anns_1good), len(anns_0good), prev_module_num, second_module_number=module_number)
+            row1 = generate_row(seq, row, post_filter)
+            tmp = generate_motifb64(seq, row)
+            (motif_clean_id, _, _motif_name, result, alignment, sequence) = tmp
+            rows_list.append(row1)
+
+            annotations = anns_2good + anns_1good
+            if len(annotations) == 0:
+                print(f"{motif_dir} {suffix} is empty")
+                continue
+
             nomenclature_file = f'{motif_dir}/nomenclatures_{suffix}.txt'
             write_histogram_nomenclature(f'{motif_dir}/nomenclatures_{suffix}.txt', anns_2good, index_rep=prev_module_num, index_rep2=second_module_number)
             nomenclature_lines = generate_nomenclatures(nomenclature_file, motif, nomenclature_limit)
             nomenclatures_local = '\n'.join(nomenclature_lines)
 
-            annotations = anns_2good + anns_1good
             write_histogram_image2d(f'{motif_dir}/repetitions_{suffix}', annotations, prev_module_num, second_module_number, motif.module_str(prev_module_num), motif.module_str(second_module_number))
             rep_file = find_file(f'{motif_dir}/repetitions_{suffix}.json')
             motif_reps: str = '' if rep_file is None else open(rep_file, 'r').read()
@@ -389,39 +392,23 @@ def write_report(
 
             motif_pcol: str = ''
 
-            row = generate_result_line(motif, phasing1, supp_reads, len(anns_2good), len(anns_1good), len(anns_0good), prev_module_num, second_module_number=module_number)
-            row1 = generate_row(seq, row, post_filter)
-            tmp = generate_motifb64(seq, row)
-            (motif_clean_id, motif_id_local, motif_name, result, alignment, sequence) = tmp
-            rows_list.append(row1)
-
             if motif_reps == "":
                 m = MOTIF_STRING_EMPTY
             else:
                 m = MOTIF_STRINGB64_REPONLY.format(
                     post_bases=post_bases, post_reps=post_reps, errors=post_errors,
-                    motif_name=motif_clean_id, motif_id=motif_id_local, motif=motif_name, motif_reps=motif_reps, motif_pcolor=motif_pcol,
+                    motif_name=motif_clean_id, motif_id=motif_id, motif=motif.name, motif_reps=motif_reps, motif_pcolor=motif_pcol,
                     result=result, alignment=alignment, sequence=sequence, nomenclatures=nomenclatures_local
                 )
 
             ms_list.append(m)
 
-            if motif.name not in mcs:
-                if motif_reps == "":
-                    mcontent = CONTENT_STRING_EMPTY
-                else:
-                    mcontent = CONTENT_STRING.format(motif_name=motif_id_local, motif=motif_name)
-
-                mcs[motif.name] = mcontent
-
-        table = '\n'.join(rows_list)
-        motifs = '\n'.join(ms_list)
-
-        tabs.append((motif_id, nomenclatures, table, motifs))
+        tabs.append((motif_id, nomenclatures, rows_list, ms_list))
+        mcs_list.append((motif_id, motif.name))
 
     sample = os.path.basename(output_dir)
     version = VERSION
-    table = sorted(mcs.values())
+    table = sorted(mcs_list)
 
     env = Environment(loader=FileSystemLoader([script_dir]))
     template = env.get_template("report_template.html")
@@ -2552,18 +2539,6 @@ def save_phasing(phasing_file: str, phasing: tuple[str, str], supp_reads: tuple[
         f.write(f'{phasing[0]}\t{phasing[1]}\n')
         f.write(f'{supp_reads[0]}\t{supp_reads[1]}\t{supp_reads[2]}\n')
 
-
-# this is repeated for each motif
-CONTENT_STRING = """
-<tr>
-    <td class="tg-s6z2">
-        <a href="#{motif_name}" class="tablinks"
-        onclick="openTab(event, '{motif_name}'); $('.{motif_name}').trigger('content-change');">{motif}</a>
-    </td>
-</tr>
-"""
-
-CONTENT_STRING_EMPTY = ""
 
 ROW_STRING = """
   <tr>
