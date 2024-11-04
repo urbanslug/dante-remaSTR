@@ -29,13 +29,82 @@
 <!-- Tab links -->
 <h2 id="content">Content (Sample: {{ sample }} Version: Remastr v{{ version }})</h2>
 <div class="tab">
-    {{ motifs_content }}
+<table class="tg" id="content-tg">
+    <thead>
+        <tr>
+            <th class="tg-s6z2">Motif</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in table %}{{ row }}{% endfor %}
+    </tbody>
+</table>
+
+<script>
+    $(document).ready( function () { {
+    $('#content-tg').DataTable();
+} } );
+</script>
+
 </div>
 
-{{ table }}
 
 <!-- Tab content -->
+{% for (motif_id, nomenclatures, table, motifs) in tabs %}
+<div class="tabcontent" id="{{ motif_id }}" style="display: none">
+<h2 class="summary_nomenclatures">Nomenclatures</h2>
+<table class="nomtg">
+    <tbody>
+        {{ nomenclatures }}
+    </tbody>
+</table>
+<h2 class="summary">Summary table</h2>
+<table class="tg" id="tg-{{ motif_id }}">
+    <thead>
+        <tr>
+            <th class="tg-s6z2" rowspan="3">Motif</th>
+            <th class="tg-s6z2" rowspan="3">Sequence</th>
+            <th class="tg-s6z2" colspan="5">Allele 1</th>
+            <th class="tg-s6z2" colspan="5">Allele 2</th>
+            <th class="tg-s6z2" rowspan="3">Overall<br>confidence</th>
+            <th class="tg-s6z2" colspan="2">Errors per read</th>
+            <th class="tg-s6z2" colspan="2">Reads</th>
+        </tr>
+        <tr>
+            <td class="tg-smaller" rowspan="2">prediction</td>
+            <td class="tg-smaller" rowspan="2">confidence</td>
+            <td class="tg-smaller" rowspan="2">reads</td>
+            <td class="tg-smaller" colspan="2">Errors per read</td>
+            <td class="tg-smaller" rowspan="2">prediction</td>
+            <td class="tg-smaller" rowspan="2">confidence</td>
+            <td class="tg-smaller" rowspan="2">reads</td>
+            <td class="tg-smaller" colspan="2">Errors per read</td>
+            <td class="tg-smaller" rowspan="2">indel</td>
+            <td class="tg-smaller" rowspan="2">mismatch</td>
+            <td class="tg-smaller" rowspan="2">full</td>
+            <td class="tg-smaller" rowspan="2">partial</td>
+        </tr>
+        <tr>
+            <td class="tg-smaller">indel</td>
+            <td class="tg-smaller">mismatch</td>
+            <td class="tg-smaller">indel</td>
+            <td class="tg-smaller">mismatch</td>
+        </tr>
+    </thead>
+    <tbody>
+        {{ table }}
+    </tbody>
+</table>
+
+<script>
+    $(document).ready( function () {
+    $('#tg-{{ motif_id }}').DataTable({scrollX: true});
+} );
+</script>
+
 {{ motifs }}
+</div>
+{% endfor %}
 
 <script>
     function openTab(evt, tabName) {

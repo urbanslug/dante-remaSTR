@@ -293,8 +293,13 @@ def write_report(
     script_dir: str, output_dir: str, nomenclature_limit: int = 5
 ) -> None:
     post_filter = PostFilter()
+    post_bases = post_filter.min_rep_len
+    post_reps = post_filter.min_rep_cnt
+    post_errors = f'{post_filter.max_rel_error * 100:.0f}%'
+    if post_filter.max_abs_error is not None:
+        post_errors += f' (abs={post_filter.max_abs_error})'
 
-    mcs: dict[str, str] = {}  # first table in html, one value, one row
+    mcs: dict[str, str] = {}
     tabs = []
     for (motif, anns, genotype, phasing) in zip(all_motifs, all_annotations, all_genotypes, all_haplotypes):
         motif_dir = f'{output_dir}/{motif.dir_name()}'
@@ -320,44 +325,48 @@ def write_report(
             nomenclature_file = f'{motif_dir}/nomenclatures_{suffix}.txt'
             write_histogram_nomenclature(f'{motif_dir}/nomenclatures_{suffix}.txt', anns_spanning, index_rep=module_number, index_rep2=None)
             nomenclature_lines = generate_nomenclatures(nomenclature_file, motif, nomenclature_limit)  # NOMENCLATURE_STRING
+            nomenclatures_local = '\n'.join(nomenclature_lines)
 
             write_histogram_image(f'{motif_dir}/repetitions_{suffix}', anns_spanning, anns_flanking, module_number)
             rep_file = find_file(f'{motif_dir}/repetitions_{suffix}.json')
+            motif_reps: str = '' if rep_file is None else open(rep_file, 'r').read()
+            del rep_file
 
             if lh_array is not None:
                 file_pcolor = f'{motif_dir}/pcolor_{module_number}'
                 model.draw_pcolor(file_pcolor, lh_array, motif.nomenclature)
             pcol_file = find_file(f'{motif_dir}/pcolor_{suffix}.json')
+            motif_pcol: str = '' if pcol_file is None else open(pcol_file, 'r').read()
+            del pcol_file
 
             row = generate_result_line(motif, predicted, confidence, len(anns_spanning), len(anns_flanking), len(anns_filtered), module_number, qual_annot=anns_spanning)
             row1 = generate_row(seq, row, post_filter)  # ROW_STRING
+            tmp = generate_motifb64(seq, row)
+            (motif_clean_id, motif_id_local, motif_name, result, alignment, sequence) = tmp
             rows_list.append(row1)
+            del row
 
-            if rep_file is None:
-                mcontent = CONTENT_STRING_EMPTY
+            if motif_reps == "":
                 m = MOTIF_STRING_EMPTY
+            elif motif_pcol == "":
+                m = MOTIF_STRINGB64_REPONLY.format(
+                    post_bases=post_bases, post_reps=post_reps, errors=post_errors,
+                    motif_name=motif_clean_id, motif_id=motif_id_local, motif=motif_name, motif_reps=motif_reps, motif_pcolor=motif_pcol,
+                    result=result, alignment=alignment, sequence=sequence, nomenclatures=nomenclatures_local
+                )
             else:
-                reps: str = open(rep_file, 'r').read()
-                pcol: str = '' if pcol_file is None else open(pcol_file, 'r').read()
-                tmp = generate_motifb64(seq, row, reps, pcol, nomenclature_lines, post_filter)
-                (post_bases, post_reps, post_errors, motif_clean_id, motif_id_local, motif_name, motif_reps, motif_pcol, result, alignment, sequence, nomenclatures_local) = tmp
-                mcontent = CONTENT_STRING.format(motif_name=motif_id_local, motif=motif_name)
-                if motif_pcol == '':
-                    m = MOTIF_STRINGB64_REPONLY.format(
-                        post_bases=post_bases, post_reps=post_reps, errors=post_errors,
-                        motif_name=motif_clean_id, motif_id=motif_id_local, motif=motif_name, motif_reps=motif_reps, motif_pcolor=motif_pcol,
-                        result=result, alignment=alignment, sequence=sequence, nomenclatures=nomenclatures_local
-                    )
-                else:
-                    m = MOTIF_STRINGB64.format(
-                        post_bases=post_bases, post_reps=post_reps, errors=post_errors,
-                        motif_name=motif_clean_id, motif_id=motif_id_local, motif=motif_name, motif_reps=motif_reps, motif_pcolor=motif_pcol,
-                        result=result, alignment=alignment, sequence=sequence, nomenclatures=nomenclatures_local
-                    )
-
+                m = MOTIF_STRINGB64.format(
+                    post_bases=post_bases, post_reps=post_reps, errors=post_errors,
+                    motif_name=motif_clean_id, motif_id=motif_id_local, motif=motif_name, motif_reps=motif_reps, motif_pcolor=motif_pcol,
+                    result=result, alignment=alignment, sequence=sequence, nomenclatures=nomenclatures_local
+                )
             ms_list.append(m)
 
             if motif.name not in mcs:
+                if motif_reps == "":
+                    mcontent = CONTENT_STRING_EMPTY
+                else:
+                    mcontent = CONTENT_STRING.format(motif_name=motif_id_local, motif=motif_name)
                 mcs[motif.name] = mcontent
 
         for ph in phasing[1:]:
@@ -370,57 +379,53 @@ def write_report(
             nomenclature_file = f'{motif_dir}/nomenclatures_{suffix}.txt'
             write_histogram_nomenclature(f'{motif_dir}/nomenclatures_{suffix}.txt', anns_2good, index_rep=prev_module_num, index_rep2=second_module_number)
             nomenclature_lines = generate_nomenclatures(nomenclature_file, motif, nomenclature_limit)
+            nomenclatures_local = '\n'.join(nomenclature_lines)
 
             annotations = anns_2good + anns_1good
             write_histogram_image2d(f'{motif_dir}/repetitions_{suffix}', annotations, prev_module_num, second_module_number, motif.module_str(prev_module_num), motif.module_str(second_module_number))
             rep_file = find_file(f'{motif_dir}/repetitions_{suffix}.json')
+            motif_reps: str = '' if rep_file is None else open(rep_file, 'r').read()
+            del rep_file
+
+            motif_pcol: str = ''
 
             row = generate_result_line(motif, phasing1, supp_reads, len(anns_2good), len(anns_1good), len(anns_0good), prev_module_num, second_module_number=module_number)
             row1 = generate_row(seq, row, post_filter)
+            tmp = generate_motifb64(seq, row)
+            (motif_clean_id, motif_id_local, motif_name, result, alignment, sequence) = tmp
             rows_list.append(row1)
 
-            if rep_file is None:
-                mcontent = CONTENT_STRING_EMPTY
+            if motif_reps == "":
                 m = MOTIF_STRING_EMPTY
             else:
-                reps: str = open(rep_file, 'r').read()
-                pcol: str = ''
-                # mcontent, m = generate_motifb64(seq, row, reps, pcol, nomenclature_lines, post_filter)  # CONTENT_STRING, MOTIF_STRINGB64
-                tmp = generate_motifb64(seq, row, reps, pcol, nomenclature_lines, post_filter)
-                (post_bases, post_reps, post_errors, motif_clean_id, motif_id_local, motif_name, motif_reps, motif_pcol, result, alignment, sequence, nomenclatures_local) = tmp
-                mcontent = CONTENT_STRING.format(motif_name=motif_id_local, motif=motif_name)
-                if motif_pcol == '':
-                    m = MOTIF_STRINGB64_REPONLY.format(
-                        post_bases=post_bases, post_reps=post_reps, errors=post_errors,
-                        motif_name=motif_clean_id, motif_id=motif_id_local, motif=motif_name, motif_reps=motif_reps, motif_pcolor=motif_pcol,
-                        result=result, alignment=alignment, sequence=sequence, nomenclatures=nomenclatures_local
-                    )
-                else:
-                    m = MOTIF_STRINGB64.format(
-                        post_bases=post_bases, post_reps=post_reps, errors=post_errors,
-                        motif_name=motif_clean_id, motif_id=motif_id_local, motif=motif_name, motif_reps=motif_reps, motif_pcolor=motif_pcol,
-                        result=result, alignment=alignment, sequence=sequence, nomenclatures=nomenclatures_local
-                    )
+                m = MOTIF_STRINGB64_REPONLY.format(
+                    post_bases=post_bases, post_reps=post_reps, errors=post_errors,
+                    motif_name=motif_clean_id, motif_id=motif_id_local, motif=motif_name, motif_reps=motif_reps, motif_pcolor=motif_pcol,
+                    result=result, alignment=alignment, sequence=sequence, nomenclatures=nomenclatures_local
+                )
 
             ms_list.append(m)
 
             if motif.name not in mcs:
+                if motif_reps == "":
+                    mcontent = CONTENT_STRING_EMPTY
+                else:
+                    mcontent = CONTENT_STRING.format(motif_name=motif_id_local, motif=motif_name)
+
                 mcs[motif.name] = mcontent
 
         table = '\n'.join(rows_list)
         motifs = '\n'.join(ms_list)
 
-        motif_summary = MOTIF_SUMMARY.format(motif_id=motif_id, nomenclatures=nomenclatures, table=table, motifs=motifs)
-        tabs.append(motif_summary)
+        tabs.append((motif_id, nomenclatures, table, motifs))
 
     sample = os.path.basename(output_dir)
     version = VERSION
-    table = '\n'.join(sorted(mcs.values()))
-    motifs_tab = '\n'.join(tabs)
+    table = sorted(mcs.values())
 
     env = Environment(loader=FileSystemLoader([script_dir]))
     template = env.get_template("report_template.html")
-    output = template.render(sample=sample, version=version, table=table, motifs=motifs_tab)
+    output = template.render(sample=sample, version=version, table=table, tabs=tabs)
     with open(f"{output_dir}/report.html", "w") as f:
         f.write(output)
 
@@ -2590,62 +2595,6 @@ NOMENCLATURE_STRING = """
 </tr>
 """
 
-MOTIF_SUMMARY = """
-<div class="tabcontent" id="{motif_id}" style="display: none">
-<h2 class="summary_nomenclatures">Nomenclatures</h2>
-<table class="nomtg">
-    <tbody>
-        {nomenclatures}
-    </tbody>
-</table>
-<h2 class="summary">Summary table</h2>
-<table class="tg" id="tg-{motif_id}">
-    <thead>
-        <tr>
-            <th class="tg-s6z2" rowspan="3">Motif</th>
-            <th class="tg-s6z2" rowspan="3">Sequence</th>
-            <th class="tg-s6z2" colspan="5">Allele 1</th>
-            <th class="tg-s6z2" colspan="5">Allele 2</th>
-            <th class="tg-s6z2" rowspan="3">Overall<br>confidence</th>
-            <th class="tg-s6z2" colspan="2">Errors per read</th>
-            <th class="tg-s6z2" colspan="2">Reads</th>
-        </tr>
-        <tr>
-            <td class="tg-smaller" rowspan="2">prediction</td>
-            <td class="tg-smaller" rowspan="2">confidence</td>
-            <td class="tg-smaller" rowspan="2">reads</td>
-            <td class="tg-smaller" colspan="2">Errors per read</td>
-            <td class="tg-smaller" rowspan="2">prediction</td>
-            <td class="tg-smaller" rowspan="2">confidence</td>
-            <td class="tg-smaller" rowspan="2">reads</td>
-            <td class="tg-smaller" colspan="2">Errors per read</td>
-            <td class="tg-smaller" rowspan="2">indel</td>
-            <td class="tg-smaller" rowspan="2">mismatch</td>
-            <td class="tg-smaller" rowspan="2">full</td>
-            <td class="tg-smaller" rowspan="2">partial</td>
-        </tr>
-        <tr>
-            <td class="tg-smaller">indel</td>
-            <td class="tg-smaller">mismatch</td>
-            <td class="tg-smaller">indel</td>
-            <td class="tg-smaller">mismatch</td>
-        </tr>
-    </thead>
-    <tbody>
-        {table}
-    </tbody>
-</table>
-
-<script>
-    $(document).ready( function () {{
-    $('#tg-{motif_id}').DataTable({{scrollX: true}});
-}} );
-</script>
-
-{motifs}
-</div>
-"""
-
 MOTIF_STRINGB64 = """
 <h2 id="data-{motif_name}">{motif}</h2>
 <p>{sequence}</p>
@@ -2827,15 +2776,8 @@ def get_alignment_name(alignment_file: str, allele: int) -> str:
 
 
 def generate_motifb64(
-    seq: str, row: dict, motif_reps: str, motif_pcol: str, nomenclature_lines: list[str], postfilter: PostFilter
+    seq: str, row: dict
 ) -> tuple:
-
-    post_bases = postfilter.min_rep_len
-    post_reps = postfilter.min_rep_cnt
-    post_errors = f'{postfilter.max_rel_error * 100:.0f}%'
-    if postfilter.max_abs_error is not None:
-        post_errors += f' (abs={postfilter.max_abs_error})'
-
     highlight = list(map(int, str(row['repetition_index']).split('_')))
     sequence, _ = highlight_subpart(seq, highlight)
     motif_name = row['motif_name']
@@ -2857,9 +2799,8 @@ def generate_motifb64(
         result = f'{str(a1):2s} ({conf_a1}) {str(a2):2s} ({conf_a2}) total {conf_total}'
 
     alignment = f"{motif_name}/alignments.html"
-    nomenclatures = '\n'.join(nomenclature_lines)
 
-    return (post_bases, post_reps, post_errors, motif_clean_id, motif_id, motif_name, motif_reps, motif_pcol, result, alignment, sequence, nomenclatures)
+    return (motif_clean_id, motif_id, motif_name, result, alignment, sequence)
 
 
 Confidences: TypeAlias = tuple[float, float, float, float, float, float, float]
