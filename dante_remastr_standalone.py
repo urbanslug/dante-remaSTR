@@ -323,13 +323,7 @@ def write_report(
 
             nomenclature_file = f'{motif_dir}/nomenclatures_{suffix}.txt'
             write_histogram_nomenclature(f'{motif_dir}/nomenclatures_{suffix}.txt', anns_spanning, index_rep=module_number, index_rep2=None)
-            nomenclature_lines = generate_nomenclatures(nomenclature_file, motif, nomenclature_limit)  # NOMENCLATURE_STRING
-
-            nomenclature_htmls = []
-            for (count, ref, parts) in nomenclature_lines:
-                nom_row = NOMENCLATURE_STRING.format(count=count, ref=ref, parts=parts)
-                nomenclature_htmls.append(nom_row)
-            nomenclatures_local = '\n'.join(nomenclature_htmls)
+            nomenclatures_local = generate_nomenclatures(nomenclature_file, motif, nomenclature_limit)
 
             write_histogram_image(f'{motif_dir}/repetitions_{suffix}', anns_spanning, anns_flanking, module_number)
             rep_file = find_file(f'{motif_dir}/repetitions_{suffix}.json')
@@ -344,11 +338,11 @@ def write_report(
             del pcol_file
 
             row = generate_result_line(motif, predicted, confidence, len(anns_spanning), len(anns_flanking), len(anns_filtered), module_number, qual_annot=anns_spanning)
-            row, updated_result = generate_row(seq, row, post_filter)  # ROW_STRING
-            row_string = ROW_STRING.format(**{**row, **updated_result})
+            row_tuple = generate_row(seq, row, post_filter)
+            rows_list.append(row_tuple)
+
             tmp = generate_motifb64(seq, row)
             (motif_clean_id, _, _motif_name, result, alignment, sequence) = tmp
-            rows_list.append(row_string)
             del row
 
             #    (motif_reps, motif_pcolor, post_bases, post_reps, errors,    motif_name,     motif_id, motif,      result, alignment, sequence, nomenclatures)
@@ -363,11 +357,11 @@ def write_report(
             suffix = f'{prev_module_num}_{second_module_number}'
 
             row = generate_result_line(motif, phasing1, supp_reads, len(anns_2good), len(anns_1good), len(anns_0good), prev_module_num, second_module_number=module_number)
-            row, updated_result = generate_row(seq, row, post_filter)
-            row_string = ROW_STRING.format(**{**row, **updated_result})
+            row_tuple = generate_row(seq, row, post_filter)
+            rows_list.append(row_tuple)
+
             tmp = generate_motifb64(seq, row)
             (motif_clean_id, _, _motif_name, result, alignment, sequence) = tmp
-            rows_list.append(row_string)
 
             annotations = anns_2good + anns_1good
             if len(annotations) == 0:
@@ -376,13 +370,7 @@ def write_report(
 
             nomenclature_file = f'{motif_dir}/nomenclatures_{suffix}.txt'
             write_histogram_nomenclature(f'{motif_dir}/nomenclatures_{suffix}.txt', anns_2good, index_rep=prev_module_num, index_rep2=second_module_number)
-            nomenclature_lines = generate_nomenclatures(nomenclature_file, motif, nomenclature_limit)
-
-            nomenclature_htmls = []
-            for (count, ref, parts) in nomenclature_lines:
-                nom_row = NOMENCLATURE_STRING.format(count=count, ref=ref, parts=parts)
-                nomenclature_htmls.append(nom_row)
-            nomenclatures_local = '\n'.join(nomenclature_htmls)
+            nomenclatures_local = generate_nomenclatures(nomenclature_file, motif, nomenclature_limit)
 
             write_histogram_image2d(f'{motif_dir}/repetitions_{suffix}', annotations, prev_module_num, second_module_number, motif.module_str(prev_module_num), motif.module_str(second_module_number))
             rep_file = find_file(f'{motif_dir}/repetitions_{suffix}.json')
@@ -2532,134 +2520,6 @@ def save_phasing(phasing_file: str, phasing: tuple[str, str], supp_reads: tuple[
         f.write(f'{supp_reads[0]}\t{supp_reads[1]}\t{supp_reads[2]}\n')
 
 
-ROW_STRING = """
-  <tr>
-    <td class="tg-s6z2">{motif_name}</td>
-    <td class="tg-s6z2">{motif_nomenclature}</td>
-    <td class="tg-s6z2">{allele1}</td>
-    <td class="tg-s6z2">{conf_allele1}</td>
-    <td class="tg-s6z2">{reads_a1}</td>
-    <td class="tg-s6z2">{indels_a1}</td>
-    <td class="tg-s6z2">{mismatches_a1}</td>
-    <td class="tg-s6z2">{allele2}</td>
-    <td class="tg-s6z2">{conf_allele2}</td>
-    <td class="tg-s6z2">{reads_a2}</td>
-    <td class="tg-s6z2">{indels_a2}</td>
-    <td class="tg-s6z2">{mismatches_a2}</td>
-    <td class="tg-s6z2">{confidence}</td>
-    <td class="tg-s6z2">{indels}</td>
-    <td class="tg-s6z2">{mismatches}</td>
-    <td class="tg-s6z2">{quality_reads}</td>
-    <td class="tg-s6z2">{one_primer_reads}</td>
-  </tr>
-"""
-
-NOMENCLATURE_STRING = """
-<tr>
-    <td>{count}</td>
-    <td>{ref}</td>
-    {parts}
-</tr>
-"""
-
-MOTIF_STRINGB64 = """
-<h2 id="data-{motif_name}">{motif}</h2>
-<p>{sequence}</p>
-Nomenclatures:<br>
-<table class="nomtg">
-    <tbody>
-        {nomenclatures}
-    </tbody>
-</table>
-postfilter: bases {post_bases} , repetitions {post_reps} , max. errors {errors}<br>
-alleles: {result}<br>
-<table class="plots">
-    <tr>
-        <td colspan="1">
-            <div class="hist pic100 {motif_id}" id="hist-{motif_name}"></div>
-        </td>
-        <td colspan="1">
-            <div class="pcol pic100 {motif_id}" id="pcol-{motif_name}"></div>
-        </td>
-    </tr>
-</table>
-
-<script>
-    {{
-        let hist_data = {motif_reps};
-        let pcol_data = {motif_pcolor};
-
-        let updateGraph = () => {{
-            if (document.getElementById('{motif_id}').style.display === 'block') {{
-                hist_data['layout'] = {{...hist_data['layout'],
-                    width: (window.innerWidth-50) * 0.6,
-                    height: (window.innerWidth-50) * 0.35,
-                    legend: {{...hist_data['layout']['legend'], x: 0.85, y: 0.85 }}}};
-                pcol_data['layout'] = {{...pcol_data['layout'],
-                                        width: (window.innerWidth-50) * 0.4,
-                                        height: (window.innerWidth-50) * 0.35}};
-                Plotly.react('hist-{motif_name}', hist_data);
-                Plotly.react('pcol-{motif_name}', pcol_data);
-            }}
-        }};
-
-        $(document).ready(function() {{
-            $('.{motif_id}').bind("content-change", updateGraph);
-            window.addEventListener('resize', updateGraph, true);
-        }});
-    }}
-</script>
-
-<p><a href="{alignment}">Link to alignments</a></p>
-<p><a href="#content">Back to content</a></p>
-"""
-
-MOTIF_STRINGB64_REPONLY = """
-<h2 id="data-{motif_name}">{motif}</h2>
-<p>{sequence}</p>
-Nomenclatures:<br>
-<table class="nomtg">
-    <tbody>
-        {nomenclatures}
-    </tbody>
-</table>
-postfilter: bases {post_bases} , repetitions {post_reps} , max. errors {errors}<br>
-alleles: {result}<br>
-<table class="plots">
-    <tr>
-        <td colspan="1">
-            <div class="hist {motif_id}" id="hist2d-{motif_name}"></div>
-        </td>
-    </tr>
-</table>
-
-<script>
-    {{
-        let hist_data = {motif_reps};
-
-        let updateGraph = () => {{
-            if (document.getElementById('{motif_id}').style.display === 'block') {{
-                hist_data['layout'] = {{...hist_data['layout'],
-                                        width: (window.innerWidth-50) * 0.5,
-                                        height: (window.innerWidth-50) * 0.45}};
-                Plotly.react('hist2d-{motif_name}', hist_data);
-            }}
-        }};
-
-        $(document).ready(function() {{
-            $('.{motif_id}').bind("content-change", updateGraph);
-            window.addEventListener('resize', updateGraph, true);
-        }});
-    }}
-</script>
-
-<p><a href="{alignment}">Link to alignments</a></p>
-<p><a href="#content">Back to content</a></p>
-"""
-
-MOTIF_STRING_EMPTY = ""
-
-
 def highlight_subpart(seq: str, highlight: int | list[int]) -> tuple[str, str]:
     """
     Highlights subpart of a motif sequence
@@ -2692,7 +2552,7 @@ def float_to_str(c: float | str, percents: bool = False, decimals: int = 1) -> s
     return c
 
 
-def generate_row(sequence: str, result: dict, postfilter: PostFilter) -> tuple[dict, dict[str, str]]:
+def generate_row(sequence: str, result: dict, postfilter: PostFilter) -> tuple:
     """
     Generate rows of a summary table in html report.
     :param sequence: str - motif sequence
@@ -2728,7 +2588,35 @@ def generate_row(sequence: str, result: dict, postfilter: PostFilter) -> tuple[d
         'mismatches_a2': float_to_str(result['mismatches_a2'], decimals=2)
     }
     # return ROW_STRING.format(**{**result, **updated_result})
-    return (result, updated_result)
+    motif_name = result['motif_name']
+    motif_nomenclature = updated_result['motif_nomenclature']
+    allele1 = result['allele1']
+    conf_allele1 = updated_result['conf_allele1']
+    reads_a1 = result['reads_a1']
+    indels_a1 = updated_result['indels_a1']
+    mismatches_a1 = updated_result['mismatches_a1']
+
+    allele2 = result['allele2']
+    conf_allele2 = updated_result['conf_allele2']
+    reads_a2 = result['reads_a2']
+    indels_a2 = updated_result['indels_a2']
+    mismatches_a2 = updated_result['mismatches_a2']
+
+    confidence = updated_result['confidence']
+    indels = updated_result['indels']
+    mismatches = updated_result['mismatches']
+    quality_reads = result['quality_reads']
+    one_primer_reads = result['one_primer_reads']
+
+    row_tuple = (
+        motif_name, motif_nomenclature,
+        allele1, conf_allele1, reads_a1, indels_a1, mismatches_a1,
+        allele2, conf_allele2, reads_a2, indels_a2, mismatches_a2,
+        confidence, indels, mismatches, quality_reads, one_primer_reads
+    )
+
+    return row_tuple
+    # return (result, updated_result)
 
 
 def get_alignment_name(alignment_file: str, allele: int) -> str:
