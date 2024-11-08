@@ -313,8 +313,7 @@ def write_report(
             annotations, _ = post_filter.get_filtered(annotations, module_number, both_primers=True)
         nomenclature_file = f'{motif_dir}/nomenclature.txt'
         write_histogram_nomenclature(nomenclature_file, annotations)
-        nomenclature_lines = generate_nomenclatures(nomenclature_file, motif, nomenclature_limit)
-        nomenclatures = '\n'.join(nomenclature_lines)
+        nomenclatures = generate_nomenclatures(nomenclature_file, motif, nomenclature_limit)
 
         rows_list = []
         ms_list = []
@@ -325,7 +324,12 @@ def write_report(
             nomenclature_file = f'{motif_dir}/nomenclatures_{suffix}.txt'
             write_histogram_nomenclature(f'{motif_dir}/nomenclatures_{suffix}.txt', anns_spanning, index_rep=module_number, index_rep2=None)
             nomenclature_lines = generate_nomenclatures(nomenclature_file, motif, nomenclature_limit)  # NOMENCLATURE_STRING
-            nomenclatures_local = '\n'.join(nomenclature_lines)
+
+            nomenclature_htmls = []
+            for (count, ref, parts) in nomenclature_lines:
+                nom_row = NOMENCLATURE_STRING.format(count=count, ref=ref, parts=parts)
+                nomenclature_htmls.append(nom_row)
+            nomenclatures_local = '\n'.join(nomenclature_htmls)
 
             write_histogram_image(f'{motif_dir}/repetitions_{suffix}', anns_spanning, anns_flanking, module_number)
             rep_file = find_file(f'{motif_dir}/repetitions_{suffix}.json')
@@ -340,27 +344,16 @@ def write_report(
             del pcol_file
 
             row = generate_result_line(motif, predicted, confidence, len(anns_spanning), len(anns_flanking), len(anns_filtered), module_number, qual_annot=anns_spanning)
-            row1 = generate_row(seq, row, post_filter)  # ROW_STRING
+            row, updated_result = generate_row(seq, row, post_filter)  # ROW_STRING
+            row_string = ROW_STRING.format(**{**row, **updated_result})
             tmp = generate_motifb64(seq, row)
             (motif_clean_id, _, _motif_name, result, alignment, sequence) = tmp
-            rows_list.append(row1)
+            rows_list.append(row_string)
             del row
 
-            if motif_reps == "":
-                m = MOTIF_STRING_EMPTY
-            elif motif_pcol == "":
-                m = MOTIF_STRINGB64_REPONLY.format(
-                    post_bases=post_bases, post_reps=post_reps, errors=post_errors,
-                    motif_name=motif_clean_id, motif_id=motif_id, motif=motif.name, motif_reps=motif_reps, motif_pcolor=motif_pcol,
-                    result=result, alignment=alignment, sequence=sequence, nomenclatures=nomenclatures_local
-                )
-            else:
-                m = MOTIF_STRINGB64.format(
-                    post_bases=post_bases, post_reps=post_reps, errors=post_errors,
-                    motif_name=motif_clean_id, motif_id=motif_id, motif=motif.name, motif_reps=motif_reps, motif_pcolor=motif_pcol,
-                    result=result, alignment=alignment, sequence=sequence, nomenclatures=nomenclatures_local
-                )
-            ms_list.append(m)
+            #    (motif_reps, motif_pcolor, post_bases, post_reps, errors,    motif_name,     motif_id, motif,      result, alignment, sequence, nomenclatures)
+            m2 = (motif_reps, motif_pcol, post_bases, post_reps, post_errors, motif_clean_id, motif_id, motif.name, result, alignment, sequence, nomenclatures_local)
+            ms_list.append(m2)
 
         for ph in phasing[1:]:
             if ph is None:
@@ -370,10 +363,11 @@ def write_report(
             suffix = f'{prev_module_num}_{second_module_number}'
 
             row = generate_result_line(motif, phasing1, supp_reads, len(anns_2good), len(anns_1good), len(anns_0good), prev_module_num, second_module_number=module_number)
-            row1 = generate_row(seq, row, post_filter)
+            row, updated_result = generate_row(seq, row, post_filter)
+            row_string = ROW_STRING.format(**{**row, **updated_result})
             tmp = generate_motifb64(seq, row)
             (motif_clean_id, _, _motif_name, result, alignment, sequence) = tmp
-            rows_list.append(row1)
+            rows_list.append(row_string)
 
             annotations = anns_2good + anns_1good
             if len(annotations) == 0:
@@ -383,25 +377,22 @@ def write_report(
             nomenclature_file = f'{motif_dir}/nomenclatures_{suffix}.txt'
             write_histogram_nomenclature(f'{motif_dir}/nomenclatures_{suffix}.txt', anns_2good, index_rep=prev_module_num, index_rep2=second_module_number)
             nomenclature_lines = generate_nomenclatures(nomenclature_file, motif, nomenclature_limit)
-            nomenclatures_local = '\n'.join(nomenclature_lines)
+
+            nomenclature_htmls = []
+            for (count, ref, parts) in nomenclature_lines:
+                nom_row = NOMENCLATURE_STRING.format(count=count, ref=ref, parts=parts)
+                nomenclature_htmls.append(nom_row)
+            nomenclatures_local = '\n'.join(nomenclature_htmls)
 
             write_histogram_image2d(f'{motif_dir}/repetitions_{suffix}', annotations, prev_module_num, second_module_number, motif.module_str(prev_module_num), motif.module_str(second_module_number))
             rep_file = find_file(f'{motif_dir}/repetitions_{suffix}.json')
-            motif_reps: str = '' if rep_file is None else open(rep_file, 'r').read()
+            motif_reps = '' if rep_file is None else open(rep_file, 'r').read()
             del rep_file
 
-            motif_pcol: str = ''
+            motif_pcol = ''
 
-            if motif_reps == "":
-                m = MOTIF_STRING_EMPTY
-            else:
-                m = MOTIF_STRINGB64_REPONLY.format(
-                    post_bases=post_bases, post_reps=post_reps, errors=post_errors,
-                    motif_name=motif_clean_id, motif_id=motif_id, motif=motif.name, motif_reps=motif_reps, motif_pcolor=motif_pcol,
-                    result=result, alignment=alignment, sequence=sequence, nomenclatures=nomenclatures_local
-                )
-
-            ms_list.append(m)
+            m2 = (motif_reps, motif_pcol, post_bases, post_reps, post_errors, motif_clean_id, motif_id, motif.name, result, alignment, sequence, nomenclatures_local)
+            ms_list.append(m2)
 
         tabs.append((motif_id, nomenclatures, rows_list, ms_list))
         mcs_list.append((motif_id, motif.name))
@@ -410,7 +401,7 @@ def write_report(
     version = VERSION
     table = sorted(mcs_list)
 
-    env = Environment(loader=FileSystemLoader([script_dir]))
+    env = Environment(loader=FileSystemLoader([script_dir]), trim_blocks=True, lstrip_blocks=True)
     template = env.get_template("report_template.html")
     output = template.render(sample=sample, version=version, table=table, tabs=tabs)
     with open(f"{output_dir}/report.html", "w") as f:
@@ -1920,7 +1911,7 @@ def find_file(filename: str) -> str | None:
     return None
 
 
-def generate_nomenclatures(filename: str, motif: Motif, nomenclature_limit: int) -> list[str]:
+def generate_nomenclatures(filename: str, motif: Motif, nomenclature_limit: int) -> list[tuple[str, str, str]]:
     """
     Generate nomenclature string lines from nomenclature file. Maximally generate nomenclature_limit lines.
     :param filename: str - file name of the nomenclature file
@@ -1940,9 +1931,10 @@ def generate_nomenclatures(filename: str, motif: Motif, nomenclature_limit: int)
 
             line_split = line.split('\t')
             motif_parts = [f'<td>{s}</td>' for s in line_split[1:]]
+            count = line_split[0] + 'x'
             ref = f'{motif.chrom}:g.{motif.start}_{motif.end}'
-            nom_row = NOMENCLATURE_STRING.format(count=line_split[0] + 'x', ref=ref, parts='\n    '.join(motif_parts))
-            lines.append(nom_row)
+            parts = '\n    '.join(motif_parts)
+            lines.append((count, ref, parts))
 
             # end?
             if len(lines) >= nomenclature_limit:
@@ -2700,7 +2692,7 @@ def float_to_str(c: float | str, percents: bool = False, decimals: int = 1) -> s
     return c
 
 
-def generate_row(sequence: str, result: dict, postfilter: PostFilter) -> str:
+def generate_row(sequence: str, result: dict, postfilter: PostFilter) -> tuple[dict, dict[str, str]]:
     """
     Generate rows of a summary table in html report.
     :param sequence: str - motif sequence
@@ -2733,8 +2725,10 @@ def generate_row(sequence: str, result: dict, postfilter: PostFilter) -> str:
         'indels_a1': float_to_str(result['indels_a1'], decimals=2),
         'mismatches_a1': float_to_str(result['mismatches_a1'], decimals=2),
         'indels_a2': float_to_str(result['indels_a2'], decimals=2),
-        'mismatches_a2': float_to_str(result['mismatches_a2'], decimals=2)}
-    return ROW_STRING.format(**{**result, **updated_result})  # TODO: WTF?
+        'mismatches_a2': float_to_str(result['mismatches_a2'], decimals=2)
+    }
+    # return ROW_STRING.format(**{**result, **updated_result})
+    return (result, updated_result)
 
 
 def get_alignment_name(alignment_file: str, allele: int) -> str:

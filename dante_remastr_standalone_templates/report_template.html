@@ -37,12 +37,11 @@
     </thead>
     <tbody>
         {% for (motif_name, motif) in table %}
-<tr>
-    <td class="tg-s6z2">
-        <a href="#{{ motif_name }}" class="tablinks"
-        onclick="openTab(event, '{{ motif_name }}'); $('.{{ motif_name }}').trigger('content-change');">{{ motif }}</a>
-    </td>
-</tr>
+        <tr>
+            <td class="tg-s6z2">
+                <a href="#{{ motif_name }}" class="tablinks" onclick="openTab(event, '{{ motif_name }}'); $('.{{ motif_name }}').trigger('content-change');">{{ motif }}</a>
+            </td>
+        </tr>
         {% endfor %}
     </tbody>
 </table>
@@ -62,7 +61,13 @@
 <h2 class="summary_nomenclatures">Nomenclatures</h2>
 <table class="nomtg">
     <tbody>
-        {{ nomenclatures }}
+        {% for (count, ref, parts) in nomenclatures %}
+        <tr>
+            <td>{{ count }}</td>
+            <td>{{ ref }}</td>
+            {{ parts }}
+        </tr>
+        {% endfor %}
     </tbody>
 </table>
 <h2 class="summary">Summary table</h2>
@@ -110,10 +115,101 @@
     $('#tg-{{ motif_id }}').DataTable({scrollX: true});
 } );
 </script>
+    {% for (motif_reps, motif_pcolor, post_bases, post_reps, errors, motif_name, motif_id, motif, result, alignment, sequence, nomenclatures) in ms_list %}
+        {% if motif_reps == "" %}
+        {% elif motif_pcolor == "" %}
+<h2 id="data-{{ motif_name }}">{{ motif }}</h2>
+<p>{{ sequence }}</p>
+Nomenclatures:<br>
+<table class="nomtg">
+    <tbody>
+        {{ nomenclatures }}
+    </tbody>
+</table>
+postfilter: bases {{ post_bases }} , repetitions {{ post_reps }} , max. errors {{ errors }}<br>
+alleles: {{ result }}<br>
+<table class="plots">
+    <tr>
+        <td colspan="1">
+            <div class="hist {{ motif_id }}" id="hist2d-{{ motif_name }}"></div>
+        </td>
+    </tr>
+</table>
 
-{% for row in ms_list %}
-{{ row }}
-{% endfor %}
+<script>
+    {
+        let hist_data = {{ motif_reps }};
+
+        let updateGraph = () => {
+            if (document.getElementById('{{ motif_id }}').style.display === 'block') {
+                hist_data['layout'] = {...hist_data['layout'],
+                                        width: (window.innerWidth-50) * 0.5,
+                                        height: (window.innerWidth-50) * 0.45};
+                Plotly.react('hist2d-{{ motif_name }}', hist_data);
+            }
+        };
+
+        $(document).ready(function() {
+            $('.{{ motif_id }}').bind("content-change", updateGraph);
+            window.addEventListener('resize', updateGraph, true);
+        });
+    }
+</script>
+
+<p><a href="{{ alignment }}">Link to alignments</a></p>
+<p><a href="#content">Back to content</a></p>
+        {% else %}
+<h2 id="data-{{ motif_name }}">{{ motif }}</h2>
+<p>{{ sequence }}</p>
+Nomenclatures:<br>
+<table class="nomtg">
+    <tbody>
+        {{ nomenclatures }}
+    </tbody>
+</table>
+postfilter: bases {{ post_bases }} , repetitions {{ post_reps }} , max. errors {{ errors }}<br>
+alleles: {{ result }}<br>
+<table class="plots">
+    <tr>
+        <td colspan="1">
+            <div class="hist pic100 {{ motif_id }}" id="hist-{{ motif_name }}"></div>
+        </td>
+        <td colspan="1">
+            <div class="pcol pic100 {{ motif_id }}" id="pcol-{{ motif_name }}"></div>
+        </td>
+    </tr>
+</table>
+
+<script>
+    {
+        let hist_data = {{ motif_reps }};
+        let pcol_data = {{ motif_pcolor }};
+
+        let updateGraph = () => {
+            if (document.getElementById('{{ motif_id }}').style.display === 'block') {
+                hist_data['layout'] = {...hist_data['layout'],
+                    width: (window.innerWidth-50) * 0.6,
+                    height: (window.innerWidth-50) * 0.35,
+                    legend: {...hist_data['layout']['legend'], x: 0.85, y: 0.85 } };
+                pcol_data['layout'] = {...pcol_data['layout'],
+                                        width: (window.innerWidth-50) * 0.4,
+                                        height: (window.innerWidth-50) * 0.35};
+                Plotly.react('hist-{{ motif_name }}', hist_data);
+                Plotly.react('pcol-{{ motif_name }}', pcol_data);
+            }
+        };
+
+        $(document).ready(function() {
+            $('.{{ motif_id }}').bind("content-change", updateGraph);
+            window.addEventListener('resize', updateGraph, true);
+        });
+    }
+</script>
+
+<p><a href="{{ alignment }}">Link to alignments</a></p>
+<p><a href="#content">Back to content</a></p>
+        {% endif %}
+    {% endfor %}
 </div>
 {% endfor %}
 
