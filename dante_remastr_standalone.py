@@ -157,12 +157,6 @@ def write_alignment_html(
 
         data = []
 
-        name = motif_clean
-        display_text = 'Spanning reads alignment visualization'
-        fasta = write_alignment(anns_spanning, module_number, index_rep2=None, cutoff_after=flank_size)
-        seq_logo = 'true'
-        data.append((name, display_text, fasta, seq_logo))
-
         if a1 is not None and a1 > 0:
             name = f'{motif_clean}_{str(a1)}'
             display_text = f'Allele 1 ({str(a1):2s}) alignment visualization'
@@ -176,6 +170,12 @@ def write_alignment_html(
             fasta = write_alignment(anns_spanning, module_number, a2, cutoff_after=flank_size)
             seq_logo = 'true'
             data.append((name, display_text, fasta, seq_logo))
+
+        name = motif_clean
+        display_text = 'Spanning reads alignment visualization'
+        fasta = write_alignment(anns_spanning, module_number, index_rep2=None, cutoff_after=flank_size)
+        seq_logo = 'true'
+        data.append((name, display_text, fasta, seq_logo))
 
         name = motif_clean + '_filtered'
         display_text = 'Partial reads alignment visualization'
@@ -1804,6 +1804,7 @@ def write_histogram_image(
 def plot_histogram_image_plotly(
     out_prefix: str, spanning: list[int], flanking: list[int], inread: list[int]
 ) -> None:
+    # print(f"{spanning=}\n{flanking=}\n{inread=}")
     dist_text = ['' if d == 0 else str(d) for d in spanning]
     dist_filt_text = ['' if df - d == 0 else str(df - d) for df, d in zip(flanking, spanning)]
     dist_inread_text = ['' if di - df == 0 else str(di - df) for di, df in zip(inread, flanking)]

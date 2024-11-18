@@ -106,26 +106,25 @@
     <tbody>
         {% for row in rows_list %}
         {% set motif_name, motif_nomenclature, allele1, conf_allele1, reads_a1, indels_a1, mismatches_a1, allele2, conf_allele2, reads_a2, indels_a2, mismatches_a2, confidence, indels, mismatches, quality_reads, one_primer_reads = row %}
-  <tr>
-    <td class="tg-s6z2">{{ motif_name }}</td>
-    <td class="tg-s6z2">{{ motif_nomenclature }}</td>
-    <td class="tg-s6z2">{{ allele1 }}</td>
-    <td class="tg-s6z2">{{ conf_allele1 }}</td>
-    <td class="tg-s6z2">{{ reads_a1 }}</td>
-    <td class="tg-s6z2">{{ indels_a1 }}</td>
-    <td class="tg-s6z2">{{ mismatches_a1 }}</td>
-    <td class="tg-s6z2">{{ allele2 }}</td>
-    <td class="tg-s6z2">{{ conf_allele2 }}</td>
-    <td class="tg-s6z2">{{ reads_a2 }}</td>
-    <td class="tg-s6z2">{{ indels_a2 }}</td>
-    <td class="tg-s6z2">{{ mismatches_a2 }}</td>
-    <td class="tg-s6z2">{{ confidence }}</td>
-    <td class="tg-s6z2">{{ indels }}</td>
-    <td class="tg-s6z2">{{ mismatches }}</td>
-    <td class="tg-s6z2">{{ quality_reads }}</td>
-    <td class="tg-s6z2">{{ one_primer_reads }}</td>
-  </tr>
-        {# {{ row }} #}
+        <tr>
+            <td class="tg-s6z2">{{ motif_name }}</td>
+            <td class="tg-s6z2">{{ motif_nomenclature }}</td>
+            <td class="tg-s6z2">{{ allele1 }}</td>
+            <td class="tg-s6z2">{{ conf_allele1 }}</td>
+            <td class="tg-s6z2">{{ reads_a1 }}</td>
+            <td class="tg-s6z2">{{ indels_a1 }}</td>
+            <td class="tg-s6z2">{{ mismatches_a1 }}</td>
+            <td class="tg-s6z2">{{ allele2 }}</td>
+            <td class="tg-s6z2">{{ conf_allele2 }}</td>
+            <td class="tg-s6z2">{{ reads_a2 }}</td>
+            <td class="tg-s6z2">{{ indels_a2 }}</td>
+            <td class="tg-s6z2">{{ mismatches_a2 }}</td>
+            <td class="tg-s6z2">{{ confidence }}</td>
+            <td class="tg-s6z2">{{ indels }}</td>
+            <td class="tg-s6z2">{{ mismatches }}</td>
+            <td class="tg-s6z2">{{ quality_reads }}</td>
+            <td class="tg-s6z2">{{ one_primer_reads }}</td>
+        </tr>
         {% endfor %}
     </tbody>
 </table>
@@ -135,6 +134,7 @@
     $('#tg-{{ motif_id }}').DataTable({scrollX: true});
 } );
 </script>
+
     {% for (motif_reps, motif_pcolor, post_bases, post_reps, errors, motif_name, motif_id, motif, result, alignment, sequence, nomenclatures) in ms_list %}
         {% if motif_reps == "" %}
         {% elif motif_pcolor == "" %}
@@ -144,11 +144,11 @@
             <table class="nomtg">
                 <tbody>
                     {% for (count, ref, parts) in nomenclatures %}
-<tr>
-    <td>{{ count }}</td>
-    <td>{{ ref }}</td>
-    {{ parts }}
-</tr>
+                    <tr>
+                        <td>{{ count }}</td>
+                        <td>{{ ref }}</td>
+                        {{ parts }}
+                    </tr>
                     {% endfor %}
                 </tbody>
             </table>
@@ -168,9 +168,11 @@
 
                     let updateGraph = () => {
                         if (document.getElementById('{{ motif_id }}').style.display === 'block') {
-                            hist_data['layout'] = {...hist_data['layout'],
-                                                    width: (window.innerWidth-50) * 0.5,
-                                                    height: (window.innerWidth-50) * 0.45};
+                            hist_data['layout'] = {
+                                ...hist_data['layout'],
+                                width: (window.innerWidth-50) * 0.5,
+                                height: (window.innerWidth-50) * 0.45
+                            };
                             Plotly.react('hist2d-{{ motif_name }}', hist_data);
                         }
                     };
@@ -191,11 +193,11 @@
             <table class="nomtg">
                 <tbody>
                     {% for (count, ref, parts) in nomenclatures %}
-<tr>
-    <td>{{ count }}</td>
-    <td>{{ ref }}</td>
-    {{ parts }}
-</tr>
+                    <tr>
+                        <td>{{ count }}</td>
+                        <td>{{ ref }}</td>
+                        {{ parts }}
+                    </tr>
                     {% endfor %}
                 </tbody>
             </table>
@@ -219,13 +221,17 @@
 
                     let updateGraph = () => {
                         if (document.getElementById('{{ motif_id }}').style.display === 'block') {
-                            hist_data['layout'] = {...hist_data['layout'],
+                            hist_data['layout'] = {
+                                ...hist_data['layout'],
                                 width: (window.innerWidth-50) * 0.6,
                                 height: (window.innerWidth-50) * 0.35,
-                                legend: {...hist_data['layout']['legend'], x: 0.85, y: 0.85 } };
-                            pcol_data['layout'] = {...pcol_data['layout'],
-                                                    width: (window.innerWidth-50) * 0.4,
-                                                    height: (window.innerWidth-50) * 0.35};
+                                legend: {...hist_data['layout']['legend'], x: 0.85, y: 0.85 }
+                            };
+                            pcol_data['layout'] = {
+                                ...pcol_data['layout'],
+                                width: (window.innerWidth-50) * 0.4,
+                                height: (window.innerWidth-50) * 0.35
+                            };
                             Plotly.react('hist-{{ motif_name }}', hist_data);
                             Plotly.react('pcol-{{ motif_name }}', pcol_data);
                         }
