@@ -26,36 +26,33 @@
 
 <div id="sample_name" style="display: none">{{ sample }}</div>
 
-<!-- Tab links -->
 <h2 id="content">Content (Sample: {{ sample }} Version: Remastr v{{ version }})</h2>
 <div class="tab">
-<table class="tg" id="content-tg">
-    <thead>
-        <tr>
-            <th class="tg-s6z2">Motif</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for (motif_name, motif) in table %}
-        <tr>
-            <td class="tg-s6z2">
-                <a href="#{{ motif_name }}" class="tablinks" onclick="openTab(event, '{{ motif_name }}'); $('.{{ motif_name }}').trigger('content-change');">{{ motif }}</a>
-            </td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
+    <table class="tg" id="content-tg">
+        <thead>
+            <tr>
+                <th class="tg-s6z2">Motif</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for (motif_name, motif) in table %}
+            <tr>
+                <td class="tg-s6z2">
+                    <a href="#{{ motif_name }}" class="tablinks" onclick="openTab(event, '{{ motif_name }}'); $('.{{ motif_name }}').trigger('content-change');">{{ motif }}</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
 
-<script>
-    $(document).ready( function () { {
-    $('#content-tg').DataTable();
-} } );
-</script>
-
+    <script>
+        $(document).ready( function () { {
+        $('#content-tg').DataTable();
+    } } );
+    </script>
 </div>
 
 
-<!-- Tab content -->
 {% for (motif_id, nomenclatures, rows_list, ms_list) in tabs %}
 <div class="tabcontent" id="{{ motif_id }}" style="display: none">
 <h2 class="summary_nomenclatures">Nomenclatures</h2>
@@ -135,25 +132,26 @@
 } );
 </script>
 
-    {% for (motif_reps, motif_pcolor, post_bases, post_reps, errors, motif_name, motif_id, motif, result, alignment, sequence, nomenclatures) in ms_list %}
-        {% if motif_reps == "" %}
-        {% elif motif_pcolor == "" %}
-            <h2 id="data-{{ motif_name }}">{{ motif }}</h2>
-            <p>{{ sequence }}</p>
-            Nomenclatures:<br>
-            <table class="nomtg">
-                <tbody>
-                    {% for (count, ref, parts) in nomenclatures %}
-                    <tr>
-                        <td>{{ count }}</td>
-                        <td>{{ ref }}</td>
-                        {{ parts }}
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            postfilter: bases {{ post_bases }} , repetitions {{ post_reps }} , max. errors {{ errors }}<br>
-            alleles: {{ result }}<br>
+    {% for (graph_data, postfilter_data, motif_name, motif_id, motif, result, alignment, sequence, nomenclatures) in ms_list if not motif_reps == "" %}
+        <h2 id="data-{{ motif_name }}">{{ motif }}</h2>
+        <p>{{ sequence }}</p>
+        Nomenclatures:<br>
+        <table class="nomtg">
+            <tbody>
+                {% for (count, ref, parts) in nomenclatures %}
+                <tr>
+                    <td>{{ count }}</td>
+                    <td>{{ ref }}</td>
+                    {{ parts }}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% set post_bases, post_reps, errors = postfilter_data %}
+        postfilter: bases {{ post_bases }} , repetitions {{ post_reps }} , max. errors {{ errors }}<br>
+        alleles: {{ result }}<br>
+        {% set motif_reps, motif_pcolor, read_counts = graph_data %}
+        {% if motif_pcolor == "" %}
             <table class="plots">
                 <tr>
                     <td colspan="1">
@@ -183,26 +181,7 @@
                     });
                 }
             </script>
-
-            <p><a href="{{ alignment }}">Link to alignments</a></p>
-            <p><a href="#content">Back to content</a></p>
         {% else %}
-            <h2 id="data-{{ motif_name }}">{{ motif }}</h2>
-            <p>{{ sequence }}</p>
-            Nomenclatures:<br>
-            <table class="nomtg">
-                <tbody>
-                    {% for (count, ref, parts) in nomenclatures %}
-                    <tr>
-                        <td>{{ count }}</td>
-                        <td>{{ ref }}</td>
-                        {{ parts }}
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            postfilter: bases {{ post_bases }} , repetitions {{ post_reps }} , max. errors {{ errors }}<br>
-            alleles: {{ result }}<br>
             <table class="plots">
                 <tr>
                     <td colspan="1">
@@ -243,46 +222,46 @@
                     });
                 }
             </script>
-
-            <p><a href="{{ alignment }}">Link to alignments</a></p>
-            <p><a href="#content">Back to content</a></p>
         {% endif %}
+
+        <p><a href="{{ alignment }}">Link to alignments</a></p>
+        <p><a href="#content">Back to content</a></p>
     {% endfor %}
 </div>
 {% endfor %}
 
 <script>
-    function openTab(evt, tabName) {
-        // Declare all variables
-        var i, tabcontent, tablinks;
+function openTab(evt, tabName) {
+    // Declare all variables
+    var i, tabcontent, tablinks;
 
-        // Get all elements with class="tabcontent" and hide them
-        tabcontent = document.getElementsByClassName("tabcontent");
-        for (i = 0; i < tabcontent.length; i++) {
-            tabcontent[i].style.display = "none";
-        }
-
-        // Get all elements with class="tablinks" and remove the class "active"
-        tablinks = document.getElementsByClassName("tablinks");
-        for (i = 0; i < tablinks.length; i++) {
-            tablinks[i].className = tablinks[i].className.replace(" active", "");
-        }
-
-        // Show the current tab, and add an "active" class to the button that opened the tab
-        document.getElementById(tabName).style.display = "block";
-        evt.currentTarget.className += " active";
-
-        var tableName = `#tg-${tabName}`;
-        var table = $(tableName).DataTable({
-            scrollX: true,
-            retrieve: true,
-        });
-
-        // Adjust columns after showing the tab and ensuring the table is visible
-        setTimeout(function() {
-            table.columns.adjust().draw();
-        }, 0); // setTimeout with 0 delay helps in cases where the layout needs to stabilize
+    // Get all elements with class="tabcontent" and hide them
+    tabcontent = document.getElementsByClassName("tabcontent");
+    for (i = 0; i < tabcontent.length; i++) {
+        tabcontent[i].style.display = "none";
     }
+
+    // Get all elements with class="tablinks" and remove the class "active"
+    tablinks = document.getElementsByClassName("tablinks");
+    for (i = 0; i < tablinks.length; i++) {
+        tablinks[i].className = tablinks[i].className.replace(" active", "");
+    }
+
+    // Show the current tab, and add an "active" class to the button that opened the tab
+    document.getElementById(tabName).style.display = "block";
+    evt.currentTarget.className += " active";
+
+    var tableName = `#tg-${tabName}`;
+    var table = $(tableName).DataTable({
+        scrollX: true,
+        retrieve: true,
+    });
+
+    // Adjust columns after showing the tab and ensuring the table is visible
+    setTimeout(function() {
+        table.columns.adjust().draw();
+    }, 0); // setTimeout with 0 delay helps in cases where the layout needs to stabilize
+}
 </script>
 </body>
 </html>

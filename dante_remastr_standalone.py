@@ -325,10 +325,14 @@ def write_report(
             write_histogram_nomenclature(f'{motif_dir}/nomenclatures_{suffix}.txt', anns_spanning, index_rep=module_number, index_rep2=None)
             nomenclatures_local = generate_nomenclatures(nomenclature_file, motif, nomenclature_limit)
 
-            write_histogram_image(f'{motif_dir}/repetitions_{suffix}', anns_spanning, anns_flanking, module_number)
-            rep_file = find_file(f'{motif_dir}/repetitions_{suffix}.json')
-            motif_reps: str = '' if rep_file is None else open(rep_file, 'r').read()
-            del rep_file
+            motif_reps: str = ''
+            if len(anns_spanning) != 0 or len(anns_flanking) != 0:
+                read_counts = write_histogram_image(f'{motif_dir}/repetitions_{suffix}', anns_spanning, anns_flanking, module_number)
+                rep_file = find_file(f'{motif_dir}/repetitions_{suffix}.json')
+                motif_reps = '' if rep_file is None else open(rep_file, 'r').read()
+                del rep_file
+            else:
+                print(f"Zero reads in {motif_id}")
 
             if lh_array is not None:
                 file_pcolor = f'{motif_dir}/pcolor_{module_number}'
@@ -345,8 +349,10 @@ def write_report(
             (motif_clean_id, _, _motif_name, result, alignment, sequence) = tmp
             del row
 
-            #    (motif_reps, motif_pcolor, post_bases, post_reps, errors,    motif_name,     motif_id, motif,      result, alignment, sequence, nomenclatures)
-            m2 = (motif_reps, motif_pcol, post_bases, post_reps, post_errors, motif_clean_id, motif_id, motif.name, result, alignment, sequence, nomenclatures_local)
+            # print(read_counts[0], read_counts[1], read_counts[2], sep="\n", end="\n\n")
+            graph_data = (motif_reps, motif_pcol, read_counts)
+            postfilter_data = (post_bases, post_reps, post_errors)
+            m2 = (graph_data, postfilter_data, motif_clean_id, motif_id, motif.name, result, alignment, sequence, nomenclatures_local)
             ms_list.append(m2)
 
         for ph in phasing[1:]:
@@ -378,8 +384,12 @@ def write_report(
             del rep_file
 
             motif_pcol = ''
+            read_counts = ([], [], [])
 
-            m2 = (motif_reps, motif_pcol, post_bases, post_reps, post_errors, motif_clean_id, motif_id, motif.name, result, alignment, sequence, nomenclatures_local)
+            # m2 = (motif_reps, motif_pcol, post_bases, post_reps, post_errors, motif_clean_id, motif_id, motif.name, result, alignment, sequence, nomenclatures_local)
+            graph_data = (motif_reps, motif_pcol, read_counts)
+            postfilter_data = (post_bases, post_reps, post_errors)
+            m2 = (graph_data, postfilter_data, motif_clean_id, motif_id, motif.name, result, alignment, sequence, nomenclatures_local)
             ms_list.append(m2)
 
         tabs.append((motif_id, nomenclatures, rows_list, ms_list))
@@ -391,6 +401,7 @@ def write_report(
 
     env = Environment(loader=FileSystemLoader([script_dir]), trim_blocks=True, lstrip_blocks=True)
     template = env.get_template("report_template.html")
+    # print(sample, version, table, tabs, sep="\n")
     output = template.render(sample=sample, version=version, table=table, tabs=tabs)
     with open(f"{output_dir}/report.html", "w") as f:
         f.write(output)
@@ -1760,7 +1771,7 @@ def plot_histogram_image2d_plotly(
 
 def write_histogram_image(
     out_prefix: str, annotations: list[Annotation], filt_annot: list[Annotation], index_rep: int
-) -> None:
+) -> tuple[list[int], list[int], list[int]]:
     """
     Stores quantity of different combinations of module repetitions, generates separate graph image for each module
     :param out_prefix: Output file prefix
@@ -1768,9 +1779,6 @@ def write_histogram_image(
     :param filt_annot: Annotated reads (filtered)
     :param index_rep: int - index of repetition module of a motif
     """
-    if len(annotations) == 0 and len(filt_annot) == 0:
-        return
-
     repetitions = sorted_repetitions(annotations)
     repetitions_filt = sorted_repetitions(filt_annot)
 
@@ -1786,19 +1794,23 @@ def write_histogram_image(
     )
 
     # set data
-    dist = [0] * (xm + 1)
+    spanning = [0] * (xm + 1)
     for r, c in spanning_counts:
-        dist[r] += c
+        spanning[r] += c
 
-    dist_filt = dist.copy()
+    flanking = spanning.copy()
     for r, c in filtered_counts:
-        dist_filt[r] += c
+        flanking[r] += c
 
-    dist_inread = dist_filt.copy()
+    inread = flanking.copy()
     for r, c in inread_counts:
-        dist_inread[r] += c
+        inread[r] += c
 
-    plot_histogram_image_plotly(out_prefix, dist, dist_filt, dist_inread)
+    plot_histogram_image_plotly(out_prefix, spanning, flanking, inread)
+
+    only_flanking = [df - d for df, d in zip(flanking, spanning)]
+    only_inread = [di - df for di, df in zip(inread, flanking)]
+    return spanning, only_flanking, only_inread
 
 
 def plot_histogram_image_plotly(
