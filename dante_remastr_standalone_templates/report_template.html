@@ -150,7 +150,8 @@
         {% set post_bases, post_reps, errors = postfilter_data %}
         postfilter: bases {{ post_bases }} , repetitions {{ post_reps }} , max. errors {{ errors }}<br>
         alleles: {{ result }}<br>
-        {% set motif_reps, motif_pcolor, read_counts = graph_data %}
+
+        {% set _, motif_pcolor, read_counts = graph_data %}
         {% if motif_pcolor == "" %}
             <table class="plots">
                 <tr>
@@ -193,9 +194,28 @@
                 </tr>
             </table>
 
+            {% set spanning, flanking, inread = read_counts %}
             <script>
                 {
-                    let hist_data = {{ motif_reps }};
+                    let hist_data = {
+                        "data":[
+                            {"y":{{ spanning }},"name":"Full reads",
+                                "marker":{"color":"#636EFA"},"textfont":{"color":"#636EFA","size":7},"type":"bar","hover":"true"},
+                            {"y":{{ flanking }},"name":"Partial reads",
+                                "marker":{"color":"#CCCCCC"},"textfont":{"color":"#CCCCCC","size":7},"type":"bar","hover":"true"},
+                            {"y":{{ inread }},"name":"Inread reads",
+                                "marker":{"color":"#FF6600"},"textfont":{"color":"#FF6600","size":7},"type":"bar","hover":"true"}
+                        ],
+                        "layout":{
+                            "title":{"text":"Histogram of repetitions"},
+                            "xaxis":{"title":{"text":"STR repetitions"},"tickmode":"array","tickvals":[5,10,15,20,25,30,35,40],"ticktext":[5,10,15,20,25,30,35,40]},
+                            "yaxis": {"fixedrange":true,"title":{"text":"Read counts"}},
+                            "legend": {"x": 0.85, "y": 0.85 },
+                            "barmode":"stack",
+                            "hovermode":"x",
+                        }
+                    };
+
                     let pcol_data = {{ motif_pcolor }};
 
                     let updateGraph = () => {
@@ -204,7 +224,6 @@
                                 ...hist_data['layout'],
                                 width: (window.innerWidth-50) * 0.6,
                                 height: (window.innerWidth-50) * 0.35,
-                                legend: {...hist_data['layout']['legend'], x: 0.85, y: 0.85 }
                             };
                             pcol_data['layout'] = {
                                 ...pcol_data['layout'],

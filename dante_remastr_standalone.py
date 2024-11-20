@@ -325,12 +325,8 @@ def write_report(
             write_histogram_nomenclature(f'{motif_dir}/nomenclatures_{suffix}.txt', anns_spanning, index_rep=module_number, index_rep2=None)
             nomenclatures_local = generate_nomenclatures(nomenclature_file, motif, nomenclature_limit)
 
-            motif_reps: str = ''
             if len(anns_spanning) != 0 or len(anns_flanking) != 0:
                 read_counts = write_histogram_image(f'{motif_dir}/repetitions_{suffix}', anns_spanning, anns_flanking, module_number)
-                rep_file = find_file(f'{motif_dir}/repetitions_{suffix}.json')
-                motif_reps = '' if rep_file is None else open(rep_file, 'r').read()
-                del rep_file
             else:
                 print(f"Zero reads in {motif_id}")
 
@@ -350,7 +346,7 @@ def write_report(
             del row
 
             # print(read_counts[0], read_counts[1], read_counts[2], sep="\n", end="\n\n")
-            graph_data = (motif_reps, motif_pcol, read_counts)
+            graph_data = ('', motif_pcol, read_counts)
             postfilter_data = (post_bases, post_reps, post_errors)
             m2 = (graph_data, postfilter_data, motif_clean_id, motif_id, motif.name, result, alignment, sequence, nomenclatures_local)
             ms_list.append(m2)
@@ -1806,7 +1802,7 @@ def write_histogram_image(
     for r, c in inread_counts:
         inread[r] += c
 
-    plot_histogram_image_plotly(out_prefix, spanning, flanking, inread)
+    # plot_histogram_image_plotly(out_prefix, spanning, flanking, inread)
 
     only_flanking = [df - d for df, d in zip(flanking, spanning)]
     only_inread = [di - df for di, df in zip(inread, flanking)]
