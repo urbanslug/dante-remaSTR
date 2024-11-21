@@ -330,9 +330,10 @@ def write_report(
             else:
                 print(f"Zero reads in {motif_id}")
 
+            heatmap_data = None
             if lh_array is not None:
                 file_pcolor = f'{motif_dir}/pcolor_{module_number}'
-                model.draw_pcolor(file_pcolor, lh_array, motif.nomenclature)
+                heatmap_data = model.draw_pcolor(file_pcolor, lh_array, motif.nomenclature)
             pcol_file = find_file(f'{motif_dir}/pcolor_{suffix}.json')
             motif_pcol: str = '' if pcol_file is None else open(pcol_file, 'r').read()
             del pcol_file
@@ -346,7 +347,8 @@ def write_report(
             del row
 
             # print(read_counts[0], read_counts[1], read_counts[2], sep="\n", end="\n\n")
-            graph_data = ('', motif_pcol, read_counts)
+            # print(heatmap_data)
+            graph_data = ('', motif_pcol, read_counts, heatmap_data)
             postfilter_data = (post_bases, post_reps, post_errors)
             m2 = (graph_data, postfilter_data, motif_clean_id, motif_id, motif.name, result, alignment, sequence, nomenclatures_local)
             ms_list.append(m2)
@@ -383,7 +385,7 @@ def write_report(
             read_counts = ([], [], [])
 
             # m2 = (motif_reps, motif_pcol, post_bases, post_reps, post_errors, motif_clean_id, motif_id, motif.name, result, alignment, sequence, nomenclatures_local)
-            graph_data = (motif_reps, motif_pcol, read_counts)
+            graph_data = (motif_reps, motif_pcol, read_counts, None)
             postfilter_data = (post_bases, post_reps, post_errors)
             m2 = (graph_data, postfilter_data, motif_clean_id, motif_id, motif.name, result, alignment, sequence, nomenclatures_local)
             ms_list.append(m2)
@@ -2307,54 +2309,44 @@ class Inference:
         self, display_file: str,
         lh_copy: np.ndarray, lognorm: bool,
         title: str, max_str: int, start_ticks: int = 5, step_ticks: int = 5
-    ):
+    ) -> tuple:
         text = [['' for _ in range(max_str - self.min_rep + 1)] for _ in range(max_str - self.min_rep + 1)]
         text[-1][0] = 'B'
         text[-1][1] = 'E'
 
         hovertext = []
-        for i in list(range(self.min_rep, max_str)) + ['E']:
-            inner = [f'{j}/{i}' for j in ['B'] + list(range(self.min_rep, max_str))]
+        for j in ['B'] + list(range(self.min_rep, max_str)):
+            inner = [f'{j}/{i}' for i in list(range(self.min_rep, max_str)) + ['E']]
             hovertext.append(inner)
 
         hovertext[0][-1] = 'E/E'
         hovertext[-1][0] = 'B'
         hovertext[-1][1] = 'E'
+        hovertemplate = '<b>%{{hovertext}} - {log} likelihood:\t%{{z}}</b>'.format(log='Loglog' if lognorm else 'Log')
+
+        z: list[list[float]] = lh_copy[self.min_rep - 1:, self.min_rep:].tolist()
+        hovertext2: list[list[str]] = hovertext
+        y_tickvals: list[int] = list(np.concatenate([np.array(range(start_ticks - self.min_rep + 1, max_str - self.min_rep + 1, step_ticks)), [0]]))
+        y_ticktext: list[int | str] = list(range(start_ticks, max_str, step_ticks)) + ['B']
+        x_tickvals: list[int] = list(np.concatenate([np.array(range(start_ticks - self.min_rep, max_str - self.min_rep, step_ticks)), [max_str - self.min_rep]]))
+        x_ticktext: list[int | str] = list(range(start_ticks, max_str, step_ticks)) + ['E(>%d)' % (self.max_with_e - 2)]
+        x_pos: float = max_str - self.min_rep - 0.5
 
         fig = go.Figure()
-        fig.add_trace(go.Heatmap(z=lh_copy[self.min_rep - 1:, self.min_rep:],
-                                 text=text, name='', hovertext=hovertext,
-                                 showscale=True, colorscale='Jet'))
-        fig.add_vline(x=max_str - self.min_rep - 0.5, line_width=5, line_color='black', opacity=1)
+        fig.add_trace(go.Heatmap(z=z, text=text, name='', hovertext=hovertext, showscale=True, colorscale='Jet'))
+        fig.add_vline(x=x_pos, line_width=5, line_color='black', opacity=1)
         fig.add_hline(y=0.5, line_width=5, line_color='black', opacity=1)
 
-        fig.update_traces(
-            texttemplate='%{text}', textfont_size=15,
-            hovertemplate='<b>%{{hovertext}} - {log} likelihood:\t%{{z}}</b>'.format(
-                log='Loglog' if lognorm else 'Log'))
-        fig.update_layout(width=500, height=450,
-                          template='simple_white',
-                          yaxis_fixedrange=True, xaxis_fixedrange=True,
-                          title=title)
-        fig.update_yaxes(
-            title_text='1st allele', tickmode='array',
-            tickvals=np.concatenate([
-                np.array(range(start_ticks - self.min_rep + 1, max_str - self.min_rep + 1, step_ticks)),
-                [0]
-            ]),
-            ticktext=list(range(start_ticks, max_str, step_ticks)) + ['B'])
-        fig.update_xaxes(
-            title_text='2nd allele', tickmode='array',
-            tickvals=np.concatenate([
-                np.array(range(start_ticks - self.min_rep, max_str - self.min_rep, step_ticks)),
-                [max_str - self.min_rep]
-            ]),
-            ticktext=list(range(start_ticks, max_str, step_ticks)) + ['E(>%d)' % (self.max_with_e - 2)])
+        fig.update_traces(texttemplate='%{text}', textfont_size=15, hovertemplate=hovertemplate)
+        fig.update_layout(width=500, height=450, template='simple_white', yaxis_fixedrange=True, xaxis_fixedrange=True, title=title)
+        fig.update_yaxes(title_text='1st allele', tickmode='array', tickvals=y_tickvals, ticktext=y_ticktext)
+        fig.update_xaxes(title_text='2nd allele', tickmode='array', tickvals=x_tickvals, ticktext=x_ticktext)
 
         with open(display_file, 'w') as f:
             f.write(fig.to_json())
 
         # fig.write_image(display_file + '_plotly.png')
+        return (z, hovertext2, y_tickvals, y_ticktext, x_tickvals, x_ticktext, x_pos)
 
     def predict(self, lh_dict: dict[tuple[int | str, int | str], float]) -> tuple[np.ndarray, tuple[int, int]]:
         # convert to a numpy array:
@@ -2387,7 +2379,7 @@ class Inference:
         return lh_array, prediction
 
     # TODO: make this function taking model instead of method of model
-    def draw_pcolor(self, display_file: str | None, lh_array: np.ndarray, name: str, lognorm: bool = True) -> None:
+    def draw_pcolor(self, display_file: str | None, lh_array: np.ndarray, name: str, lognorm: bool = True) -> tuple:
         if display_file is not None:
             ind_good = (lh_array < 0.0) & (lh_array > -1e10) & (lh_array != np.nan)
             z_min, z_max = min(lh_array[ind_good]), max(lh_array[ind_good])
@@ -2407,7 +2399,10 @@ class Inference:
             lh_copy[-1, self.min_rep + 1] = lh_copy[0, self.max_rep]
 
             title = '%s likelihood of options (%s)' % ('Loglog' if lognorm else 'Log', name)
-            self.save_pcolor_plotly_file(display_file + '.json', lh_copy, lognorm, title, max_str)
+            # print(lh_copy.shape, lognorm, title, max_str)
+            heatmap_data = self.save_pcolor_plotly_file(display_file + '.json', lh_copy, lognorm, title, max_str)
+            return heatmap_data
+        return ()
 
     def convert_to_sym(self, best: tuple[int, int], monoallelic: bool) -> tuple[int | str, int | str]:
         """

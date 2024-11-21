@@ -151,7 +151,7 @@
         postfilter: bases {{ post_bases }} , repetitions {{ post_reps }} , max. errors {{ errors }}<br>
         alleles: {{ result }}<br>
 
-        {% set _, motif_pcolor, read_counts = graph_data %}
+        {% set motif_reps, motif_pcolor, read_counts, heatmap_data = graph_data %}
         {% if motif_pcolor == "" %}
             <table class="plots">
                 <tr>
@@ -195,6 +195,7 @@
             </table>
 
             {% set spanning, flanking, inread = read_counts %}
+            {% set z, text, y_tickvals, y_ticktext, x_tickvals, x_ticktext, x_pos = heatmap_data %}
             <script>
                 {
                     let hist_data = {
@@ -216,7 +217,40 @@
                         }
                     };
 
-                    let pcol_data = {{ motif_pcolor }};
+                    let pcol_data = {
+                        "data":[{
+                            "z": {{ z|replace("-inf", "null") }},
+                            "text": {{ text }},
+                            "colorscale": "YlOrRd",
+                            "reversescale": true,
+                            "showscale": true,
+                            "name":"",
+                            "type":"heatmap",
+                            "textfont":{"size":15},
+                            "hovertemplate":"%{text} - Loglog likelihood:\t%{z}",
+                            "texttemplate":"%{text}"
+                        }],
+                        "layout":{
+                            "title":{"text":"Loglog likelihood of options"},
+                            "yaxis":{
+                                "title":{"text":"1st allele"}, "tickvals": {{ y_tickvals }},"ticktext": {{ y_ticktext }},
+                                "fixedrange":true, "tickmode":"array", "showline":false,"zeroline":false,"showgrid":false
+                            },
+                            "xaxis":{
+                                "title":{"text":"2nd allele"}, "tickvals":{{ x_tickvals }},"ticktext":{{ x_ticktext }},
+                                "fixedrange":true, "tickmode":"array", "showline":false,"zeroline":false,"showgrid":false
+                            },
+                            "shapes":[{
+                                "type":"line",
+                                "x0":{{ x_pos }}, "x1":{{ x_pos }}, "xref":"x",
+                                "y0":0, "y1":1, "yref":"y domain", "line":{"color":"black","width":5}
+                            }, {
+                                "type":"line",
+                                "x0":0, "x1":1, "xref":"x domain",
+                                "y0":0.5, "y1":0.5, "yref":"y", "line":{"color":"black","width":5}
+                            }],
+                        }
+                    };
 
                     let updateGraph = () => {
                         if (document.getElementById('{{ motif_id }}').style.display === 'block') {
