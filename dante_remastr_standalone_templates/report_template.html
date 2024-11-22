@@ -151,8 +151,8 @@
         postfilter: bases {{ post_bases }} , repetitions {{ post_reps }} , max. errors {{ errors }}<br>
         alleles: {{ result }}<br>
 
-        {% set motif_reps, motif_pcolor, read_counts, heatmap_data, hist2d_data = graph_data %}
-        {% if motif_pcolor == "" %}
+        {% set read_counts, heatmap_data, hist2d_data = graph_data %}
+        {% if hist2d_data != None %}
             <table class="plots">
                 <tr>
                     <td colspan="1">
@@ -164,6 +164,7 @@
             {% set z_partial, z_full, text, yaxis_text, xaxis_text = hist2d_data %}
             <script>
                 {
+                    // https://plotly.com/javascript/reference/heatmap/
                     let hist_data = {
                         "data":[{
                             "z":{{ z_partial }},
