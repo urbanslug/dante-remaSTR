@@ -151,7 +151,7 @@
         postfilter: bases {{ post_bases }} , repetitions {{ post_reps }} , max. errors {{ errors }}<br>
         alleles: {{ result }}<br>
 
-        {% set motif_reps, motif_pcolor, read_counts, heatmap_data = graph_data %}
+        {% set motif_reps, motif_pcolor, read_counts, heatmap_data, hist2d_data = graph_data %}
         {% if motif_pcolor == "" %}
             <table class="plots">
                 <tr>
@@ -161,9 +161,36 @@
                 </tr>
             </table>
 
+            {% set z_partial, z_full, text, yaxis_text, xaxis_text = hist2d_data %}
             <script>
                 {
-                    let hist_data = {{ motif_reps }};
+                    let hist_data = {
+                        "data":[{
+                            "z":{{ z_partial }},
+                            "colorbar":{"title":{"text":"Partial reads"},"x":1.25},
+                            "colorscale":[[0.0, "rgba(0.92, 0.92, 0.92, 0.0)"],[0.01,"rgba(0.92, 0.92, 0.92, 1.0)"],[1.0, "rgba(0.48, 0.48, 0.48, 1.0)"]],
+                            "showscale":true,
+                            "type":"heatmap",
+                        }, {
+                            "z":{{ z_full }},
+                            "text":{{ text }},
+                            "colorbar":{"title":{"text":"Full reads"},"x":1.1},
+                            "colorscale":[[0.0,"rgba(0.85, 0.90, 0.96, 0.0)"],[0.01,"rgba(0.84, 0.90, 0.96, 1.0)"],[1.0,"rgba(0.09, 0.39, 0.67, 1.0)"]],
+                            "showscale":true,
+                            "type":"heatmap",
+                            "name":"Repetitions<br>heatmap",
+                            "hovertemplate":" %{yaxis.title.text}: %{y} <br> %{xaxis.title.text}: %{x} <br> Full / Partial: %{text}",
+                            "hoverlabel":{"font":{"family":"'Droid Sans Mono',mono"}},
+                            "texttemplate":"%{text}",
+                        }],
+                        "layout":{
+                            "width": (window.innerWidth-50) * 0.5,
+                            "height": (window.innerWidth-50) * 0.45,
+                            "yaxis": {"title":{"text":"{{ yaxis_text }}" }, "showgrid":false, "showline":true, "zeroline":false},
+                            "xaxis": {"title":{"text":"{{ xaxis_text }}" }, "showgrid":false, "showline":true, "zeroline":false}
+                        }
+                    };
+
 
                     let updateGraph = () => {
                         if (document.getElementById('{{ motif_id }}').style.display === 'block') {

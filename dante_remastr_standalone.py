@@ -334,9 +334,7 @@ def write_report(
             if lh_array is not None:
                 file_pcolor = f'{motif_dir}/pcolor_{module_number}'
                 heatmap_data = model.draw_pcolor(file_pcolor, lh_array, motif.nomenclature)
-            pcol_file = find_file(f'{motif_dir}/pcolor_{suffix}.json')
-            motif_pcol: str = '' if pcol_file is None else open(pcol_file, 'r').read()
-            del pcol_file
+            motif_pcol: str = '' if heatmap_data is None else 'something'
 
             row = generate_result_line(motif, predicted, confidence, len(anns_spanning), len(anns_flanking), len(anns_filtered), module_number, qual_annot=anns_spanning)
             row_tuple = generate_row(seq, row, post_filter)
@@ -346,9 +344,7 @@ def write_report(
             (motif_clean_id, _, _motif_name, result, alignment, sequence) = tmp
             del row
 
-            # print(read_counts[0], read_counts[1], read_counts[2], sep="\n", end="\n\n")
-            # print(heatmap_data)
-            graph_data = ('', motif_pcol, read_counts, heatmap_data)
+            graph_data = ('', motif_pcol, read_counts, heatmap_data, None)
             postfilter_data = (post_bases, post_reps, post_errors)
             m2 = (graph_data, postfilter_data, motif_clean_id, motif_id, motif.name, result, alignment, sequence, nomenclatures_local)
             ms_list.append(m2)
@@ -376,7 +372,7 @@ def write_report(
             write_histogram_nomenclature(f'{motif_dir}/nomenclatures_{suffix}.txt', anns_2good, index_rep=prev_module_num, index_rep2=second_module_number)
             nomenclatures_local = generate_nomenclatures(nomenclature_file, motif, nomenclature_limit)
 
-            write_histogram_image2d(f'{motif_dir}/repetitions_{suffix}', annotations, prev_module_num, second_module_number, motif.module_str(prev_module_num), motif.module_str(second_module_number))
+            hist2d_data = write_histogram_image2d(f'{motif_dir}/repetitions_{suffix}', annotations, prev_module_num, second_module_number, motif.module_str(prev_module_num), motif.module_str(second_module_number))
             rep_file = find_file(f'{motif_dir}/repetitions_{suffix}.json')
             motif_reps = '' if rep_file is None else open(rep_file, 'r').read()
             del rep_file
@@ -384,8 +380,8 @@ def write_report(
             motif_pcol = ''
             read_counts = ([], [], [])
 
-            # m2 = (motif_reps, motif_pcol, post_bases, post_reps, post_errors, motif_clean_id, motif_id, motif.name, result, alignment, sequence, nomenclatures_local)
-            graph_data = (motif_reps, motif_pcol, read_counts, None)
+            # print(hist2d_data)
+            graph_data = (motif_reps, motif_pcol, read_counts, None, hist2d_data)
             postfilter_data = (post_bases, post_reps, post_errors)
             m2 = (graph_data, postfilter_data, motif_clean_id, motif_id, motif.name, result, alignment, sequence, nomenclatures_local)
             ms_list.append(m2)
@@ -1664,7 +1660,7 @@ def write_histogram_nomenclature(
 
 def write_histogram_image2d(
     out_prefix: str, deduplicated: list[Annotation], index_rep: int, index_rep2: int, seq: str, seq2: str
-) -> None:
+) -> tuple[list[list[int]], list[list[int]], list[list[str]], str, str]:
     """
     Stores quantity of different combinations of module repetitions,
     generates separate graph image for each module
@@ -1709,13 +1705,13 @@ def write_histogram_image2d(
     str1 = 'STR %d [%s]' % (index_rep + 1, seq.split('-')[-1])
     str2 = 'STR %d [%s]' % (index_rep2 + 1, seq2.split('-')[-1])
 
-    plot_histogram_image2d_plotly(out_prefix, data, data_primer, str1, str2, max_ticks)
+    return plot_histogram_image2d_plotly(out_prefix, data, data_primer, str1, str2, max_ticks)
 
 
 def plot_histogram_image2d_plotly(
     out_prefix: str, data: np.ndarray, data_primer: np.ndarray,
     str1: str, str2: str, max_ticks: int,
-) -> None:
+) -> tuple[list[list[int]], list[list[int]], list[list[str]], str, str]:
     def parse_labels(num, num_primer):
         if num == 0 and num_primer == 0:
             return ''
@@ -1725,38 +1721,26 @@ def plot_histogram_image2d_plotly(
             return '%s/0' % str(num)
         return '%s/%s' % (str(num), str(num_primer))
 
-    text = [[parse_labels(data[i, j], data_primer[i, j]) for j in range(data.shape[1])] for i in range(data.shape[0])]
-
-    fig = go.Figure()
-
     cmgrey = matplotlib.colormaps['Greys']
     cmap_grey = cmgrey(np.arange(int(cmgrey.N * 0.15), int(cmgrey.N * 0.6)))  # start from light grey to deep grey
     cmap_grey[0, -1] = 0.0  # Set alpha on the lowest element only
-    cmap_grey_plotly = [(i, f'rgba({c[0]}, {c[1]}, {c[2]}, {c[3]})') for i, c in [
-        (0.0, cmap_grey[0]), (0.01, cmap_grey[1]), (1.0, cmap_grey[-1])
-    ]]
-    if np.sum(data_primer[:max_ticks, :max_ticks]) > 0:
-        fig.add_trace(go.Heatmap(
-            z=data_primer[:max_ticks, :max_ticks], name='Repetitions heatmap',
-            showscale=True, colorbar_x=1.3, colorbar_title='Partial reads', colorscale=cmap_grey_plotly
-        ))
+    cmap_grey_plotly = [(i, f'rgba({c[0]}, {c[1]}, {c[2]}, {c[3]})') for i, c in [(0.0, cmap_grey[0]), (0.01, cmap_grey[1]), (1.0, cmap_grey[-1])]]
 
     cmblue = matplotlib.colormaps['Blues']
     cmap_blue = cmblue(np.arange(int(cmblue.N * 0.15), int(cmblue.N * 0.8)))  # start from light blue to deep blue
     cmap_blue[0, -1] = 0.0  # Set alpha on the lowest element only
-    cmap_blue_plotly = [(i, f'rgba({c[0]}, {c[1]}, {c[2]}, {c[3]})') for i, c in [
-        (0.0, cmap_blue[0]), (0.01, cmap_blue[1]), (1.0, cmap_blue[-1])
-    ]]
-    fig.add_trace(go.Heatmap(
-        z=data[:max_ticks, :max_ticks], text=text, name='Repetitions heatmap',
-        showscale=True, colorbar_title='Full reads', colorscale=cmap_blue_plotly
-    ))
+    cmap_blue_plotly = [(i, f'rgba({c[0]}, {c[1]}, {c[2]}, {c[3]})') for i, c in [(0.0, cmap_blue[0]), (0.01, cmap_blue[1]), (1.0, cmap_blue[-1])]]
 
-    fig.update_traces(
-        texttemplate='%{text}', textfont_size=7,
-        hovertemplate='<b>{name1}:\t%{y}<br>{name2}:\t%{x}</b><br>Full / Partial:\t%{text}'.
-        format(name1=str1, y='{y}', name2=str2, x='{x}', text='{text}')
-    )
+    z_partial = data_primer[:max_ticks, :max_ticks]
+    z_full = data[:max_ticks, :max_ticks]
+    # text = [[parse_labels(data[i, j], data_primer[i, j]) for j in range(data.shape[1])] for i in range(data.shape[0])]
+    text = [[parse_labels(z_full[i, j], z_partial[i, j]) for j in range(z_full.shape[1])] for i in range(z_full.shape[0])]
+    hovertemplate = '<b>{name1}:\t%{y}<br>{name2}:\t%{x}</b><br>Full / Partial:\t%{text}'.format(name1=str1, y='{y}', name2=str2, x='{x}', text='{text}')
+
+    fig = go.Figure()
+    fig.add_trace(go.Heatmap(z=z_partial, name='Repetitions heatmap', showscale=True, colorbar_x=1.3, colorbar_title='Partial reads', colorscale=cmap_grey_plotly))
+    fig.add_trace(go.Heatmap(z=z_full, text=text, name='Repetitions heatmap', showscale=True, colorbar_title='Full reads', colorscale=cmap_blue_plotly))
+    fig.update_traces(texttemplate='%{text}', textfont_size=7, hovertemplate=hovertemplate)
     fig.update_layout(width=800, height=600, template='simple_white')
     fig.update_yaxes(title_text=str1)
     fig.update_xaxes(title_text=str2)
@@ -1765,6 +1749,9 @@ def plot_histogram_image2d_plotly(
         f.write(fig.to_json())
 
     # fig.write_image(out_prefix + '_plotly.pdf')
+    z_partial_out: list[list[int]] = z_partial.tolist()
+    z_full_out: list[list[int]] = z_full.tolist()
+    return (z_partial_out, z_full_out, text, str1, str2)
 
 
 def write_histogram_image(
@@ -2332,18 +2319,18 @@ class Inference:
         x_ticktext: list[int | str] = list(range(start_ticks, max_str, step_ticks)) + ['E(>%d)' % (self.max_with_e - 2)]
         x_pos: float = max_str - self.min_rep - 0.5
 
-        fig = go.Figure()
-        fig.add_trace(go.Heatmap(z=z, text=text, name='', hovertext=hovertext, showscale=True, colorscale='Jet'))
-        fig.add_vline(x=x_pos, line_width=5, line_color='black', opacity=1)
-        fig.add_hline(y=0.5, line_width=5, line_color='black', opacity=1)
+        # fig = go.Figure()
+        # fig.add_trace(go.Heatmap(z=z, text=text, name='', hovertext=hovertext, showscale=True, colorscale='Jet'))
+        # fig.add_vline(x=x_pos, line_width=5, line_color='black', opacity=1)
+        # fig.add_hline(y=0.5, line_width=5, line_color='black', opacity=1)
 
-        fig.update_traces(texttemplate='%{text}', textfont_size=15, hovertemplate=hovertemplate)
-        fig.update_layout(width=500, height=450, template='simple_white', yaxis_fixedrange=True, xaxis_fixedrange=True, title=title)
-        fig.update_yaxes(title_text='1st allele', tickmode='array', tickvals=y_tickvals, ticktext=y_ticktext)
-        fig.update_xaxes(title_text='2nd allele', tickmode='array', tickvals=x_tickvals, ticktext=x_ticktext)
+        # fig.update_traces(texttemplate='%{text}', textfont_size=15, hovertemplate=hovertemplate)
+        # fig.update_layout(width=500, height=450, template='simple_white', yaxis_fixedrange=True, xaxis_fixedrange=True, title=title)
+        # fig.update_yaxes(title_text='1st allele', tickmode='array', tickvals=y_tickvals, ticktext=y_ticktext)
+        # fig.update_xaxes(title_text='2nd allele', tickmode='array', tickvals=x_tickvals, ticktext=x_ticktext)
 
-        with open(display_file, 'w') as f:
-            f.write(fig.to_json())
+        # with open(display_file, 'w') as f:
+        #     f.write(fig.to_json())
 
         # fig.write_image(display_file + '_plotly.png')
         return (z, hovertext2, y_tickvals, y_ticktext, x_tickvals, x_ticktext, x_pos)
