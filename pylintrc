@@ -26,5 +26,6 @@ enable =
 [SPELLING]
 [STRING]
 [TYPECHECK]
+typealias-rgx = ^[A-Z][a-z]*(?:[0-9]|[A-Z][a-z]*)*$
 [VARIABLES]
 

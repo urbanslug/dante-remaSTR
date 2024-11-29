@@ -54,6 +54,9 @@ BASE_MAPPING = {
 # Locus - repetitive module of a Motif
 # Allele
 
+# prediction could be from -3, -2, ..., n
+# where -3 would be translated to X, -2 to E, -1 to B, and numbers to numbers
+
 
 def main() -> None:
     start_time = datetime.now()
@@ -88,6 +91,9 @@ def main() -> None:
 
     print(f'Writing vcf output: {datetime.now():%Y-%m-%d %H:%M:%S}')
     write_vcf(variants_df, args.output_dir)
+
+    print(f'Writing phased predictions: {datetime.now():%Y-%m-%d %H:%M:%S}')
+    write_phased_predictions(all_motifs, all_genotypes, all_haplotypes, args.output_dir + "/phased_predictions.tsv")
 
     if args.verbose:
         script_dir = os.path.dirname(__file__) + "/dante_remastr_standalone_templates"
@@ -237,6 +243,75 @@ def write_alignment_html(
         f.write(output)
 
     return
+
+
+def write_phased_predictions(
+    all_motifs: list[Motif], all_genotypes: list[list[GenotypeInfo]], all_haplotypes: list[list[None | tuple]], output: str
+) -> None:
+    result = []
+    for (motif, genotype, phasing) in zip(all_motifs, all_genotypes, all_haplotypes):
+        h1 = []
+        h2 = []
+        for gt in genotype:
+            # (mod_num, spanning, flanking, filtered, predicted, conf, lh_array, model)
+            (_, _, _, _, predicted, _, _, _) = gt
+            h1.append(str(predicted[0]))
+            h2.append(str(predicted[1]))
+
+        hp1 = []
+        hp2 = []
+        for ph in phasing:
+            if ph is None:
+                continue
+
+            # (mod_num, 2good, 1good, 0good, phase, supp_reads, prev_mod_num)
+            (_, _, _, _, phase, _, _) = ph
+            hp1.append(phase[0])
+            hp2.append(phase[1])
+
+        h1_full, h2_full = phase_full_locus(h1, h2, hp1, hp2)
+        result.append(f"{motif.name}\t{motif.augmented_nomenclature(h1_full)}\n")
+        result.append(f"{motif.name}\t{motif.augmented_nomenclature(h2_full)}\n")
+
+    with open(output, "w") as f:
+        f.writelines(result)
+
+
+def phase_full_locus(h1_full: list[str], h2_full: list[str], hp1: list[str], hp2: list[str]) -> tuple[list[str], list[str]]:
+    # ['9', '15'] ['12', '16'] ['9|16'] ['12|15'] -> ['9', '16'] ['12', '15']
+
+    n_diff: int = sum(map(lambda x: x[0] != x[1], zip(h1_full, h2_full)))
+    if n_diff <= 1:
+        return (h1_full, h2_full)  # there is nothing to phase
+
+    # print()
+    # print(h1_full, h2_full, hp1, hp2)
+    different_prefix = False
+    for i in range(len(h1_full) - 1):
+        if h1_full[i] == h2_full[i]:
+            if different_prefix:
+                print(f"Warning: Cannot phase prefix and suffix at position {i}.\n{h1_full} {h2_full}\n{hp1} {hp2}")
+            continue
+        different_prefix = True
+
+        h1_cur, _ = hp1[i].split("|")
+        if h1_cur != h1_full[i]:
+            hp1[i], hp2[i] = hp2[i], hp1[i]
+
+        h1_cur, h1_next = hp1[i].split("|")
+        _, h2_next = hp2[i].split("|")
+
+        if h1_full[i] == h1_cur and h1_full[i + 1] == h1_next:
+            # if h2_full[i] != h2_cur or h2_full[i + 1] != h2_next: WARN?
+            pass
+        elif h1_full[i] == h1_cur and h1_full[i + 1] == h2_next:
+            # if h2_full[i] != h2_cur or h2_full[i + 1] != h1_next: WARN?
+            h1_full[i + 1], h2_full[i + 1] = h2_full[i + 1], h1_full[i + 1]
+        else:
+            print(f"Warning: {h1_full[i:i + 2]} {h2_full[i:i + 2]} {hp1[i]} {hp2[i]} is inconsistent.")
+
+    # print(f"-> {h1_full} {h2_full}\n")
+    return (h1_full, h2_full)
 
 
 def write_report(
@@ -446,30 +521,33 @@ class Motif:
     :ivar motif: motif nomenclature
     """
 
-    def __init__(self, motif: str, name: str | None = None):
+    def __init__(self, motif: str, name: str | None = None) -> None:
         """
         Initialize a Motif object.
         :param motif: The motif string in the format "chrom:start_end[A][B]..."
         :param name: optional name of the motif
         """
         # remove whitespace
-        self.nomenclature = motif.strip().replace(' ', '')
-        self.name = (name if name is not None else self.nomenclature)\
-            .replace(':', '-').replace('.', '_').replace('/', '_')
+        nomenclature = motif.strip().replace(' ', '')
+        name = (name if name is not None else nomenclature).replace(':', '-').replace('.', '_').replace('/', '_')
 
         # extract prefix, first number, second number
-        tmp = re.match(r'([^:]+):g\.(\d+)_(\d+)(.*)', self.nomenclature)
+        tmp = re.match(r'([^:]+):g\.(\d+)_(\d+)(.*)', nomenclature)
         if tmp is None:
-            raise ValueError(f"{self.nomenclature} has incorrect format")
-        self.chrom, start, end, remainder = tmp.groups()
+            raise ValueError(f"{nomenclature} has incorrect format")
+        chrom, start, end, remainder = tmp.groups()
 
         # extract sequence and repetition count
-        self.modules = [(str(seq), int(num)) for seq, num in re.findall(r'([A-Z]+)\[(\d+)', remainder)]
-        self.modules = [('left_flank', 1)] + self.modules + [('right_flank', 1)]
+        modules = [(str(seq), int(num)) for seq, num in re.findall(r'([A-Z]+)\[(\d+)', remainder)]
+        modules = [('left_flank', 1)] + modules + [('right_flank', 1)]
 
-        # convert to ints
-        self.start = int(start)
-        self.end = int(end)
+        # store members
+        self.nomenclature: str = nomenclature
+        self.name: str = name
+        self.chrom: str = chrom
+        self.start: int = int(start)
+        self.end: int = int(end)
+        self.modules: list[tuple[str, int]] = modules
 
     def __getitem__(self, index: int) -> tuple[str, int]:
         """
@@ -499,6 +577,18 @@ class Motif:
         :return: bool - if this object is equal to the other
         """
         return self.name == obj.name
+
+    def augmented_nomenclature(self, rep_counts: list[str]) -> str:
+        modules = []
+        i = 0
+        for seq, num in self.modules[1:-1]:
+            if num == 1:
+                modules.append(f"{seq}[{num}]")
+            else:
+                modules.append(f"{seq}[{rep_counts[i]}]")
+                i += 1
+        assert i == len(rep_counts), "Invalid augmentation."
+        return f'{self.chrom}:g.{self.start}_{self.end}' + "".join(modules)
 
     def modules_str(self, include_flanks: bool = False) -> str:
         """
@@ -574,7 +664,7 @@ class Annotation:
         self.expected_seq = expected_seq
         self.states = states
         self.probability = probability
-        self.motif = motif
+        self.motif = motif  # TODO: remove this, it looks like unnecessary dependency
         self.n_modules = len(motif.modules)
 
         # Calculate insertion/deletion/mismatch string
@@ -1819,6 +1909,7 @@ class Inference:
     DEFAULT_MODEL_PARAMS = (0.00716322, 0.000105087, 0.0210812, 0.0001648)
     DEFAULT_FIT_FUNCTION = 'linear'
 
+    # TODO: type the members
     def __init__(
         self, read_distribution, params_file,
         str_rep=MIN_REP_CNT, minl_primer1=MIN_FLANK_LEN, minl_primer2=MIN_FLANK_LEN, minl_str=MIN_REP_LEN,
@@ -1973,11 +2064,13 @@ class Inference:
         :return: float - likelihood of this read generation
         """
         # TODO: tuto podla mna nemoze byt len tak +, chyba tam korelacia modelov, ale v ramci zjednodusenia asi ok
-        allele1_likelihood = (self.model_probabilities[model_index1]
-                              * self.likelihood_read_allele(self.models[model_index1], observed, rl, closed))
+        allele1_likelihood = (
+            self.model_probabilities[model_index1] * self.likelihood_read_allele(self.models[model_index1], observed, rl, closed)
+        )
         allele2_likelihood = 0.0 if model_index2 is None else (
-            self.model_probabilities[model_index2]
-            * self.likelihood_read_allele(self.models[model_index2], observed, rl, closed))
+            self.model_probabilities[model_index2] * self.likelihood_read_allele(self.models[model_index2], observed, rl, closed)
+        )
+
         p_bckg = self.p_bckg_closed if closed else self.p_bckg_open
         bckgrnd_likelihood = p_bckg * self.likelihood_read_allele(self.models['B'], observed, rl, closed)
 
@@ -1985,6 +2078,7 @@ class Inference:
         assert not np.isnan(allele1_likelihood)
         assert not np.isnan(bckgrnd_likelihood)
 
+        # "tuto" refers to the next line
         return allele1_likelihood + allele2_likelihood + bckgrnd_likelihood
 
     def infer(
@@ -2395,6 +2489,11 @@ HistReadCounts: TypeAlias = tuple[list[int], list[int], list[int]]
 ProbHeatmap: TypeAlias = tuple[list[list[float]], list[list[str]], list[int], list[int | str], list[int], list[int | str], float]
 
 
+# def test1() -> None:
+#     print("kjsk")
+
+
 # %%
 if __name__ == '__main__':
     main()
+    # test1()
