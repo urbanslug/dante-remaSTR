@@ -339,20 +339,17 @@ def write_report(
         annotations = anns
         for module_number, _, _ in repeating_modules:
             annotations, _ = post_filter.get_filtered(annotations, module_number, both_primers=True)
-        nomenclature_file = f'{motif_dir}/nomenclature.txt'
-        write_histogram_nomenclature(nomenclature_file, annotations)
-        nomenclatures = generate_nomenclatures(nomenclature_file, motif, nomenclature_limit)
+        nomenclatures = generate_nomenclatures(annotations, None, None, motif, nomenclature_limit)
 
         rows_list = []
-        ms_list = []
-        graph_data: tuple[HistReadCounts | None, ProbHeatmap | None, Hist2DGraph | None]
+        ms_list: list[tuple] = []
+
+        graph_data: GraphData
         for gt in genotype:
             (module_number, anns_spanning, anns_flanking, anns_filtered, predicted, confidence, lh_array, model) = gt
             suffix = str(module_number)
 
-            nomenclature_file = f'{motif_dir}/nomenclatures_{suffix}.txt'
-            write_histogram_nomenclature(f'{motif_dir}/nomenclatures_{suffix}.txt', anns_spanning, index_rep=module_number, index_rep2=None)
-            nomenclatures_local = generate_nomenclatures(nomenclature_file, motif, nomenclature_limit)
+            nomenclatures_local = generate_nomenclatures(anns_spanning, module_number, None, motif, nomenclature_limit)
 
             if len(anns_spanning) != 0 or len(anns_flanking) != 0:
                 read_counts = write_histogram_image(f'{motif_dir}/repetitions_{suffix}', anns_spanning, anns_flanking, module_number)
@@ -376,9 +373,9 @@ def write_report(
             graph_data = (read_counts, heatmap_data, None)
             postfilter_data = (post_bases, post_reps, post_errors)
 
-            m2 = (graph_data, postfilter_data, motif_clean_id, motif_id, motif.name, result, alignment, sequence, nomenclatures_local)
-
-            ms_list.append(m2)
+            ms_list.append(
+                (graph_data, postfilter_data, motif_clean_id, motif_id, motif.name, result, alignment, sequence, nomenclatures_local)
+            )
 
         for ph in phasing[1:]:
             if ph is None:
@@ -400,18 +397,16 @@ def write_report(
                 print(f"{motif_dir} {suffix} is empty")
                 continue
 
-            nomenclature_file = f'{motif_dir}/nomenclatures_{suffix}.txt'
-            write_histogram_nomenclature(f'{motif_dir}/nomenclatures_{suffix}.txt', anns_2good, index_rep=prev_module_num, index_rep2=second_module_number)
-            nomenclatures_local = generate_nomenclatures(nomenclature_file, motif, nomenclature_limit)
+            nomenclatures_local = generate_nomenclatures(anns_2good, prev_module_num, second_module_number, motif, nomenclature_limit)
 
             hist2d_data = write_histogram_image2d(annotations, prev_module_num, second_module_number, motif.module_str(prev_module_num), motif.module_str(second_module_number))
 
             graph_data = (None, None, hist2d_data)
             postfilter_data = (post_bases, post_reps, post_errors)
 
-            m2 = (graph_data, postfilter_data, motif_clean_id, motif_id, motif.name, result, alignment, sequence, nomenclatures_local)
-
-            ms_list.append(m2)
+            ms_list.append(
+                (graph_data, postfilter_data, motif_clean_id, motif_id, motif.name, result, alignment, sequence, nomenclatures_local)
+            )
 
         tabs.append((motif_id, nomenclatures, rows_list, ms_list))
         mcs_list.append((motif_id, motif.name))
@@ -428,6 +423,27 @@ def write_report(
         f.write(output)
 
     return
+
+
+def generate_nomenclatures(
+    annotations: list[Annotation], module_num: int | None, next_module_num: int | None, motif: Motif, nomenclature_limit: int
+) -> list[tuple[str, str, str]]:
+
+    count_dict = Counter(annot.get_nomenclature(module_num, next_module_num, False) for annot in annotations)
+    count_dict2 = sorted(count_dict.items(), key=lambda k: (-k[1], k[0]))
+
+    lines = []
+    for nomenclature, count in count_dict2:
+        count2 = str(count) + 'x'
+        ref = f'{motif.chrom}:g.{motif.start}_{motif.end}'
+        parts = ''.join([f'<td>{s}</td>' for s in nomenclature.rstrip().split('\t')])
+
+        lines.append((count2, ref, parts))
+
+        if len(lines) >= nomenclature_limit:
+            break
+
+    return lines
 
 
 def construct_dataframe(
@@ -1643,27 +1659,6 @@ def sorted_repetitions(annotations: list[Annotation]) -> list[tuple[tuple[int, .
     return sorted(count_dict.items(), key=lambda k: k[0])
 
 
-def write_histogram_nomenclature(
-    out_file: str, annotations: list[Annotation],
-    index_rep: int | None = None, index_rep2: int | None = None
-) -> None:
-    """
-    Stores quantity of different nomenclature strings into text file
-    :param out_file: str - output file for repetitions
-    :param annotations: Annotated reads
-    :param index_rep: int - index of the first repetition (None if include all)
-    :param index_rep2: int - index of the second repetition (None if include all)
-    """
-    # count nomenclature strings:
-    count_dict = Counter(annot.get_nomenclature(index_rep, index_rep2, False) for annot in annotations)
-    count_dict2 = sorted(count_dict.items(), key=lambda k: (-k[1], k[0]))
-
-    # write nomenclatures to file
-    with open(out_file, 'w') as fw:
-        for nomenclature, count in count_dict2:
-            fw.write(f'{count}\t{nomenclature}\n')
-
-
 def write_histogram_image2d(
     deduplicated: list[Annotation], index_rep: int, index_rep2: int, seq: str, seq2: str
 ) -> Hist2DGraph | None:
@@ -1761,38 +1756,6 @@ def write_histogram_image(
     only_flanking = [df - d for df, d in zip(flanking, spanning)]
     only_inread = [di - df for di, df in zip(inread, flanking)]
     return spanning, only_flanking, only_inread
-
-
-def generate_nomenclatures(filename: str, motif: Motif, nomenclature_limit: int) -> list[tuple[str, str, str]]:
-    """
-    Generate nomenclature string lines from nomenclature file. Maximally generate nomenclature_limit lines.
-    :param filename: str - file name of the nomenclature file
-    :param motif: Motif - motif class
-    :param nomenclature_limit: int - limit how many nomenclatures to generate
-    :return: list[str] - array of nomenclature lines
-    """
-    if not os.path.exists(filename):
-        print(f"{filename} does not exist")
-        return []
-
-    with open(filename, 'r') as noms:
-        lines = []
-        for line in noms:
-            if line == '' or line is None:
-                break
-
-            line_split = line.split('\t')
-            motif_parts = [f'<td>{s}</td>' for s in line_split[1:]]
-            count = line_split[0] + 'x'
-            ref = f'{motif.chrom}:g.{motif.start}_{motif.end}'
-            parts = '\n    '.join(motif_parts)
-            lines.append((count, ref, parts))
-
-            # end?
-            if len(lines) >= nomenclature_limit:
-                break
-
-    return lines
 
 
 def combine_distribs(deletes, inserts):
@@ -2488,6 +2451,7 @@ GenotypeInfo: TypeAlias = tuple[
 Hist2DGraph: TypeAlias = tuple[list[list[int]], list[list[int]], list[list[str]], str, str]
 HistReadCounts: TypeAlias = tuple[list[int], list[int], list[int]]
 ProbHeatmap: TypeAlias = tuple[list[list[float]], list[list[str]], list[int], list[int | str], list[int], list[int | str], float]
+GraphData: TypeAlias = tuple[HistReadCounts | None, ProbHeatmap | None, Hist2DGraph | None]
 
 
 # def test1() -> None:
