@@ -223,7 +223,6 @@
             </table>
 
             {% set spanning, flanking, inread = read_counts %}
-            {% set z, text, y_tickvals, y_ticktext, x_tickvals, x_ticktext, x_pos = heatmap_data %}
             <script>
                 {
                     let hist_data = {
@@ -245,6 +244,28 @@
                         }
                     };
 
+                    let updateGraph = () => {
+                        if (document.getElementById('{{ motif_id }}').style.display === 'block') {
+                            hist_data['layout'] = {
+                                ...hist_data['layout'],
+                                width: (window.innerWidth-50) * 0.6,
+                                height: (window.innerWidth-50) * 0.35,
+                            };
+                            Plotly.react('hist-{{ motif_name }}', hist_data);
+                        }
+                    };
+
+                    $(document).ready(function() {
+                        $('.{{ motif_id }}').bind("content-change", updateGraph);
+                        window.addEventListener('resize', updateGraph, true);
+                    });
+                }
+            </script>
+
+            {% if heatmap_data != None %}
+            {% set z, text, y_tickvals, y_ticktext, x_tickvals, x_ticktext, x_pos = heatmap_data %}
+            <script>
+                {
                     let pcol_data = {
                         "data":[{
                             "z": {{ z|replace("-inf", "null") }},
@@ -282,17 +303,11 @@
 
                     let updateGraph = () => {
                         if (document.getElementById('{{ motif_id }}').style.display === 'block') {
-                            hist_data['layout'] = {
-                                ...hist_data['layout'],
-                                width: (window.innerWidth-50) * 0.6,
-                                height: (window.innerWidth-50) * 0.35,
-                            };
                             pcol_data['layout'] = {
                                 ...pcol_data['layout'],
                                 width: (window.innerWidth-50) * 0.4,
                                 height: (window.innerWidth-50) * 0.35
                             };
-                            Plotly.react('hist-{{ motif_name }}', hist_data);
                             Plotly.react('pcol-{{ motif_name }}', pcol_data);
                         }
                     };
@@ -303,6 +318,8 @@
                     });
                 }
             </script>
+            {% endif %}
+
         {% endif %}
 
         <p><a href="{{ alignment }}">Link to alignments</a></p>

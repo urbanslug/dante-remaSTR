@@ -85,6 +85,8 @@ def main() -> None:
 
     # core computation ends here
     # next lines are only outputing things
+    # os.makedirs(args.output_dir, exist_ok=True)
+
     print(f'Writing tsv output: {datetime.now():%Y-%m-%d %H:%M:%S}')
     variants_df = construct_dataframe(all_motifs, all_genotypes, all_haplotypes)
     variants_df.to_csv(args.output_dir + "/variants.tsv", sep='\t')
@@ -359,8 +361,9 @@ def write_report(
 
             heatmap_data = None
             if lh_array is not None:
-                file_pcolor = f'{motif_dir}/pcolor_{module_number}'
-                heatmap_data = model.draw_pcolor(file_pcolor, lh_array, motif.nomenclature)
+                heatmap_data = model.draw_pcolor(lh_array, motif.nomenclature)
+            else:
+                print(f"Likelihood array is None for {motif_id}.")
 
             row = generate_result_line(motif, predicted, confidence, len(anns_spanning), len(anns_flanking), len(anns_filtered), module_number, qual_annot=anns_spanning)
             row_tuple = generate_row(seq, row, post_filter)
@@ -2160,7 +2163,7 @@ class Inference:
 
     # TODO: make this function taking model instead of method of model
     def save_pcolor_plotly_file(
-        self, display_file: str,
+        self,
         lh_copy: np.ndarray, lognorm: bool,
         title: str, max_str: int, start_ticks: int = 5, step_ticks: int = 5
     ) -> ProbHeatmap:
@@ -2219,31 +2222,29 @@ class Inference:
 
     # TODO: make this function taking model instead of method of model
     def draw_pcolor(
-        self, display_file: str | None, lh_array: np.ndarray, name: str, lognorm: bool = True
-    ) -> ProbHeatmap | None:
-        if display_file is not None:
-            ind_good = (lh_array < 0.0) & (lh_array > -1e10) & (lh_array != np.nan)
-            z_min, z_max = min(lh_array[ind_good]), max(lh_array[ind_good])
-            max_str = len(lh_array)
-            if lognorm:
-                lh_view = -np.log(-lh_array)
-                z_min = -np.log(-z_min)
-                z_max = -np.log(-z_max)
-            else:
-                lh_view = lh_array.copy()
+        self, lh_array: np.ndarray, name: str, lognorm: bool = True
+    ) -> ProbHeatmap:
+        ind_good = (lh_array < 0.0) & (lh_array > -1e10) & (lh_array != np.nan)
+        z_min, z_max = min(lh_array[ind_good]), max(lh_array[ind_good])
+        max_str = len(lh_array)
+        if lognorm:
+            lh_view = -np.log(-lh_array)
+            z_min = -np.log(-z_min)
+            z_max = -np.log(-z_max)
+        else:
+            lh_view = lh_array.copy()
 
-            # background (B, i) - copy it below min_rep
-            lh_view[self.min_rep - 1, :] = lh_view[0, :]
+        # background (B, i) - copy it below min_rep
+        lh_view[self.min_rep - 1, :] = lh_view[0, :]
 
-            lh_copy = lh_view.copy()
-            lh_copy[-1, self.min_rep] = lh_copy[0, 0]
-            lh_copy[-1, self.min_rep + 1] = lh_copy[0, self.max_rep]
+        lh_copy = lh_view.copy()
+        lh_copy[-1, self.min_rep] = lh_copy[0, 0]
+        lh_copy[-1, self.min_rep + 1] = lh_copy[0, self.max_rep]
 
-            title = '%s likelihood of options (%s)' % ('Loglog' if lognorm else 'Log', name)
-            # print(lh_copy.shape, lognorm, title, max_str)
-            heatmap_data = self.save_pcolor_plotly_file(display_file + '.json', lh_copy, lognorm, title, max_str)
-            return heatmap_data
-        return None
+        title = '%s likelihood of options (%s)' % ('Loglog' if lognorm else 'Log', name)
+        # print(lh_copy.shape, lognorm, title, max_str)
+        heatmap_data = self.save_pcolor_plotly_file(lh_copy, lognorm, title, max_str)
+        return heatmap_data
 
     def convert_to_sym(self, best: tuple[int, int], monoallelic: bool) -> tuple[int | str, int | str]:
         """
