@@ -315,11 +315,12 @@ def create_reports(arg_list: argparse.Namespace):
             if name != last_name:
                 rep_num = 1
             else:
-                rep_num += 1
+                rep_num += 2
 
             nomenclature_lines = generate_nomenclatures(f'{os.path.dirname(path)}/{name}/nomenclatures_{rep_num}.txt')
             nomenclatures = '\n'.join(nomenclature_lines)
 
+            last_name = name
             name += '_rep' + str(rep_num)
             data = motifs[name][-1]
 

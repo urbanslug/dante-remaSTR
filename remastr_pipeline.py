@@ -67,7 +67,7 @@ def load_arguments() -> argparse.Namespace:
     return args
 
 
-def run_command(command: str, exit_on_error: bool, skip_call: bool):
+def run_command(command: str, exit_on_error: bool, skip_call: bool) -> None:
     """
     Prints and runs the command
     :param command: str - command to run
@@ -129,7 +129,7 @@ if __name__ == '__main__':
             remastr_params = '--flank 30 --quality 0' if args.use_old_defaults else (f'--flank {args.flank_len} --quality {args.min_mapq}' +
                                                                                      (' -d' if not args.include_duplicates else ''))
             remastr_params += ' ' + args.remastr_args
-            remastr_call = (f'{args.dante_repo}/remastr/target/release/remastr -f {args.reference_fasta} -m {nomenclature_file} '
+            remastr_call = (f'{args.dante_repo}/remastr/target/release/dante_cli -f {args.reference_fasta} -m {nomenclature_file} '
                             f'-b {bam_file} -o {output_dir}/{sample_name}.tsv {remastr_params}')
 
             # build dante_remastr call (report)
