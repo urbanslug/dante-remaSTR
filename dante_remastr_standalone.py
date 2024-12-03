@@ -113,7 +113,6 @@ def main() -> None:
         shutil.copy2(f'{script_dir}/jquery-3.6.1.min.js',   f'{args.output_dir}/jquery-3.6.1.min.js')
         shutil.copy2(f'{script_dir}/datatables.min.js',     f'{args.output_dir}/datatables.min.js')
         shutil.copy2(f'{script_dir}/styles.css',            f'{args.output_dir}/styles.css')
-        pass
 
     end_time = datetime.now()
     print(f'DANTE_remaSTR Stopping : {end_time:%Y-%m-%d %H:%M:%S}')
@@ -260,6 +259,8 @@ def write_phased_predictions(
             h1.append(str(predicted[0]))
             h2.append(str(predicted[1]))
 
+            # nomenclatures_local = generate_nomenclatures(anns_spanning, module_number, None, motif, nomenclature_limit)
+
         hp1 = []
         hp2 = []
         for ph in phasing:
@@ -317,7 +318,8 @@ def phase_full_locus(h1_full: list[str], h2_full: list[str], hp1: list[str], hp2
 
 
 def write_report(
-    all_motifs: list[Motif], all_annotations: list[list[Annotation]], all_genotypes: list[list[GenotypeInfo]], all_haplotypes: list[list[None | tuple]],
+    all_motifs: list[Motif], all_annotations: list[list[Annotation]],
+    all_genotypes: list[list[GenotypeInfo]], all_haplotypes: list[list[None | tuple]],
     script_dir: str, output_dir: str, nomenclature_limit: int = 5
 ) -> None:
     post_filter = PostFilter()
@@ -351,14 +353,15 @@ def write_report(
 
             nomenclatures_local = generate_nomenclatures(anns_spanning, module_number, None, motif, nomenclature_limit)
 
+            read_counts = None
             if len(anns_spanning) != 0 or len(anns_flanking) != 0:
-                read_counts = write_histogram_image(f'{motif_dir}/repetitions_{suffix}', anns_spanning, anns_flanking, module_number)
+                read_counts = write_histogram_image(anns_spanning, anns_flanking, module_number)
             else:
                 print(f"Zero reads in {motif_id}")
 
             heatmap_data = None
             if lh_array is not None:
-                heatmap_data = model.draw_pcolor(lh_array, motif.nomenclature)
+                heatmap_data = draw_pcolor(model, lh_array, motif.nomenclature)
             else:
                 print(f"Likelihood array is None for {motif_id}.")
 
@@ -398,7 +401,6 @@ def write_report(
                 continue
 
             nomenclatures_local = generate_nomenclatures(anns_2good, prev_module_num, second_module_number, motif, nomenclature_limit)
-
             hist2d_data = write_histogram_image2d(annotations, prev_module_num, second_module_number, motif.module_str(prev_module_num), motif.module_str(second_module_number))
 
             graph_data = (None, None, hist2d_data)
@@ -417,9 +419,16 @@ def write_report(
 
     env = Environment(loader=FileSystemLoader([script_dir]), trim_blocks=True, lstrip_blocks=True)
     template = env.get_template("report_template.html")
-    # print(sample, version, table, tabs, sep="\n")
+    # print(sample, version, table[0:5], tabs[0:5], sep="\n")
     output = template.render(sample=sample, version=version, table=table, tabs=tabs)
     with open(f"{output_dir}/report.html", "w") as f:
+        f.write(output)
+
+    template = env.get_template("report_template_simplified.html")
+    tabs = sorted(tabs, key=lambda x: x[0])
+    data = (sample, version, tabs)
+    output = template.render(data=data)
+    with open(f"{output_dir}/report2.html", "w") as f:
         f.write(output)
 
     return
@@ -451,24 +460,29 @@ def construct_dataframe(
 ) -> pd.DataFrame:
     all_result_lines: list[dict] = []
     for motif, genotype, phasing in zip(all_motifs, all_genotypes, all_haplotypes):
-        rls = generate_all_result_lines(motif, genotype, phasing)
+        rls = []
+        for gt, ph in zip(genotype, phasing):
+
+            (module_number, anns_spanning, anns_flanking, anns_filtered, predicted, confidence, _, _) = gt
+            rl_gt = generate_result_line(
+                motif, predicted, confidence, len(anns_spanning), len(anns_flanking), len(anns_filtered), module_number,
+                qual_annot=anns_spanning
+            )
+            rls.append(rl_gt)
+
+            if ph is not None:
+                (module_number, anns_2good, anns_1good, anns_0good, phasing1, supp_reads, prev_module_num) = ph
+                rl_ph = generate_result_line(
+                    motif, phasing1, supp_reads, len(anns_2good), len(anns_1good), len(anns_0good), prev_module_num,
+                    second_module_number=module_number
+                )
+                rls.append(rl_ph)
+
         all_result_lines.extend(rls)
 
     variants_df = pd.DataFrame.from_records(all_result_lines)
     variants_df.sort_values(by=['motif_name'], kind='stable')
     return variants_df
-
-
-def load_arguments_fake() -> Namespace:
-    return Namespace(
-        output_dir='dante_out',
-        input_tsv=open("../../cache/HG002.GRCh38.remastr_output.tsv", "r"),
-        male=False,
-
-        verbose=True,
-        nomenclatures=5,
-        cutoff_alignments=20,
-    )
 
 
 def load_arguments() -> Namespace:
@@ -635,7 +649,6 @@ class Motif:
         """
         return self.name
 
-    # TODO: remove me
     def get_repeating_modules(self) -> list[tuple[int, str, int]]:
         """
         Returns list of modules with more than one repetition.
@@ -756,8 +769,10 @@ class Annotation:
 
         # Divide by the module length where applicable
         # TODO: this is not right for grey ones, where only closed ones should be counted, so round is not right.
-        return tuple(1 if reps == 1 and cnt > 0 else round(cnt / len(seq))
-                     for (seq, reps), cnt in zip(self.motif.modules, repetitions))
+        return tuple(
+            1 if reps == 1 and cnt > 0 else round(cnt / len(seq))
+            for (seq, reps), cnt in zip(self.motif.modules, repetitions)
+        )
 
     def __get_module_sequences(self) -> tuple[str, ...]:
         """
@@ -1031,32 +1046,6 @@ def errors_per_read(
         float(np.mean([indels for indels, _, _ in errors])),
         float(np.mean([mismatches for _, mismatches, _ in errors]))
     )
-
-
-# TODO: I don't particularly like mixing of genotyping and phasing
-# rls = generate_all_result_lines(motif, genotype, phasing)
-def generate_all_result_lines(
-    motif: Motif, genotype: list[tuple], phasing: list[None | tuple]
-) -> list[dict]:
-    result_lines = []
-    for gt, ph in zip(genotype, phasing):
-
-        (module_number, anns_spanning, anns_flanking, anns_filtered, predicted, confidence, _, _) = gt
-        rl_gt = generate_result_line(
-            motif, predicted, confidence, len(anns_spanning), len(anns_flanking), len(anns_filtered), module_number,
-            qual_annot=anns_spanning
-        )
-        result_lines.append(rl_gt)
-
-        if ph is not None:
-            (module_number, anns_2good, anns_1good, anns_0good, phasing1, supp_reads, prev_module_num) = ph
-            rl_ph = generate_result_line(
-                motif, phasing1, supp_reads, len(anns_2good), len(anns_1good), len(anns_0good), prev_module_num,
-                second_module_number=module_number
-            )
-            result_lines.append(rl_ph)
-
-    return result_lines
 
 
 def generate_result_line(
@@ -1715,7 +1704,7 @@ def write_histogram_image2d(
 
 
 def write_histogram_image(
-    out_prefix: str, annotations: list[Annotation], filt_annot: list[Annotation], index_rep: int
+    annotations: list[Annotation], filt_annot: list[Annotation], index_rep: int
 ) -> HistReadCounts:
     """
     Stores quantity of different combinations of module repetitions, generates separate graph image for each module
@@ -2124,35 +2113,6 @@ class Inference:
 
         return evaluated_models
 
-    # TODO: make this function taking model instead of method of model
-    def save_pcolor_plotly_file(
-        self,
-        lh_copy: np.ndarray, lognorm: bool,
-        title: str, max_str: int, start_ticks: int = 5, step_ticks: int = 5
-    ) -> ProbHeatmap:
-        text = [['' for _ in range(max_str - self.min_rep + 1)] for _ in range(max_str - self.min_rep + 1)]
-        text[-1][0] = 'B'
-        text[-1][1] = 'E'
-
-        hovertext = []
-        for j in ['B'] + list(range(self.min_rep, max_str)):
-            inner = [f'{j}/{i}' for i in list(range(self.min_rep, max_str)) + ['E']]
-            hovertext.append(inner)
-
-        hovertext[0][-1] = 'E/E'
-        hovertext[-1][0] = 'B'
-        hovertext[-1][1] = 'E'
-
-        z: list[list[float]] = lh_copy[self.min_rep - 1:, self.min_rep:].tolist()
-        hovertext2: list[list[str]] = hovertext
-        y_tickvals: list[int] = list(np.concatenate([np.array(range(start_ticks - self.min_rep + 1, max_str - self.min_rep + 1, step_ticks)), [0]]))
-        y_ticktext: list[int | str] = list(range(start_ticks, max_str, step_ticks)) + ['B']
-        x_tickvals: list[int] = list(np.concatenate([np.array(range(start_ticks - self.min_rep, max_str - self.min_rep, step_ticks)), [max_str - self.min_rep]]))
-        x_ticktext: list[int | str] = list(range(start_ticks, max_str, step_ticks)) + ['E(>%d)' % (self.max_with_e - 2)]
-        x_pos: float = max_str - self.min_rep - 0.5
-
-        return (z, hovertext2, y_tickvals, y_ticktext, x_tickvals, x_ticktext, x_pos)
-
     def predict(self, lh_dict: dict[tuple[int | str, int | str], float]) -> tuple[np.ndarray, tuple[int, int]]:
         # convert to a numpy array:
         lh_array = np.zeros((self.max_rep, self.max_rep + 1))
@@ -2182,32 +2142,6 @@ class Inference:
 
         # output best option
         return lh_array, prediction
-
-    # TODO: make this function taking model instead of method of model
-    def draw_pcolor(
-        self, lh_array: np.ndarray, name: str, lognorm: bool = True
-    ) -> ProbHeatmap:
-        ind_good = (lh_array < 0.0) & (lh_array > -1e10) & (lh_array != np.nan)
-        z_min, z_max = min(lh_array[ind_good]), max(lh_array[ind_good])
-        max_str = len(lh_array)
-        if lognorm:
-            lh_view = -np.log(-lh_array)
-            z_min = -np.log(-z_min)
-            z_max = -np.log(-z_max)
-        else:
-            lh_view = lh_array.copy()
-
-        # background (B, i) - copy it below min_rep
-        lh_view[self.min_rep - 1, :] = lh_view[0, :]
-
-        lh_copy = lh_view.copy()
-        lh_copy[-1, self.min_rep] = lh_copy[0, 0]
-        lh_copy[-1, self.min_rep + 1] = lh_copy[0, self.max_rep]
-
-        title = '%s likelihood of options (%s)' % ('Loglog' if lognorm else 'Log', name)
-        # print(lh_copy.shape, lognorm, title, max_str)
-        heatmap_data = self.save_pcolor_plotly_file(lh_copy, lognorm, title, max_str)
-        return heatmap_data
 
     def convert_to_sym(self, best: tuple[int, int], monoallelic: bool) -> tuple[int | str, int | str]:
         """
@@ -2316,6 +2250,59 @@ class Inference:
         return lh_array, predicted_sym, confidence
 
 
+def draw_pcolor(
+    model: Inference, lh_array: np.ndarray, name: str, lognorm: bool = True
+) -> ProbHeatmap:
+    ind_good = (lh_array < 0.0) & (lh_array > -1e10) & (lh_array != np.nan)
+    z_min, z_max = min(lh_array[ind_good]), max(lh_array[ind_good])
+    max_str = len(lh_array)
+    if lognorm:
+        lh_view = -np.log(-lh_array)
+        z_min = -np.log(-z_min)
+        z_max = -np.log(-z_max)
+    else:
+        lh_view = lh_array.copy()
+
+    # background (B, i) - copy it below min_rep
+    lh_view[model.min_rep - 1, :] = lh_view[0, :]
+
+    lh_copy = lh_view.copy()
+    lh_copy[-1, model.min_rep] = lh_copy[0, 0]
+    lh_copy[-1, model.min_rep + 1] = lh_copy[0, model.max_rep]
+
+    title = '%s likelihood of options (%s)' % ('Loglog' if lognorm else 'Log', name)
+    # print(lh_copy.shape, lognorm, title, max_str)
+    heatmap_data = save_pcolor_plotly_file(model, lh_copy, lognorm, title, max_str)
+    return heatmap_data
+
+
+def save_pcolor_plotly_file(
+    model: Inference, lh_copy: np.ndarray, lognorm: bool, title: str, max_str: int, start_ticks: int = 5, step_ticks: int = 5
+) -> ProbHeatmap:
+    text = [['' for _ in range(max_str - model.min_rep + 1)] for _ in range(max_str - model.min_rep + 1)]
+    text[-1][0] = 'B'
+    text[-1][1] = 'E'
+
+    hovertext = []
+    for j in ['B'] + list(range(model.min_rep, max_str)):
+        inner = [f'{j}/{i}' for i in list(range(model.min_rep, max_str)) + ['E']]
+        hovertext.append(inner)
+
+    hovertext[0][-1] = 'E/E'
+    hovertext[-1][0] = 'B'
+    hovertext[-1][1] = 'E'
+
+    z: list[list[float]] = lh_copy[model.min_rep - 1:, model.min_rep:].tolist()
+    hovertext2: list[list[str]] = hovertext
+    y_tickvals: list[int] = list(np.concatenate([np.array(range(start_ticks - model.min_rep + 1, max_str - model.min_rep + 1, step_ticks)), [0]]))
+    y_ticktext: list[int | str] = list(range(start_ticks, max_str, step_ticks)) + ['B']
+    x_tickvals: list[int] = list(np.concatenate([np.array(range(start_ticks - model.min_rep, max_str - model.min_rep, step_ticks)), [max_str - model.min_rep]]))
+    x_ticktext: list[int | str] = list(range(start_ticks, max_str, step_ticks)) + ['E(>%d)' % (model.max_with_e - 2)]
+    x_pos: float = max_str - model.min_rep - 0.5
+
+    return (z, hovertext2, y_tickvals, y_ticktext, x_tickvals, x_ticktext, x_pos)
+
+
 def highlight_subpart(seq: str, highlight: int | list[int]) -> tuple[str, str]:
     """
     Highlights subpart of a motif sequence
@@ -2415,9 +2402,7 @@ def generate_row(sequence: str, result: dict, postfilter: PostFilter) -> tuple:
     # return (result, updated_result)
 
 
-def generate_motifb64(
-    seq: str, row: dict
-) -> tuple:
+def generate_motifb64(seq: str, row: dict) -> tuple:
     highlight = list(map(int, str(row['repetition_index']).split('_')))
     sequence, _ = highlight_subpart(seq, highlight)
     motif_name = row['motif_name']
@@ -2456,6 +2441,16 @@ GraphData: TypeAlias = tuple[HistReadCounts | None, ProbHeatmap | None, Hist2DGr
 
 # def test1() -> None:
 #     print("kjsk")
+def load_arguments_fake() -> Namespace:
+    return Namespace(
+        output_dir='dante_out',
+        input_tsv=open("../../cache/HG002.GRCh38.remastr_output.tsv", "r"),
+        male=False,
+
+        verbose=True,
+        nomenclatures=5,
+        cutoff_alignments=20,
+    )
 
 
 # %%

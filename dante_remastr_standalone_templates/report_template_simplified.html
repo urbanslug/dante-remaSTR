@@ -24,9 +24,10 @@
 
 <body class="valo v-app">
 
+{% set sample, dante_version, tabs = data %}
 <div id="sample_name" style="display: none">{{ sample }}</div>
 
-<h2 id="content">Content (Sample: {{ sample }} Version: Remastr v{{ version }})</h2>
+<h2 id="content">Content (Sample: {{ sample }} Version: Remastr v{{ dante_version }})</h2>
 <div class="tab">
     <table class="tg" id="content-tg">
         <thead>
@@ -35,10 +36,10 @@
             </tr>
         </thead>
         <tbody>
-            {% for (motif_name, motif) in table %}
+            {% for (motif_id, _, _, _) in tabs %}
             <tr>
                 <td class="tg-s6z2">
-                    <a href="#{{ motif_name }}" class="tablinks" onclick="openTab(event, '{{ motif_name }}'); $('.{{ motif_name }}').trigger('content-change');">{{ motif }}</a>
+                    <a href="#{{ motif_id }}" class="tablinks" onclick="openTab(event, '{{ motif_id }}'); $('.{{ motif_id }}').trigger('content-change');">{{ motif_id }}</a>
                 </td>
             </tr>
             {% endfor %}
@@ -132,8 +133,8 @@
 } );
 </script>
 
-    {% for (graph_data, postfilter_data, motif_name, motif_id, motif, result, alignment, sequence, nomenclatures) in ms_list if not motif_reps == "" %}
-        <h2 id="data-{{ motif_name }}">{{ motif }}</h2>
+    {% for (graph_data, postfilter_data, motif_name, _, _, result, alignment, sequence, nomenclatures) in ms_list if not motif_reps == "" %}
+        <h2 id="data-{{ motif_name }}">{{ motif_id }}</h2>
         <p>{{ sequence }}</p>
         Nomenclatures:<br>
         <table class="nomtg">
