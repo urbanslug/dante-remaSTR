@@ -10,6 +10,7 @@ import csv
 import os
 import re
 import sys
+import json
 import textwrap
 import enum
 import shutil
@@ -328,6 +329,7 @@ def write_report(
     post_errors = f'{post_filter.max_rel_error * 100:.0f}%'
     if post_filter.max_abs_error is not None:
         post_errors += f' (abs={post_filter.max_abs_error})'
+    postfilter_data = (post_bases, post_reps, post_errors)
 
     tabs = []
     for (motif, anns, genotype, phasing) in zip(all_motifs, all_annotations, all_genotypes, all_haplotypes):
@@ -350,7 +352,7 @@ def write_report(
             (module_number, anns_spanning, anns_flanking, anns_filtered, predicted, confidence, lh_array, model) = gt
             suffix = str(module_number)
 
-            nomenclatures_local = generate_nomenclatures(anns_spanning, module_number, None, motif, nomenclature_limit)
+            locus_nomenclatures = generate_nomenclatures(anns_spanning, module_number, None, motif, nomenclature_limit)
 
             read_counts = None
             if len(anns_spanning) != 0 or len(anns_flanking) != 0:
@@ -368,28 +370,28 @@ def write_report(
             row_tuple = generate_row(seq, row, post_filter)
 
             tmp = generate_motifb64(seq, row)
-            (motif_clean_id, _, _, result, alignment, sequence) = tmp
+            (locus_id, _, _, result, alignment, sequence) = tmp
             del row
 
             graph_data = (read_counts, heatmap_data, None)
-            postfilter_data = (post_bases, post_reps, post_errors)
 
             rows_list1.append(row_tuple)
             ms_list1.append(
-                (graph_data, postfilter_data, motif_clean_id, result, alignment, sequence, nomenclatures_local)
+                (graph_data, postfilter_data, locus_id, result, alignment, sequence, locus_nomenclatures)
             )
 
             # motif_name, motif_nomenclature, allele1, conf_allele1, reads_a1, indels_a1, mismatches_a1, allele2, conf_allele2, reads_a2, indels_a2, mismatches_a2, confidence, indels, mismatches, quality_reads, one_primer_reads
-            m_name, m_nomenclature, a1, conf_a1, reads_a1, indels_a1, mismatches_a1, a2, conf_a2, reads_a2, indels_a2, mismatches_a2, confidence, indels, mismatches, quality_reads, one_primer_reads = row_tuple
-            module_data = (
-                sequence, nomenclatures_local,
-                (a1, conf_a1, indels_a1, mismatches_a1, reads_a1),
-                (a2, conf_a2, indels_a2, mismatches_a2, reads_a2),
-                confidence, indels, mismatches,
-                quality_reads, one_primer_reads,
-                graph_data, postfilter_data, motif_clean_id,
+            m_name, m_nomenclature, a1_prediction, a1_confidence, a1_reads, a1_indels, a1_mismatches, a2_prediction, a2_confidence, a2_reads, a2_indels, a2_mismatches, confidence, indels, mismatches, spanning_reads, flanking_reads = row_tuple
+            locus_data = (
+                locus_id, sequence, locus_nomenclatures,
+                (a1_prediction, a1_confidence, a1_indels, a1_mismatches, a1_reads),
+                (a2_prediction, a2_confidence, a2_indels, a2_mismatches, a2_reads),
+                (confidence, indels, mismatches),
+                spanning_reads, flanking_reads,
+                graph_data,
             )
-            m_list1.append(module_data)
+
+            m_list1.append(locus_data)
 
         rows_list2 = []
         ms_list2: list[tuple] = []
@@ -407,41 +409,44 @@ def write_report(
             rows_list2.append(row_tuple)
 
             tmp = generate_motifb64(seq, row)
-            (motif_clean_id, _, _, result, alignment, sequence) = tmp
+            (locus_id, _, _, result, alignment, sequence) = tmp
 
             annotations = anns_2good + anns_1good
             if len(annotations) == 0:
                 print(f"{motif_dir} {suffix} is empty")
 
-            nomenclatures_local = generate_nomenclatures(anns_2good, prev_module_num, second_module_number, motif, nomenclature_limit)
+            locus_nomenclatures = generate_nomenclatures(anns_2good, prev_module_num, second_module_number, motif, nomenclature_limit)
             hist2d_data = write_histogram_image2d(annotations, prev_module_num, second_module_number, motif.module_str(prev_module_num), motif.module_str(second_module_number))
 
             graph_data = (None, None, hist2d_data)
-            postfilter_data = (post_bases, post_reps, post_errors)
 
             ms_list2.append(
-                (graph_data, postfilter_data, motif_clean_id, result, alignment, sequence, nomenclatures_local)
+                (graph_data, postfilter_data, locus_id, result, alignment, sequence, locus_nomenclatures)
             )
-            # motif_name, motif_nomenclature, allele1, conf_allele1, reads_a1, indels_a1, mismatches_a1, allele2, conf_allele2, reads_a2, indels_a2, mismatches_a2, confidence, indels, mismatches, quality_reads, one_primer_reads
-            m_name, m_nomenclature, a1, conf_a1, reads_a1, indels_a1, mismatches_a1, a2, conf_a2, reads_a2, indels_a2, mismatches_a2, confidence, indels, mismatches, quality_reads, one_primer_reads = row_tuple
-            module_data2 = (
-                sequence, nomenclatures_local,
-                (a1, conf_a1, indels_a1, mismatches_a1, reads_a1),
-                (a2, conf_a2, indels_a2, mismatches_a2, reads_a2),
-                confidence, indels, mismatches,
-                quality_reads, one_primer_reads,
-                graph_data, postfilter_data, motif_clean_id,
+            m_name, m_nomenclature, a1_prediction, a1_confidence, a1_reads, a1_indels, a1_mismatches, a2_prediction, a2_confidence, a2_reads, a2_indels, a2_mismatches, confidence, indels, mismatches, spanning_reads, flanking_reads = row_tuple
+            locus_data2 = (
+                locus_id, sequence, locus_nomenclatures,
+                (a1_prediction, a1_confidence, a1_indels, a1_mismatches, a1_reads),
+                (a2_prediction, a2_confidence, a2_indels, a2_mismatches, a2_reads),
+                (confidence, indels, mismatches),
+                spanning_reads, flanking_reads,
+                graph_data,
             )
 
-            m_list2.append(module_data2)
+            m_list2.append(locus_data2)
 
         tabs.append((motif_id, nomenclatures, m_list1, m_list2))
 
     sample = os.path.basename(output_dir)
     version = VERSION
     tabs = sorted(tabs, key=lambda x: x[0])
-    data = (sample, version, tabs)
+    data = (sample, version, postfilter_data, tabs)
+
     # print(tabs[11:12])  # print DM2
+    # print(data)
+    # y = json.dumps(data)
+    # print(y)
+    # data = json.loads(y)
 
     env = Environment(loader=FileSystemLoader([script_dir]), trim_blocks=True, lstrip_blocks=True)
     template = env.get_template("report_template_simplified.html")
@@ -2312,9 +2317,9 @@ def save_pcolor_plotly_file(
 
     z: list[list[float]] = lh_copy[model.min_rep - 1:, model.min_rep:].tolist()
     hovertext2: list[list[str]] = hovertext
-    y_tickvals: list[int] = list(np.concatenate([np.array(range(start_ticks - model.min_rep + 1, max_str - model.min_rep + 1, step_ticks)), [0]]))
+    y_tickvals: list[int] = list(range(start_ticks - model.min_rep + 1, max_str - model.min_rep + 1, step_ticks)) + [0]
     y_ticktext: list[int | str] = list(range(start_ticks, max_str, step_ticks)) + ['B']
-    x_tickvals: list[int] = list(np.concatenate([np.array(range(start_ticks - model.min_rep, max_str - model.min_rep, step_ticks)), [max_str - model.min_rep]]))
+    x_tickvals: list[int] = list(range(start_ticks - model.min_rep, max_str - model.min_rep, step_ticks)) + [int(max_str - model.min_rep)]
     x_ticktext: list[int | str] = list(range(start_ticks, max_str, step_ticks)) + ['E(>%d)' % (model.max_with_e - 2)]
     x_pos: float = max_str - model.min_rep - 0.5
 
