@@ -329,7 +329,6 @@ def write_report(
     if post_filter.max_abs_error is not None:
         post_errors += f' (abs={post_filter.max_abs_error})'
 
-    mcs_list = []
     tabs = []
     for (motif, anns, genotype, phasing) in zip(all_motifs, all_annotations, all_genotypes, all_haplotypes):
         motif_dir = f'{output_dir}/{motif.dir_name()}'
@@ -343,10 +342,10 @@ def write_report(
             annotations, _ = post_filter.get_filtered(annotations, module_number, both_primers=True)
         nomenclatures = generate_nomenclatures(annotations, None, None, motif, nomenclature_limit)
 
-        rows_list = []
-        ms_list: list[tuple] = []
-
         graph_data: GraphData
+        rows_list1 = []
+        ms_list1 = []
+        m_list1 = []
         for gt in genotype:
             (module_number, anns_spanning, anns_flanking, anns_filtered, predicted, confidence, lh_array, model) = gt
             suffix = str(module_number)
@@ -367,7 +366,6 @@ def write_report(
 
             row = generate_result_line(motif, predicted, confidence, len(anns_spanning), len(anns_flanking), len(anns_filtered), module_number, qual_annot=anns_spanning)
             row_tuple = generate_row(seq, row, post_filter)
-            rows_list.append(row_tuple)
 
             tmp = generate_motifb64(seq, row)
             (motif_clean_id, _, _, result, alignment, sequence) = tmp
@@ -376,10 +374,26 @@ def write_report(
             graph_data = (read_counts, heatmap_data, None)
             postfilter_data = (post_bases, post_reps, post_errors)
 
-            ms_list.append(
-                (graph_data, postfilter_data, motif_clean_id, motif_id, motif.name, result, alignment, sequence, nomenclatures_local)
+            rows_list1.append(row_tuple)
+            ms_list1.append(
+                (graph_data, postfilter_data, motif_clean_id, result, alignment, sequence, nomenclatures_local)
             )
 
+            # motif_name, motif_nomenclature, allele1, conf_allele1, reads_a1, indels_a1, mismatches_a1, allele2, conf_allele2, reads_a2, indels_a2, mismatches_a2, confidence, indels, mismatches, quality_reads, one_primer_reads
+            m_name, m_nomenclature, a1, conf_a1, reads_a1, indels_a1, mismatches_a1, a2, conf_a2, reads_a2, indels_a2, mismatches_a2, confidence, indels, mismatches, quality_reads, one_primer_reads = row_tuple
+            module_data = (
+                sequence, nomenclatures_local,
+                (a1, conf_a1, indels_a1, mismatches_a1, reads_a1),
+                (a2, conf_a2, indels_a2, mismatches_a2, reads_a2),
+                confidence, indels, mismatches,
+                quality_reads, one_primer_reads,
+                graph_data, postfilter_data, motif_clean_id,
+            )
+            m_list1.append(module_data)
+
+        rows_list2 = []
+        ms_list2: list[tuple] = []
+        m_list2 = []
         for ph in phasing[1:]:
             if ph is None:
                 raise ValueError
@@ -390,7 +404,7 @@ def write_report(
 
             row = generate_result_line(motif, phasing1, supp_reads, len(anns_2good), len(anns_1good), len(anns_0good), prev_module_num, second_module_number=module_number)
             row_tuple = generate_row(seq, row, post_filter)
-            rows_list.append(row_tuple)
+            rows_list2.append(row_tuple)
 
             tmp = generate_motifb64(seq, row)
             (motif_clean_id, _, _, result, alignment, sequence) = tmp
@@ -398,7 +412,6 @@ def write_report(
             annotations = anns_2good + anns_1good
             if len(annotations) == 0:
                 print(f"{motif_dir} {suffix} is empty")
-                continue
 
             nomenclatures_local = generate_nomenclatures(anns_2good, prev_module_num, second_module_number, motif, nomenclature_limit)
             hist2d_data = write_histogram_image2d(annotations, prev_module_num, second_module_number, motif.module_str(prev_module_num), motif.module_str(second_module_number))
@@ -406,27 +419,32 @@ def write_report(
             graph_data = (None, None, hist2d_data)
             postfilter_data = (post_bases, post_reps, post_errors)
 
-            ms_list.append(
-                (graph_data, postfilter_data, motif_clean_id, motif_id, motif.name, result, alignment, sequence, nomenclatures_local)
+            ms_list2.append(
+                (graph_data, postfilter_data, motif_clean_id, result, alignment, sequence, nomenclatures_local)
+            )
+            # motif_name, motif_nomenclature, allele1, conf_allele1, reads_a1, indels_a1, mismatches_a1, allele2, conf_allele2, reads_a2, indels_a2, mismatches_a2, confidence, indels, mismatches, quality_reads, one_primer_reads
+            m_name, m_nomenclature, a1, conf_a1, reads_a1, indels_a1, mismatches_a1, a2, conf_a2, reads_a2, indels_a2, mismatches_a2, confidence, indels, mismatches, quality_reads, one_primer_reads = row_tuple
+            module_data2 = (
+                sequence, nomenclatures_local,
+                (a1, conf_a1, indels_a1, mismatches_a1, reads_a1),
+                (a2, conf_a2, indels_a2, mismatches_a2, reads_a2),
+                confidence, indels, mismatches,
+                quality_reads, one_primer_reads,
+                graph_data, postfilter_data, motif_clean_id,
             )
 
-        tabs.append((motif_id, nomenclatures, rows_list, ms_list))
-        mcs_list.append((motif_id, motif.name))
+            m_list2.append(module_data2)
+
+        tabs.append((motif_id, nomenclatures, m_list1, m_list2))
 
     sample = os.path.basename(output_dir)
     version = VERSION
-    table = sorted(mcs_list)
-
-    env = Environment(loader=FileSystemLoader([script_dir]), trim_blocks=True, lstrip_blocks=True)
-    template = env.get_template("report_template.html")
-    # print(sample, version, table[0:5], tabs[0:5], sep="\n")
-    output = template.render(sample=sample, version=version, table=table, tabs=tabs)
-    with open(f"{output_dir}/report.html", "w") as f:
-        f.write(output)
-
-    template = env.get_template("report_template_simplified.html")
     tabs = sorted(tabs, key=lambda x: x[0])
     data = (sample, version, tabs)
+    # print(tabs[11:12])  # print DM2
+
+    env = Environment(loader=FileSystemLoader([script_dir]), trim_blocks=True, lstrip_blocks=True)
+    template = env.get_template("report_template_simplified.html")
     output = template.render(data=data)
     with open(f"{output_dir}/report2.html", "w") as f:
         f.write(output)
