@@ -444,7 +444,7 @@ def write_report(
 
 def generate_nomenclatures(
     annotations: list[Annotation], module_num: int | None, next_module_num: int | None, motif: Motif, nomenclature_limit: int
-) -> list[tuple[str, str, str]]:
+) -> list[tuple[str, str, list[str]]]:
 
     count_dict = Counter(annot.get_nomenclature(module_num, next_module_num, False) for annot in annotations)
     count_dict2 = sorted(count_dict.items(), key=lambda k: (-k[1], k[0]))
@@ -453,7 +453,7 @@ def generate_nomenclatures(
     for nomenclature, count in count_dict2:
         count2 = str(count) + 'x'
         ref = f'{motif.chrom}:g.{motif.start}_{motif.end}'
-        parts = ''.join([f'<td>{s}</td>' for s in nomenclature.rstrip().split('\t')])
+        parts = nomenclature.rstrip().split('\t')
 
         lines.append((count2, ref, parts))
 

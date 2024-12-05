@@ -64,7 +64,8 @@
         <tr>
             <td>{{ count }}</td>
             <td>{{ ref }}</td>
-            {{ parts }}
+            {%+ for part in parts %}<td>{{ part }}</td>{% endfor %}
+
         </tr>
         {% endfor %}
     </tbody>
@@ -150,7 +151,8 @@
                 <tr>
                     <td>{{ count }}</td>
                     <td>{{ ref }}</td>
-                    {{ parts }}
+                    {%+ for part in parts %}<td>{{ part }}</td>{% endfor %}
+
                 </tr>
                 {% endfor %}
             </tbody>
