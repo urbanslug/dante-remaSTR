@@ -254,13 +254,15 @@ def write_phased_predictions(
     for (motif, genotype, phasing) in zip(all_motifs, all_genotypes, all_haplotypes):
         h1 = []
         h2 = []
+        nomenclatures = []
         for gt in genotype:
             # (mod_num, spanning, flanking, filtered, predicted, conf, lh_array, model)
-            (_, _, _, _, predicted, _, _, _) = gt
+            (mod_num, spanning, _, _, predicted, _, _, _) = gt
             h1.append(str(predicted[0]))
             h2.append(str(predicted[1]))
 
-            # nomenclatures_local = generate_nomenclatures(anns_spanning, module_number, None, motif, nomenclature_limit)
+            nomenclature = list(map(nom_count_to_triple, generate_nomenclatures(spanning, mod_num, None, motif)))
+            nomenclatures.append(nomenclature)
 
         hp1 = []
         hp2 = []
@@ -274,11 +276,54 @@ def write_phased_predictions(
             hp2.append(phase[1])
 
         h1_full, h2_full = phase_full_locus(h1, h2, hp1, hp2)
-        result.append(f"{motif.name}\t{motif.augmented_nomenclature(h1_full)}\n")
-        result.append(f"{motif.name}\t{motif.augmented_nomenclature(h2_full)}\n")
+        aug_nom1, nomenclatures, errs1 = augment_nomenclature(motif, h1_full, nomenclatures, 0.8)
+        aug_nom2, nomenclatures, errs2 = augment_nomenclature(motif, h2_full, nomenclatures, 0.8)
+        result.append(f"{motif.name}\t{aug_nom1}\t{errs1}\n")
+        result.append(f"{motif.name}\t{aug_nom2}\t{errs2}\n")
 
     with open(output, "w") as f:
         f.writelines(result)
+
+
+def augment_nomenclature(
+    motif: Motif, hapl: list[str], nomenclatures: list[list[tuple[int, int, str]]], assignment_factor: float
+) -> tuple[str, list[list[tuple[int, int, str]]], list[str]]:
+
+    errors = set()
+    result = []
+    for i, x in enumerate(hapl):
+        try:
+            count = int(x)
+        except ValueError:
+            errors.add("contains B/E/X")
+            result.append(f"err[{x}]")
+            continue
+
+        assigned = False
+        for j, nom in enumerate(nomenclatures[i]):
+            length, c, representation = nom
+            if length == count:
+                result.append(representation)
+                c = int(c * (1.0 - assignment_factor))
+                nomenclatures[i][j] = (length, c, representation)
+                assigned = True
+                nomenclatures[i] = sorted(nomenclatures[i], key=lambda x: -x[1])
+                break
+
+        if not assigned:
+            errors.add("nomenclature mismatch")
+            result.append(f"err[{count}]")
+
+    aug_nom = motif.augmented_nomenclature(result)
+    return aug_nom, nomenclatures, list(errors)
+
+
+def nom_count_to_triple(nomenclature: tuple[int, str, list[str]]) -> tuple[int, int, str]:
+    count, _, repr_list = nomenclature
+    assert len(repr_list) == 1, "This function converts only one representation"
+    representation = repr_list[0]
+    length = sum(int(num) for _, num in re.findall(r'([A-Z]+)\[(\d+)', representation))
+    return length, count, representation
 
 
 def phase_full_locus(h1_full: list[str], h2_full: list[str], hp1: list[str], hp2: list[str]) -> tuple[list[str], list[str]]:
@@ -443,21 +488,22 @@ def write_report(
 
 
 def generate_nomenclatures(
-    annotations: list[Annotation], module_num: int | None, next_module_num: int | None, motif: Motif, nomenclature_limit: int
-) -> list[tuple[str, str, list[str]]]:
+    annotations: list[Annotation], module_num: int | None, next_module_num: int | None,
+    motif: Motif, nomenclature_limit: int | None = None
+) -> list[tuple[int, str, list[str]]]:
 
     count_dict = Counter(annot.get_nomenclature(module_num, next_module_num, False) for annot in annotations)
     count_dict2 = sorted(count_dict.items(), key=lambda k: (-k[1], k[0]))
 
     lines = []
     for nomenclature, count in count_dict2:
-        count2 = str(count) + 'x'
+        count2 = count
         ref = f'{motif.chrom}:g.{motif.start}_{motif.end}'
         parts = nomenclature.rstrip().split('\t')
 
         lines.append((count2, ref, parts))
 
-        if len(lines) >= nomenclature_limit:
+        if nomenclature_limit is not None and len(lines) >= nomenclature_limit:
             break
 
     return lines
@@ -626,7 +672,11 @@ class Motif:
             if num == 1:
                 modules.append(f"{seq}[{num}]")
             else:
-                modules.append(f"{seq}[{rep_counts[i]}]")
+                if rep_counts[i].startswith("err"):
+                    x = rep_counts[i][4:-1]
+                    modules.append(f"{seq}[{x}]")
+                else:
+                    modules.append(rep_counts[i])
                 i += 1
         assert i == len(rep_counts), "Invalid augmentation."
         return f'{self.chrom}:g.{self.start}_{self.end}' + "".join(modules)

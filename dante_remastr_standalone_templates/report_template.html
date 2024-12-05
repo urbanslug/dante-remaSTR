@@ -62,7 +62,7 @@
     <tbody>
         {% for (count, ref, parts) in nomenclatures %}
         <tr>
-            <td>{{ count }}</td>
+            <td>{{ count }}x</td>
             <td>{{ ref }}</td>
             {%+ for part in parts %}<td>{{ part }}</td>{% endfor %}
 
@@ -149,7 +149,7 @@
             <tbody>
                 {% for (count, ref, parts) in nomenclatures %}
                 <tr>
-                    <td>{{ count }}</td>
+                    <td>{{ count }}x</td>
                     <td>{{ ref }}</td>
                     {%+ for part in parts %}<td>{{ part }}</td>{% endfor %}
 
