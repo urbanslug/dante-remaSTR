@@ -345,8 +345,6 @@ def write_report(
         nomenclatures = generate_nomenclatures(annotations, None, None, motif, nomenclature_limit)
 
         graph_data: GraphData
-        rows_list1 = []
-        ms_list1 = []
         m_list1 = []
         for gt in genotype:
             (module_number, anns_spanning, anns_flanking, anns_filtered, predicted, confidence, lh_array, model) = gt
@@ -370,18 +368,12 @@ def write_report(
             row_tuple = generate_row(seq, row, post_filter)
 
             tmp = generate_motifb64(seq, row)
-            (locus_id, _, _, result, alignment, sequence) = tmp
+            (locus_id, _, _, _, _, sequence) = tmp
             del row
 
             graph_data = (read_counts, heatmap_data, None)
 
-            rows_list1.append(row_tuple)
-            ms_list1.append(
-                (graph_data, postfilter_data, locus_id, result, alignment, sequence, locus_nomenclatures)
-            )
-
-            # motif_name, motif_nomenclature, allele1, conf_allele1, reads_a1, indels_a1, mismatches_a1, allele2, conf_allele2, reads_a2, indels_a2, mismatches_a2, confidence, indels, mismatches, quality_reads, one_primer_reads
-            m_name, m_nomenclature, a1_prediction, a1_confidence, a1_reads, a1_indels, a1_mismatches, a2_prediction, a2_confidence, a2_reads, a2_indels, a2_mismatches, confidence, indels, mismatches, spanning_reads, flanking_reads = row_tuple
+            _, _, a1_prediction, a1_confidence, a1_reads, a1_indels, a1_mismatches, a2_prediction, a2_confidence, a2_reads, a2_indels, a2_mismatches, confidence, indels, mismatches, spanning_reads, flanking_reads = row_tuple
             locus_data = (
                 locus_id, sequence, locus_nomenclatures,
                 (a1_prediction, a1_confidence, a1_indels, a1_mismatches, a1_reads),
@@ -393,8 +385,6 @@ def write_report(
 
             m_list1.append(locus_data)
 
-        rows_list2 = []
-        ms_list2: list[tuple] = []
         m_list2 = []
         for ph in phasing[1:]:
             if ph is None:
@@ -406,10 +396,9 @@ def write_report(
 
             row = generate_result_line(motif, phasing1, supp_reads, len(anns_2good), len(anns_1good), len(anns_0good), prev_module_num, second_module_number=module_number)
             row_tuple = generate_row(seq, row, post_filter)
-            rows_list2.append(row_tuple)
 
             tmp = generate_motifb64(seq, row)
-            (locus_id, _, _, result, alignment, sequence) = tmp
+            (locus_id, _, _, _, _, sequence) = tmp
 
             annotations = anns_2good + anns_1good
             if len(annotations) == 0:
@@ -420,10 +409,7 @@ def write_report(
 
             graph_data = (None, None, hist2d_data)
 
-            ms_list2.append(
-                (graph_data, postfilter_data, locus_id, result, alignment, sequence, locus_nomenclatures)
-            )
-            m_name, m_nomenclature, a1_prediction, a1_confidence, a1_reads, a1_indels, a1_mismatches, a2_prediction, a2_confidence, a2_reads, a2_indels, a2_mismatches, confidence, indels, mismatches, spanning_reads, flanking_reads = row_tuple
+            _, _, a1_prediction, a1_confidence, a1_reads, a1_indels, a1_mismatches, a2_prediction, a2_confidence, a2_reads, a2_indels, a2_mismatches, confidence, indels, mismatches, spanning_reads, flanking_reads = row_tuple
             locus_data2 = (
                 locus_id, sequence, locus_nomenclatures,
                 (a1_prediction, a1_confidence, a1_indels, a1_mismatches, a1_reads),
@@ -442,16 +428,15 @@ def write_report(
     tabs = sorted(tabs, key=lambda x: x[0])
     data = (sample, version, postfilter_data, tabs)
 
-    # print(tabs[11:12])  # print DM2
-    # print(data)
-    # y = json.dumps(data)
-    # print(y)
-    # data = json.loads(y)
+    # json_example = json.dumps((sample, version, postfilter_data, tabs[0:1] + tabs[11:12]), indent=4)
+    json_dump = json.dumps(data, indent=4)
+    with open(f"{output_dir}/data.json", "w") as f:
+        f.write(json_dump)
 
     env = Environment(loader=FileSystemLoader([script_dir]), trim_blocks=True, lstrip_blocks=True)
-    template = env.get_template("report_template_simplified.html")
+    template = env.get_template("report_template.html")
     output = template.render(data=data)
-    with open(f"{output_dir}/report2.html", "w") as f:
+    with open(f"{output_dir}/report.html", "w") as f:
         f.write(output)
 
     return
@@ -2232,7 +2217,8 @@ class Inference:
         confidence_exp_all: float = np.sum(np.exp(lh_corr_array[:, self.max_rep])) / lh_sum
 
         if monoallelic:
-            confidence2 = '---'  # TODO: fix this
+            # confidence2 = '---'  # TODO: fix this
+            confidence2 = np.nan
 
         return (
             confidence, confidence1, confidence2,

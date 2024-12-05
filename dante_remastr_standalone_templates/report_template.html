@@ -24,9 +24,11 @@
 
 <body class="valo v-app">
 
+{% set sample, dante_version, postfilter_data, tabs = data %}
+{% set post_bases, post_reps, errors = postfilter_data %}
 <div id="sample_name" style="display: none">{{ sample }}</div>
 
-<h2 id="content">Content (Sample: {{ sample }} Version: Remastr v{{ version }})</h2>
+<h2 id="content">Content (Sample: {{ sample }} Version: Remastr v{{ dante_version }})</h2>
 <div class="tab">
     <table class="tg" id="content-tg">
         <thead>
@@ -35,10 +37,10 @@
             </tr>
         </thead>
         <tbody>
-            {% for (motif_name, motif) in table %}
+            {% for (motif_id, _, _, _) in tabs %}
             <tr>
                 <td class="tg-s6z2">
-                    <a href="#{{ motif_name }}" class="tablinks" onclick="openTab(event, '{{ motif_name }}'); $('.{{ motif_name }}').trigger('content-change');">{{ motif }}</a>
+                    <a href="#{{ motif_id }}" class="tablinks" onclick="openTab(event, '{{ motif_id }}'); $('.{{ motif_id }}').trigger('content-change');">{{ motif_id }}</a>
                 </td>
             </tr>
             {% endfor %}
@@ -53,7 +55,7 @@
 </div>
 
 
-{% for (motif_id, nomenclatures, rows_list, ms_list) in tabs %}
+{% for (motif_id, nomenclatures, m_individual, m_phased) in tabs %}
 <div class="tabcontent" id="{{ motif_id }}" style="display: none">
 <h2 class="summary_nomenclatures">Nomenclatures</h2>
 <table class="nomtg">
@@ -101,11 +103,15 @@
         </tr>
     </thead>
     <tbody>
-        {% for row in rows_list %}
-        {% set motif_name, motif_nomenclature, allele1, conf_allele1, reads_a1, indels_a1, mismatches_a1, allele2, conf_allele2, reads_a2, indels_a2, mismatches_a2, confidence, indels, mismatches, quality_reads, one_primer_reads = row %}
+        {% for row in m_individual + m_phased %}
+        {# {% set sequence, _, a1, a2, confidence, indels, mismatches, quality_reads, one_primer_reads, _, _ = row %} #}
+        {% set _, sequence, _, a1, a2, stats, quality_reads, one_primer_reads, _ = row %}
+        {% set allele1, conf_allele1, indels_a1, mismatches_a1, reads_a1 = a1 %}
+        {% set allele2, conf_allele2, indels_a2, mismatches_a2, reads_a2 = a2 %}
+        {% set confidence, indels, mismatches = stats %}
         <tr>
-            <td class="tg-s6z2">{{ motif_name }}</td>
-            <td class="tg-s6z2">{{ motif_nomenclature }}</td>
+            <td class="tg-s6z2">{{ motif_id }}</td>
+            <td class="tg-s6z2">{{ sequence }}</td>
             <td class="tg-s6z2">{{ allele1 }}</td>
             <td class="tg-s6z2">{{ conf_allele1 }}</td>
             <td class="tg-s6z2">{{ reads_a1 }}</td>
@@ -132,8 +138,10 @@
 } );
 </script>
 
-    {% for (graph_data, postfilter_data, motif_name, motif_id, motif, result, alignment, sequence, nomenclatures) in ms_list if not motif_reps == "" %}
-        <h2 id="data-{{ motif_name }}">{{ motif }}</h2>
+    {% for row in m_individual + m_phased %}
+    {# {% set sequence, nomenclatures, a1, a2, confidence, _, _, _, _, graph_data, motif_name = row %} #}
+    {% set motif_name, sequence, nomenclatures, a1, a2, stats, _, _, graph_data = row %}
+        <h2 id="data-{{ motif_name }}">{{ motif_id }}</h2>
         <p>{{ sequence }}</p>
         Nomenclatures:<br>
         <table class="nomtg">
@@ -147,9 +155,11 @@
                 {% endfor %}
             </tbody>
         </table>
-        {% set post_bases, post_reps, errors = postfilter_data %}
         postfilter: bases {{ post_bases }} , repetitions {{ post_reps }} , max. errors {{ errors }}<br>
-        alleles: {{ result }}<br>
+        {% set allele1, conf_allele1, indels_a1, mismatches_a1, reads_a1 = a1 %}
+        {% set allele2, conf_allele2, indels_a2, mismatches_a2, reads_a2 = a2 %}
+        {% set confidence, _, _ = stats %}
+        alleles: {{ allele1 }}  ({{ conf_allele1 }}) {{ allele2 }}  ({{ conf_allele2 }}) total {{ confidence }}<br>
 
         {% set read_counts, heatmap_data, hist2d_data = graph_data %}
         {% if hist2d_data != None %}
@@ -324,7 +334,7 @@
 
         {% endif %}
 
-        <p><a href="{{ alignment }}">Link to alignments</a></p>
+        <p><a href="{{ motif_id }}/alignments.html">Link to alignments</a></p>
         <p><a href="#content">Back to content</a></p>
     {% endfor %}
 </div>
