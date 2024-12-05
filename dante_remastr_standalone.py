@@ -275,11 +275,11 @@ def write_phased_predictions(
             hp1.append(phase[0])
             hp2.append(phase[1])
 
-        h1_full, h2_full = phase_full_locus(h1, h2, hp1, hp2)
+        h1_full, h2_full, err1, err2 = phase_full_locus(h1, h2, hp1, hp2)
         aug_nom1, nomenclatures, errs1 = augment_nomenclature(motif, h1_full, nomenclatures, 0.8)
         aug_nom2, nomenclatures, errs2 = augment_nomenclature(motif, h2_full, nomenclatures, 0.8)
-        result.append(f"{motif.name}\t{aug_nom1}\t{errs1}\n")
-        result.append(f"{motif.name}\t{aug_nom2}\t{errs2}\n")
+        result.append(f"{motif.name}\t{aug_nom1}\t{err1 + errs1}\n")
+        result.append(f"{motif.name}\t{aug_nom2}\t{err2 + errs2}\n")
 
     with open(output, "w") as f:
         f.writelines(result)
@@ -326,19 +326,25 @@ def nom_count_to_triple(nomenclature: tuple[int, str, list[str]]) -> tuple[int, 
     return length, count, representation
 
 
-def phase_full_locus(h1_full: list[str], h2_full: list[str], hp1: list[str], hp2: list[str]) -> tuple[list[str], list[str]]:
+def phase_full_locus(
+    h1_full: list[str], h2_full: list[str], hp1: list[str], hp2: list[str]
+) -> tuple[list[str], list[str], list[str], list[str]]:
     # ['9', '15'] ['12', '16'] ['9|16'] ['12|15'] -> ['9', '16'] ['12', '15']
 
     n_diff: int = sum(map(lambda x: x[0] != x[1], zip(h1_full, h2_full)))
     if n_diff <= 1:
-        return (h1_full, h2_full)  # there is nothing to phase
+        return (h1_full, h2_full, [], [])  # there is nothing to phase
 
+    errors1 = set()
+    errors2 = set()
     # print()
     # print(h1_full, h2_full, hp1, hp2)
     different_prefix = False
     for i in range(len(h1_full) - 1):
         if h1_full[i] == h2_full[i]:
             if different_prefix:
+                errors1.add("homozygous link")
+                errors2.add("homozygous link")
                 print(f"Warning: Cannot phase prefix and suffix at position {i}.\n{h1_full} {h2_full}\n{hp1} {hp2}")
             continue
         different_prefix = True
@@ -359,8 +365,17 @@ def phase_full_locus(h1_full: list[str], h2_full: list[str], hp1: list[str], hp2
         else:
             print(f"Warning: {h1_full[i:i + 2]} {h2_full[i:i + 2]} {hp1[i]} {hp2[i]} is inconsistent.")
 
+    for i in range(len(h1_full) - 1):
+        new_p1 = f"{h1_full[i]}|{h1_full[i + 1]}"
+        new_p2 = f"{h2_full[i]}|{h2_full[i + 1]}"
+        from_genotyping = sorted([new_p1, new_p2])
+        from_phasing = sorted([hp1[i], hp2[i]])
+        if from_genotyping != from_phasing:
+            errors1.add("genotyping-phasing inconsistence")
+            errors2.add("genotyping-phasing inconsistence")
+
     # print(f"-> {h1_full} {h2_full}\n")
-    return (h1_full, h2_full)
+    return (h1_full, h2_full, list(errors1), list(errors2))
 
 
 def write_report(
