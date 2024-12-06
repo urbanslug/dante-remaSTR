@@ -125,8 +125,6 @@ def write_alignment_html(
     script_dir: str, output_dir: str, flank_size: int
 ) -> None:
     seq = motif.modules_str(include_flanks=True)
-    motif_dir = f'{output_dir}/{motif.dir_name()}'
-    os.makedirs(motif_dir, exist_ok=True)
     motif_desc = motif.name
 
     data2 = []
@@ -237,11 +235,13 @@ def write_alignment_html(
         data2.append((sequence, motif_id, data))
 
     mt = motif.dir_name()
+    motif_dir = f'{output_dir}/alignments'
+    os.makedirs(motif_dir, exist_ok=True)
 
     env = Environment(loader=FileSystemLoader([script_dir]))
     template = env.get_template("alignments_template.html")
     output = template.render(sample=mt, motif_desc=motif_desc, data2=data2)
-    with open(f"{output_dir}/{mt}/alignments.html", "w") as f:
+    with open(f"{output_dir}/alignments/{mt}.html", "w") as f:
         f.write(output)
 
     return
@@ -394,7 +394,6 @@ def write_report(
     tabs = []
     for (motif, anns, genotype, phasing) in zip(all_motifs, all_annotations, all_genotypes, all_haplotypes):
         motif_dir = f'{output_dir}/{motif.dir_name()}'
-        os.makedirs(motif_dir, exist_ok=True)
         seq = motif.modules_str(include_flanks=True)
         motif_id = re.sub(r'[^\w_]', '', motif.name.replace('/', '_'))
 
