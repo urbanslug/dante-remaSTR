@@ -72,7 +72,7 @@
 
 <body class="valo v-app">
 
-  {% set locus_id, sequence, bg_num, heatmap_data, hist_data, rows = main_data %}
+  {% set locus_id, sequence, bg_num, heatmap_data, histogram_data, rows = main_data %}
   <!-- Tab links -->
   <h1 id="name">{{ locus_id }}</h1>
   Repetition sequence: {{ sequence }}
@@ -192,6 +192,7 @@
 
   <h2 id="hist">Allele histogram</h2>
   <div class="motif-hist" id="motif-hist"></div>
+  {% set hist_data, tickvals, ticktext = histogram_data %}
   <script>
         {
             let hist_data = {
@@ -208,8 +209,8 @@
                     "xaxis":{
                         "title":{"text":"Prediction"},
                         "tickmode":"array",
-                        "tickvals":[5,10,15,20,25,30,35,40,41],
-                        "ticktext":[5,10,15,20,25,30,35,40,'E']
+                        "tickvals":{{ tickvals }},
+                        "ticktext":{{ ticktext }}
                     },
                     "yaxis": {"fixedrange":true,"title":{"text":"Count"}},
                     "legend": {"x": 0.85, "y": 0.85 },

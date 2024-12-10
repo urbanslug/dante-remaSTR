@@ -34,21 +34,22 @@ def load_arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def collect_alleles(hist_data: list[int], bg_num: int, rows: list[Row], a_idx: int) -> tuple[list[int], int]:
-    for row in rows:
-        allele: int | str = row[a_idx]  # type: ignore  # if the index is correct, this is correct type
+# collect_alleles(hist_data, allele_pairs, 0)
+def collect_alleles(hist_data: list[int], allele_pairs: list[tuple[int | str, int | str]], a_idx: int) -> list[int]:
+    for pair in allele_pairs:
+        allele: int | str = pair[a_idx]
         if allele == 'E':
             hist_data[-1] += 1
             continue
         if allele == 'B':
-            bg_num += 1
+            hist_data[0] += 1
             continue
         if allele == 'X':
             raise NotImplementedError
 
         allele = int(allele)
-        hist_data[allele] += 1
-    return hist_data, bg_num
+        hist_data[allele + 1] += 1
+    return hist_data
 
 
 def collect_heatmap_data(max_allele: int, pairs: list[tuple[int | str, int | str]]) -> HeatmapData:
@@ -121,22 +122,23 @@ def main(args: argparse.Namespace) -> None:
         allele_pairs = [(a1, a2) for _, a1, _, a2, _, _, _, _, _ in rows]
 
         # ----------------------------------------------------------------------
-        a1_max = max(allele_num(row[1]) for row in rows)
-        a2_max = max(allele_num(row[3]) for row in rows)
+        a1_max = max(allele_num(pair[0]) for pair in allele_pairs)
+        a2_max = max(allele_num(pair[1]) for pair in allele_pairs)
         max_allele = max(a1_max, a2_max, MIN_GS)
         # print(locus_id, max_allele)
 
         # collect bg_num and hist_data
-        bg_num = 0
-        # hist_data = [0] * (max_allele + 2)  # +1 for zero indexing, +1 for expansion
-        hist_data = [0] * (40 + 2)  # +1 for zero indexing, +1 for expansion
-        hist_data, bg_num = collect_alleles(hist_data, bg_num, rows, 3)
-        hist_data, bg_num = collect_alleles(hist_data, bg_num, rows, 1)
+        hist_data = [0] * (max_allele + 1 + 2)  # +1 for zero indexing, +2 for B/E
+        hist_label = ["B"] + list(range(max_allele + 1)) + ["E"]
+        hist_data = collect_alleles(hist_data, allele_pairs, 0)
+        hist_data = collect_alleles(hist_data, allele_pairs, 1)
 
+        bg_num = hist_data[0]
         heatmap_data = collect_heatmap_data(max_allele, allele_pairs)
+        histogram_data = (hist_data, list(range(max_allele + 3)), hist_label)
         # ----------------------------------------------------------------------
 
-        loci_data[locus_id] = (locus_id, sequence, bg_num, heatmap_data, hist_data, rows)
+        loci_data[locus_id] = (locus_id, sequence, bg_num, heatmap_data, histogram_data, rows)
 
     print("Aggregates done. Creating HTMLs.")
     script_dir = os.path.dirname(__file__)
