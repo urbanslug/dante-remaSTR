@@ -482,13 +482,14 @@ def write_report(
 
         tabs.append((motif_id, nomenclatures, m_list1, m_list2))
 
-    sample = os.path.basename(output_dir)
+    sample = os.path.basename(os.path.normpath(output_dir))
     version = VERSION
     tabs = sorted(tabs, key=lambda x: x[0])
     data = (sample, version, postfilter_data, tabs)
 
     # json_example = json.dumps((sample, version, postfilter_data, tabs[0:1] + tabs[11:12]), indent=4)
     json_dump = json.dumps(data, indent=4)
+    # json_dump = json.dumps(data)
     with open(f"{output_dir}/data.json", "w") as f:
         f.write(json_dump)
 
@@ -2366,6 +2367,10 @@ def save_pcolor_plotly_file(
     hovertext[-1][1] = 'E'
 
     z: list[list[float]] = lh_copy[model.min_rep - 1:, model.min_rep:].tolist()
+    for i in range(len(z)):
+        for j in range(len(z[0])):
+            if z[i][j] == -np.inf:
+                z[i][j] = None
     hovertext2: list[list[str]] = hovertext
     y_tickvals: list[int] = list(range(start_ticks - model.min_rep + 1, max_str - model.min_rep + 1, step_ticks)) + [0]
     y_ticktext: list[int | str] = list(range(start_ticks, max_str, step_ticks)) + ['B']
