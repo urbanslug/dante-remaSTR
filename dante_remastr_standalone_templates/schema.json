@@ -1,8 +1,32 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://example.com/product.schema.json",
-  "title": "Product",
-  "description": "A product in the catalog",
-  "type": "object"
+  "title": "Product, can contain object, array, string, number, boolean, or null",
+  "description": "Data from Dante",
+
+  "type": "object",
+  "properties": {
+    "sample": {
+      "description": "name of the sample",
+      "type": "string"
+    },
+    "dante_version": {
+      "description": "version of the dante",
+      "type": "string"
+    },
+    "postfilter_params": {
+      "description": "TODO: describe elements",
+      "type": "array",
+      "items": {
+        "type": ["number", "string"]
+      },
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "loci": {
+      "description": "TODO",
+      "type": "array"
+    }
+  }
 }
 
