@@ -487,9 +487,10 @@ def write_report(
     tabs = sorted(tabs, key=lambda x: x[0])
     data = (sample, version, postfilter_data, tabs)
 
-    # json_example = json.dumps((sample, version, postfilter_data, tabs[0:1] + tabs[11:12]), indent=4)
-    json_dump = json.dumps(data, indent=4)
-    # json_dump = json.dumps(data)
+    data_tmp = (sample, version, postfilter_data, tabs[0:1] + tabs[11:12])
+    store_json(data_tmp, f"{output_dir}/instance.json")
+
+    json_dump = json.dumps(data)
     with open(f"{output_dir}/data.json", "w") as f:
         f.write(json_dump)
 
@@ -500,6 +501,84 @@ def write_report(
         f.write(output)
 
     return
+
+
+def store_json(old_data: tuple, output_file: str):
+    data = {}
+    data["sample"] = old_data[0]
+    data["dante_version"] = old_data[1]
+    data["postfilter_params"] = old_data[2]
+
+    motifs = []
+    for old_motif in old_data[3]:
+        motif = {}
+        motif["motif_id"] = old_motif[0]
+
+        nomenclatures = []
+        for old_nomenclature in old_motif[1]:
+            nomenclature = {}
+            nomenclature["count"] = old_nomenclature[0]
+            nomenclature["location"] = old_nomenclature[1]
+            nomenclature["noms"] = old_nomenclature[2]
+            nomenclatures.append(nomenclature)
+        motif["nomenclatures"] = nomenclatures
+
+        modules = []
+        for old_module in old_motif[2]:
+            module = {}
+            module["module_id"] = old_module[0]
+            module["sequence"] = old_module[1]
+
+            nomenclatures = []
+            for old_nomenclature in old_module[2]:
+                nomenclature = {}
+                nomenclature["count"] = old_nomenclature[0]
+                nomenclature["location"] = old_nomenclature[1]
+                nomenclature["noms"] = old_nomenclature[2]
+                nomenclatures.append(nomenclature)
+            module["nomenclatures"] = nomenclatures
+
+            module["allele_1"] = old_module[3]
+            module["allele_2"] = old_module[4]
+            module["stats"] = old_module[5]
+            module["reads_spanning"] = old_module[6]
+            module["reads_flanking"] = old_module[7]
+            module["graph_data"] = old_module[8]
+            modules.append(module)
+
+        motif["modules"] = modules
+
+        modules = []
+        for old_phasing in old_motif[3]:
+            module = {}
+            module["phasing_id"] = old_phasing[0]
+            module["sequence"] = old_phasing[1]
+
+            nomenclatures = []
+            for old_nomenclature in old_phasing[2]:
+                nomenclature = {}
+                nomenclature["count"] = old_nomenclature[0]
+                nomenclature["location"] = old_nomenclature[1]
+                nomenclature["noms"] = old_nomenclature[2]
+                nomenclatures.append(nomenclature)
+            module["nomenclatures"] = nomenclatures
+
+            module["allele_1"] = old_phasing[3]
+            module["allele_2"] = old_phasing[4]
+            module["stats"] = old_phasing[5]
+            module["reads_spanning"] = old_phasing[6]
+            module["reads_flanking"] = old_phasing[7]
+            module["graph_data"] = old_phasing[8]
+            modules.append(module)
+
+        motif["phasings"] = modules
+        motifs.append(motif)
+    data["motifs"] = motifs
+
+    # new_data[""]
+    json_example = json.dumps(data, indent=2)
+    with open(output_file, "w") as f:
+        f.write(json_example)
 
 
 def generate_nomenclatures(

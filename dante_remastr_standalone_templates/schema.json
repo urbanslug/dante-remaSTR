@@ -1,32 +1,89 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.com/product.schema.json",
-  "title": "Product, can contain object, array, string, number, boolean, or null",
-  "description": "Data from Dante",
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "last_modified": "2024-12-11",
+    "$defs": {
+        "nomenclatures": {
+            "description": "This structure is used for global and also local nomenclatures. Therefore, it is factored out.",
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "count": { "type": "number" },
+                    "location": { "type": "string" },
+                    "noms": { "type": "array" }
+                }
+            }
+        }
+    },
 
-  "type": "object",
-  "properties": {
-    "sample": {
-      "description": "name of the sample",
-      "type": "string"
-    },
-    "dante_version": {
-      "description": "version of the dante",
-      "type": "string"
-    },
-    "postfilter_params": {
-      "description": "TODO: describe elements",
-      "type": "array",
-      "items": {
-        "type": ["number", "string"]
-      },
-      "minItems": 3,
-      "maxItems": 3
-    },
-    "loci": {
-      "description": "TODO",
-      "type": "array"
+    "description": "Data from Dante",
+    "type": "object",
+    "properties": {
+        "sample": {
+            "description": "name of the sample",
+            "type": "string"
+        },
+        "dante_version": {
+            "description": "version of the dante",
+            "type": "string"
+        },
+        "postfilter_params": {
+            "description": "TODO: describe",
+            "type": "array",
+            "items": {
+                "type": ["number", "string"]
+            },
+            "minItems": 3,
+            "maxItems": 3
+        },
+        "motifs": {
+            "type": "array",
+            "items": {
+                "description": "TODO: ",
+                "type": "object",
+                "required": [ "motif_id", "nomenclatures", "modules", "phasings" ],
+                "properties": {
+                    "motif_id": { "type": "string" },
+                    "nomenclatures": { "$ref": "#/$defs/nomenclatures" },
+                    "modules": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "required": ["module_id", "sequence", "nomenclatures", "allele_1", "allele_2", "stats", "reads_spanning", "reads_flanking", "graph_data"],
+                            "properties": {
+                                "module_id": {"type": "string"},
+                                "sequence": {"type": "string"},
+                                "nomenclatures": { "$ref": "#/$defs/nomenclatures" },
+                                "allele_1": {},
+                                "allele_2": {},
+                                "stats": {},
+                                "reads_spanning": { "type": "number" },
+                                "reads_flanking": { "type": "number" },
+                                "graph_data": {}
+                            }
+                        }
+                    },
+                    "phasings": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "required": ["phasing_id", "sequence", "nomenclatures", "allele_1", "allele_2", "stats", "reads_spanning", "reads_flanking", "graph_data"],
+                            "properties": {
+                                "phasing_id": {"type": "string"},
+                                "sequence": {"type": "string"},
+                                "nomenclatures": { "$ref": "#/$defs/nomenclatures" },
+                                "allele_1": {},
+                                "allele_2": {},
+                                "stats": {},
+                                "reads_spanning": { "type": "number" },
+                                "reads_flanking": { "type": "number" },
+                                "graph_data": {}
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
-  }
 }
 
