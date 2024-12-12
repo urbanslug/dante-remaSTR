@@ -498,11 +498,9 @@ def plot_histogram_image(out_prefix: str, spanning_counts: list[tuple[int, int]]
     # fig.write_image(out_prefix + '_plotly.pdf')
 
 
-def write_all(
-    quality_annotations: list[annotation.Annotation], filt_primer: list[annotation.Annotation],
-    filtered_annotations: list[annotation.Annotation], motif_dir: str, motif_class: Motif, module_number: int,
-    second_module_number: int = None, zip_it: bool = True, cutoff_alignments: int = None
-) -> None:
+def write_all(quality_annotations: list[annotation.Annotation], filt_primer: list[annotation.Annotation],
+              filtered_annotations: list[annotation.Annotation], motif_dir: str, motif_class: Motif, module_number: int,
+              second_module_number: int = None, zip_it: bool = True, cutoff_alignments: int = None) -> None:
     """
     Write all output files: quality annotations, one-primer annotations, filtered annotations, statistics, repetitions + images.
     :param quality_annotations: list(Annotation) - list of blue annotations
@@ -771,10 +769,9 @@ def write_report(motifs: list[Motif], result_table: pd.DataFrame, post_filter: P
         for motif in sorted(motifs, key=lambda x: x.name):
             motif_clean = re.sub(r'[^\w_]', '', motif.name.replace('/', '_'))
             nomenclature_lines = generate_nomenclatures(f'{report_dir}/{motif.dir_name()}/nomenclature.txt', motif, nomenclature_limit)
-            tabs.append(report.html_templates.motif_summary.format(
-                motif_id=motif_clean, nomenclatures='\n'.join(nomenclature_lines),
-                table='\n'.join(rows[motif.name]), motifs='\n'.join(ms[motif.name])
-            ))
+            tabs.append(report.html_templates.motif_summary.format(motif_id=motif_clean,
+                                                                   nomenclatures='\n'.join(nomenclature_lines), table='\n'.join(rows[motif.name]),
+                                                                   motifs='\n'.join(ms[motif.name])))
 
         f.write(custom_format(template, table='', motifs='\n'.join(tabs)))
 
