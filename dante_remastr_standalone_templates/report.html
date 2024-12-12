@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Dante report</title>
+
+    <script src="msa.min.gz.js"></script>
+    <script src="https://gen-clc.cusp.uniba.sk/dante/msa.min.gz.js"></script>
+
+    <script src="plotly-2.14.0.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.14.0.min.js"></script>
+
+    <link rel="stylesheet" type="text/css" href="https://www.w3schools.com/w3css/4/w3.css">
+
+    <script src="jquery-3.6.1.min.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.1/jquery.min.js"></script>
+
+    <script src="datatables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.12.1/js/jquery.dataTables.js"></script>
+    <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.12.1/css/jquery.dataTables.css">
+
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body class="valo v-app">
+
+<div id="sample_name" style="display: none">{sample}</div>
+
+<!-- Tab links -->
+<h2 id="content">Content (Sample: {sample} Version: Remastr v{version})</h2>
+<div class="tab">
+    {motifs_content}
+</div>
+
+{table}
+
+<!-- Tab content -->
+{motifs}
+
+<script>
+    function openTab(evt, tabName) {
+        // Declare all variables
+        var i, tabcontent, tablinks;
+
+        // Get all elements with class="tabcontent" and hide them
+        tabcontent = document.getElementsByClassName("tabcontent");
+        for (i = 0; i < tabcontent.length; i++) {
+            tabcontent[i].style.display = "none";
+        }
+
+        // Get all elements with class="tablinks" and remove the class "active"
+        tablinks = document.getElementsByClassName("tablinks");
+        for (i = 0; i < tablinks.length; i++) {
+            tablinks[i].className = tablinks[i].className.replace(" active", "");
+        }
+
+        // Show the current tab, and add an "active" class to the button that opened the tab
+        document.getElementById(tabName).style.display = "block";
+        evt.currentTarget.className += " active";
+
+        var tableName = `#tg-${tabName}`;
+        var table = $(tableName).DataTable({
+            scrollX: true,
+            retrieve: true,
+        });
+
+        // Adjust columns after showing the tab and ensuring the table is visible
+        setTimeout(function() {
+            table.columns.adjust().draw();
+        }, 0); // setTimeout with 0 delay helps in cases where the layout needs to stabilize
+    }
+</script>
+</body>
+</html>

@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Dante report</title>
+
+    <script src="msa.min.gz.js"></script>
+    <script src="plotly-2.14.0.min.js"></script>
+    <!-- <script src="https://cdn.plot.ly/plotly-2.14.0.min.js"></script> -->
+    <script src="jquery-3.6.1.min.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.1/jquery.min.js"></script>
+    <script src="datatables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.12.1/js/jquery.dataTables.js"></script>
+
+    <!--
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.17/d3.min.js"></script>
+    -->
+
+    <link rel="stylesheet" type="text/css" href="https://www.w3schools.com/w3css/4/w3.css">
+    <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.12.1/css/jquery.dataTables.css">
+    <link rel="stylesheet" type="text/css" href="styles.css">
+</head>
+
+<body class="valo v-app">
+
+<div class="hist SCA8" id="hist2d-SCA8_12"></div>
+<script>
+    {
+        let z_partial = [
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3,3,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,4,1,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,8,1,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,9,1,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,1,8,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,4,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,3,7,2,0,0],
+            [0,0,0,0,1,1,1,1,1,1,1,1,1,1,4,2,5,1,1],
+            [0,2,6,6,6,9,1,3,3,5,2,2,2,4,3,7,8,3,3],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,3,0,5,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,3,1,6,1,1],
+            [0,0,4,7,9,1,4,5,5,7,3,9,3,8,4,7,6,9,9],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,3,5,5,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,3,5,5,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,3,5,5,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,3,5,5,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,3,5,5,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,3,5,5,0,0]
+        ];
+        let z_full = [
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,1,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,9,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,7,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+        ];
+        let text = [
+            ["LLB","","","","","","","","","","","","","","","","","","LRB"],
+            ["","","","","","","","","","","","","","","","0/3","0/3","",""],
+            ["","","","","","","","","","","","","","","0/1","0/4","0/10","",""],
+            ["","","","","","","","","","","","","","","0/1","0/8","0/12","",""],
+            ["","","","","","","","","","","","","","","0/1","0/9","0/15","",""],
+            ["","","","","","","","","","","","","","","0/2","0/11","0/18","",""],
+            ["","","","","","","","","","","","","","","0/2","0/14","0/20","",""],
+            ["","","","","","","","","","","","","","","0/3","0/17","0/22","",""],
+            ["","","","","0/1","0/1","0/1","0/1","0/1","0/1","0/1","0/1","0/1","0/1","0/4","0/22","2/25","1/1","0/1"],
+            ["","0/2","0/6","0/6","0/6","0/9","0/11","0/13","0/13","0/15","0/21","0/22","0/22","0/24","0/30","1/57","91/58","0/33","0/33"],
+            ["","","","","","","","","","","","","","","0/3","0/30","0/25","",""],
+            ["","","","","","","","","","","","","","","0/3","1/31","1/26","0/1","0/1"],
+            ["","","0/4","0/7","0/9","0/11","0/14","0/15","0/15","0/17","0/23","0/29","0/30","0/38","1/42","76/74","0/64","0/39","0/39"],
+            ["","","","","","","","","","","","","","","0/3","0/35","0/25","",""],
+            ["","","","","","","","","","","","","","","0/3","0/35","0/25","",""],
+            ["","","","","","","","","","","","","","","0/3","0/35","0/25","",""],
+            ["","","","","","","","","","","","","","","0/3","0/35","0/25","",""],
+            ["","","","","","","","","","","","","","","0/3","0/35","0/25","",""],
+            ["ULB","","","","","","","","","","","","","","0/3","0/35","0/25","","URB"],
+        ];
+        let yaxis_text = "STR 2 [TAC[11]]";
+        let xaxis_text = "STR 3 [TGC[15]]";
+
+        let hist_data = {
+            "data":[{
+                "z":z_partial,
+                "colorbar":{"title":{"text":"Partial reads"},"x":1.25},
+                "colorscale":[[0.0, "rgba(0.92, 0.92, 0.92, 0.0)"],[0.01,"rgba(0.92, 0.92, 0.92, 1.0)"],[1.0, "rgba(0.48, 0.48, 0.48, 1.0)"]],
+                "showscale":true,
+                "type":"heatmap",
+            }, {
+                "z":z_full,
+                "text":text,
+                "colorbar":{"title":{"text":"Full reads"},"x":1.1},
+                "colorscale":[[0.0,"rgba(0.85, 0.90, 0.96, 0.0)"],[0.01,"rgba(0.84, 0.90, 0.96, 1.0)"],[1.0,"rgba(0.09, 0.39, 0.67, 1.0)"]],
+                "showscale":true,
+                "type":"heatmap",
+                "name":"Repetitions<br>heatmap",
+                "hovertemplate":" %{yaxis.title.text}: %{y} <br> %{xaxis.title.text}: %{x} <br> Full / Partial: %{text}",
+                "hoverlabel":{"font":{"family":"'Droid Sans Mono',mono"}},
+                "texttemplate":"%{text}",
+            }],
+            "layout":{
+                "width": (window.innerWidth-50) * 0.5,
+                "height": (window.innerWidth-50) * 0.45,
+                "yaxis": {"title":{"text":yaxis_text}, "showgrid":false, "showline":true, "zeroline":false},
+                "xaxis": {"title":{"text":xaxis_text}, "showgrid":false, "showline":true, "zeroline":false}
+            }
+        };
+
+        let updateGraph2 = () => {
+            Plotly.react('hist2d-SCA8_12', hist_data);
+        };
+
+        $(document).ready(function() {
+            updateGraph2();
+            $('.SCA8').bind("content-change", updateGraph2);
+            window.addEventListener('resize', updateGraph2, true);
+        });
+    }
+</script>
+
+<div class="hist pic100 FTD_ALS" id="hist-FTD_ALS"></div>
+<script>
+    {
+        let spanning = [0,0,178,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+        let flanking = [0,11,14,5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+        // let flanking = [0,11,192,5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+        let inread = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+        // let inread = [0,11,192,5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+
+        let data = [
+            {"y": spanning, "marker":{"color":"#636EFA"},"name":"Full reads", "textfont":{"color":"#636EFA","size":7},"type":"bar","hover":"true"},
+            {"y": flanking, "marker":{"color":"#CCCCCC"},"name":"Partial reads", "textfont":{"color":"#CCCCCC","size":7},"type":"bar","hover":"true"},
+            {"y": inread, "marker":{"color":"#FF6600"},"name":"Inread reads", "textfont":{"color":"#FF6600","size":7},"type":"bar","hover":"true"}
+        ]
+
+        let layout = {
+            "title":{"text":"Histogram of repetitions"},
+            "width": (window.innerWidth-50) * 0.6,
+            "height": (window.innerWidth-50) * 0.35,
+            "legend": {"x": 0.85, "y": 0.85 },
+            "hovermode":"x",
+            "barmode":"stack",
+            "xaxis":{"title":{"text":"STR repetitions"},"tickmode":"array","tickvals":[5,10,15,20,25,30,35,40],"ticktext":[5,10,15,20,25,30,35,40]},
+            "yaxis": {"fixedrange":true,"title":{"text":"Read counts"}},
+        }
+
+        let updateGraph1 = () => {
+            Plotly.react('hist-FTD_ALS', data, layout);
+        };
+
+        $(document).ready(function() {
+            updateGraph1()
+            $('.FTD_ALS').bind("content-change", updateGraph1);
+            window.addEventListener('resize', updateGraph1, true);
+        });
+    }
+</script>
+
+<div class="pcol pic100 FTD_ALS" id="pcol-FTD_ALS"></div>
+<script>
+    {
+        let p_data = [{
+            "z":[
+                [-7.2,-6.9,-7.2,-7.2,-7.2,-7.8],
+                [-7.8,-7.0,-7.4,-7.7,-7.8,-7.8],
+                [null,-6.8,-6.9,-6.9,-6.9,-6.9],
+                [null,null,-7.3,-7.4,-7.4,-7.4],
+                [null,null,null,-7.7,-7.7,-7.7],
+                [-7.1,-7.8,null,null,-7.8,-7.8]
+            ],
+            "text":[["","","","","",""],["","","","","",""],["","","","","",""],["","","","","",""],["","","","","",""],["B","E","","","",""]],
+            "hovertext":[
+                ["B\u002f1","1\u002f1","2\u002f1","3\u002f1","4\u002f1","E\u002fE"],
+                ["B\u002f2","1\u002f2","2\u002f2","3\u002f2","4\u002f2","5\u002f2"],
+                ["B\u002f3","1\u002f3","2\u002f3","3\u002f3","4\u002f3","5\u002f3"],
+                ["B\u002f4","1\u002f4","2\u002f4","3\u002f4","4\u002f4","5\u002f4"],
+                ["B\u002f5","1\u002f5","2\u002f5","3\u002f5","4\u002f5","5\u002f5"],
+                ["B","E","2\u002fE","3\u002fE","4\u002fE","5\u002fE"]
+            ],
+            colorscale: "YlOrRd",
+            reversescale: true,
+            showscale: true,
+            name:"",
+            type:"heatmap",
+            textfont:{"size":15},
+            hovertemplate:"\u003cb\u003e%{hovertext} - Loglog likelihood:\t%{z}\u003c\u002fb\u003e",
+            texttemplate:"%{text}"
+        }]
+
+        let p_layout = {
+            "shapes":[
+                {"line":{"color":"black","width":5},"opacity":1,"type":"line","x0":4.5,"x1":4.5,"xref":"x","y0":0,"y1":1,"yref":"y domain"},
+                {"line":{"color":"black","width":5},"opacity":1,"type":"line","x0":0,"x1":1,"xref":"x domain","y0":0.5,"y1":0.5,"yref":"y"}
+            ],
+            "yaxis":{
+                "fixedrange":true,"title":{"text":"1st allele"},"tickmode":"array","tickvals":[5,0],"ticktext":[5,"B"],
+                "showline":false,"zeroline":false,"showgrid":false
+            },
+            "xaxis":{
+                "fixedrange":true,"title":{"text":"2nd allele"},"tickmode":"array","tickvals":[4,5],"ticktext":[5,"E(\u003e5)"],
+                "showline":false,"zeroline":false,"showgrid":false
+            },
+            width: (window.innerWidth-50) * 0.4,
+            height: (window.innerWidth-50) * 0.35,
+            "title":{"text":"Loglog likelihood of options (chr9:g.27573529_27573546GGCCCC[3])"}
+        }
+
+        let pcol_data = {"data": p_data,"layout": p_layout};
+
+        let updateGraph = () => {
+            Plotly.react('pcol-FTD_ALS', pcol_data);
+        };
+
+        $(document).ready(function() {
+            updateGraph()
+            $('.FTD_ALS').bind("content-change", updateGraph);
+            window.addEventListener('resize', updateGraph, true);
+        });
+    }
+</script>
+
+</body>
+</html>

@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Dante motif report</title>
+  <link rel="stylesheet" type="text/css" href="https://www.w3schools.com/w3css/4/w3.css" />
+
+  <script src="msa.min.gz.js"></script>
+  <script src="https://gen-clc.cusp.uniba.sk/dante/msa.min.gz.js"></script>
+
+  <script src="plotly-2.14.0.min.js"></script>
+  <script src="https://cdn.plot.ly/plotly-2.14.0.min.js"></script>
+
+  <script src="jquery-3.6.1.min.js"></script>
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.1/jquery.min.js"></script>
+
+  <script src="datatables.min.js"></script>
+  <script src="https://cdn.datatables.net/1.12.1/js/jquery.dataTables.js"></script>
+  <script src="https://cdn.datatables.net/buttons/2.3.2/js/dataTables.buttons.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.1.3/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.53/pdfmake.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.53/vfs_fonts.js"></script>
+  <script src="https://cdn.datatables.net/buttons/2.3.2/js/buttons.html5.min.js"></script>
+  <script src="https://cdn.datatables.net/buttons/2.3.2/js/buttons.print.min.js"></script>
+  <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.12.1/css/jquery.dataTables.css" />
+
+  <style>
+      body {
+          padding: 20px;
+          font-family: Verdana, sans-serif;
+          font-size: 15px;
+          line-height: 1.5
+      }
+
+      .tg {
+          border-collapse: collapse;
+          border-spacing: 0;
+      }
+
+      .tg td {
+          padding: 10px 5px;
+          border-style: solid;
+          border-width: 1px;
+          overflow: hidden;
+          word-break: normal;
+      }
+
+      .tg th {
+          font-weight: normal;
+          padding: 10px 5px;
+          border-style: solid;
+          border-width: 1px;
+          overflow: hidden;
+          word-break: normal;
+      }
+
+      .tg .tg-s6z2 {
+          text-align: center;
+      }
+
+      .pic100 {
+          width: 100%;
+          height: auto;
+      }
+
+      .pic50 {
+          width: 50%;
+          height: auto;
+      }
+  </style>
+</head>
+
+<body class="valo v-app">
+
+  {% set locus_id, sequence, bg_num, heatmap_data, histogram_data, rows = main_data %}
+  <!-- Tab links -->
+  <h1 id="name">{{ locus_id }}</h1>
+  Repetition sequence: {{ sequence }}
+
+  <div class="motif-tg">
+    <h2 id="summary">Summary table</h2>
+    <table class="tg" id="tg">
+      <thead>
+        <tr>
+          <th class="tg-s6z2" rowspan="2">Sample</th>
+          <th class="tg-s6z2" colspan="2">Allele 1</th>
+          <th class="tg-s6z2" colspan="2">Allele 2</th>
+          <th class="tg-s6z2" rowspan="2"> Overall <br /> confidence </th>
+          <th class="tg-s6z2" colspan="2">Reads</th>
+        </tr>
+        <tr>
+          <td class="tg-s6z2">prediction</td>
+          <td class="tg-s6z2">confidence</td>
+          <td class="tg-s6z2">prediction</td>
+          <td class="tg-s6z2">confidence</td>
+          <td class="tg-s6z2">full</td>
+          <td class="tg-s6z2">partial</td>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        {% set sample, a1_pred, a1_conf, a2_pred, a2_conf, confidence, spanning_num, flanking_num, _ = row %}
+          <tr>
+            <td class="tg-s6z2"><a href="#{{ sample }}">{{ sample }}</a></td>
+            <td class="tg-s6z2">{{ a1_pred }}</td>
+            <td class="tg-s6z2">{{ a1_conf }}</td>
+            <td class="tg-s6z2">{{ a2_pred }}</td>
+            <td class="tg-s6z2">{{ a2_conf }}</td>
+            <td class="tg-s6z2">{{ confidence }}</td>
+            <td class="tg-s6z2">{{ spanning_num }}</td>
+            <td class="tg-s6z2">{{ flanking_num }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <script>
+        $(document).ready(function() {
+            $('#tg').DataTable({
+                'order': [],
+                dom: 'Bfrtip',
+                buttons: ['copy', 'csv', 'excel', 'pdf', 'print']
+            });
+        });
+    </script>
+  </div>
+
+  <p> <a href="#name">Back to top</a> </p>
+
+  <h2 id="map">Allele heatmap</h2>
+  <p> <b>Number of background results: {{ bg_num }}</b> </p>
+  <div id="motif-heatmap"></div>
+  {% set z, tickvals, ticktext, xlim = heatmap_data %}
+  <script>
+      // let z = [                                 // Exp
+      //   [7   , 0   , 0   , 0   , 0   , 1   , 0   , 0], // BG
+      //   [null, 0   , 0   , 0   , 0   , 1   , 0   , 0],
+      //   [null, null, 0   , 0   , 0   , 0   , 0   , 0],
+      //   [null, null, null, 0   , 35  , 119 , 3   , 3],
+      //   [null, null, null, null, 0   , 237 , 3   , 9],
+      //   [null, null, null, null, null, 0   , 2   , 0],
+      //   [null, null, null, null, null, null, 0   , 1],
+      //   [null, null, null, null, null, null, null, 0]
+      // ];
+      // let tickvals = [0, 1, 2, 3, 4, 5, 6, 7];
+      // let ticktext = ["B", 0, 1, 2, 3, 4, 5, "E"];
+      // let xlim = 6.5
+      // let z = {{ z }};
+      let z = {{ z|replace("None", "null") }}
+      let tickvals = {{ tickvals }};
+      let ticktext = {{ ticktext }};
+      let xlim = {{ xlim }};
+
+      let heatmap_data = {
+          "data": [{
+              "z": z,
+              "text": z,
+              "name": "Prediction heatmap",
+              "colorscale": [
+                  [0.0, "rgb(255, 255, 255)"], [0.01, "rgb(255, 210, 0)"], [0.1, "rgb(255, 140, 0)"],
+                  [0.4, "rgb(255, 70, 0)"], [0.7, "rgb(230, 0  , 0)"], [1.0, "rgb(100, 0  , 0)"]
+              ],
+              "hovertemplate":" %{yaxis.title.text}: %{y} <br> %{xaxis.title.text}: %{x} <br> Count: %{text}",
+              "texttemplate": "%{text}",
+              "type": "heatmap"
+          }],
+          "layout": {
+              "shapes": [{
+                  "x0": xlim, "x1": xlim, "xref": "x",
+                  "y0": 0  , "y1": 1  , "yref": "y domain",
+                  "line": { "color": "black", "width": 2 }, "opacity": 1, "type": "line",
+              }, {
+                  "x0": 0  , "x1": 1  , "xref": "x domain",
+                  "y0": 0.5, "y1": 0.5, "yref": "y",
+                  "line": { "color": "black", "width": 2 }, "opacity": 1, "type": "line",
+              }],
+              "yaxis": {
+                  "tickvals": tickvals,
+                  "ticktext": ticktext,
+                  "title": { "text": "Allele 1" }, "showgrid": false, "showline": true, "zeroline": false,
+              },
+              "xaxis": {
+                  "tickvals": tickvals,
+                  "ticktext": ticktext,
+                  "title": { "text": "Allele 2" }, "showgrid": false, "showline": true, "zeroline": false,
+              },
+              "width": 750,
+              "height": 750,
+          },
+      };
+      Plotly.newPlot('motif-heatmap', heatmap_data);
+  </script>
+
+  <h2 id="hist">Allele histogram</h2>
+  <div class="motif-hist" id="motif-hist"></div>
+  {% set hist_data, tickvals, ticktext = histogram_data %}
+  <script>
+        {
+            let hist_data = {
+                "data":[{
+                    "y":{{ hist_data }},
+                    "name":"Prediction",
+                    "marker":{"color":"#636EFA"},
+                    "textfont":{"color":"#636EFA","size":7},
+                    "type":"bar",
+                    "hover":"true"
+                }],
+                "layout":{
+                    "title":{"text":"Allele histogram"},
+                    "xaxis":{
+                        "title":{"text":"Prediction"},
+                        "tickmode":"array",
+                        "tickvals":{{ tickvals }},
+                        "ticktext":{{ ticktext }}
+                    },
+                    "yaxis": {"fixedrange":true,"title":{"text":"Count"}},
+                    "legend": {"x": 0.85, "y": 0.85 },
+                    "barmode":"stack",
+                    "hovermode":"x",
+                }
+            };
+
+            let updateGraph = () => {
+                hist_data['layout'] = {
+                    ...hist_data['layout'],
+                    width: (window.innerWidth-50) * 0.6,
+                    height: (window.innerWidth-50) * 0.35,
+                };
+                Plotly.react('motif-hist', hist_data);
+            };
+
+            $(document).ready(function() {
+                updateGraph();
+                $('.motif-hist').bind("content-change", updateGraph);
+                window.addEventListener('resize', updateGraph, true);
+            });
+        // let hist_data = { "data": [{ "marker": { "color": ["#636EFA", "#636EFA", "#636EFA", "#636EFA", "#636EFA", "#636EFA", "#636EFA", "#636EFA", "#636EFA", "#636EFA", "#636EFA", "#EF553B"] }, "name": "Count histogram", "text": ["15", "1", "2", "", "1", "2", "", "196", "609", "10", "14", ""], "y": [15, 1, 2, 0, 1, 2, 0, 196, 609, 10, 14, 0], "type": "bar", "textfont": { "size": 7 }, "hovertemplate": "\u003cb\u003ePrediction:\t%{x}\u003c\u002fb\u003e\u003cbr\u003eCount:\t%{y}\u003cbr\u003e" }], "layout": { "template": { "data": { "barpolar": [{ "marker": { "line": { "color": "white", "width": 0.5 }, "pattern": { "fillmode": "overlay", "size": 10, "solidity": 0.2 } }, "type": "barpolar" }], "bar": [{ "error_x": { "color": "rgb(36,36,36)" }, "error_y": { "color": "rgb(36,36,36)" }, "marker": { "line": { "color": "white", "width": 0.5 }, "pattern": { "fillmode": "overlay", "size": 10, "solidity": 0.2 } }, "type": "bar" }], "carpet": [{ "aaxis": { "endlinecolor": "rgb(36,36,36)", "gridcolor": "white", "linecolor": "white", "minorgridcolor": "white", "startlinecolor": "rgb(36,36,36)" }, "baxis": { "endlinecolor": "rgb(36,36,36)", "gridcolor": "white", "linecolor": "white", "minorgridcolor": "white", "startlinecolor": "rgb(36,36,36)" }, "type": "carpet" }], "choropleth": [{ "colorbar": { "outlinewidth": 1, "tickcolor": "rgb(36,36,36)", "ticks": "outside" }, "type": "choropleth" }], "contourcarpet": [{ "colorbar": { "outlinewidth": 1, "tickcolor": "rgb(36,36,36)", "ticks": "outside" }, "type": "contourcarpet" }], "contour": [{ "colorbar": { "outlinewidth": 1, "tickcolor": "rgb(36,36,36)", "ticks": "outside" }, "colorscale": [ [0.0, "#440154"], [0.1111111111111111, "#482878"], [0.2222222222222222, "#3e4989"], [0.3333333333333333, "#31688e"], [0.4444444444444444, "#26828e"], [0.5555555555555556, "#1f9e89"], [0.6666666666666666, "#35b779"], [0.7777777777777778, "#6ece58"], [0.8888888888888888, "#b5de2b"], [1.0, "#fde725"] ], "type": "contour" }], "heatmapgl": [{ "colorbar": { "outlinewidth": 1, "tickcolor": "rgb(36,36,36)", "ticks": "outside" }, "colorscale": [ [0.0, "#440154"], [0.1111111111111111, "#482878"], [0.2222222222222222, "#3e4989"], [0.3333333333333333, "#31688e"], [0.4444444444444444, "#26828e"], [0.5555555555555556, "#1f9e89"], [0.6666666666666666, "#35b779"], [0.7777777777777778, "#6ece58"], [0.8888888888888888, "#b5de2b"], [1.0, "#fde725"] ], "type": "heatmapgl" }], "heatmap": [{ "colorbar": { "outlinewidth": 1, "tickcolor": "rgb(36,36,36)", "ticks": "outside" }, "colorscale": [ [0.0, "#440154"], [0.1111111111111111, "#482878"], [0.2222222222222222, "#3e4989"], [0.3333333333333333, "#31688e"], [0.4444444444444444, "#26828e"], [0.5555555555555556, "#1f9e89"], [0.6666666666666666, "#35b779"], [0.7777777777777778, "#6ece58"], [0.8888888888888888, "#b5de2b"], [1.0, "#fde725"] ], "type": "heatmap" }], "histogram2dcontour": [{ "colorbar": { "outlinewidth": 1, "tickcolor": "rgb(36,36,36)", "ticks": "outside" }, "colorscale": [ [0.0, "#440154"], [0.1111111111111111, "#482878"], [0.2222222222222222, "#3e4989"], [0.3333333333333333, "#31688e"], [0.4444444444444444, "#26828e"], [0.5555555555555556, "#1f9e89"], [0.6666666666666666, "#35b779"], [0.7777777777777778, "#6ece58"], [0.8888888888888888, "#b5de2b"], [1.0, "#fde725"] ], "type": "histogram2dcontour" }], "histogram2d": [{ "colorbar": { "outlinewidth": 1, "tickcolor": "rgb(36,36,36)", "ticks": "outside" }, "colorscale": [ [0.0, "#440154"], [0.1111111111111111, "#482878"], [0.2222222222222222, "#3e4989"], [0.3333333333333333, "#31688e"], [0.4444444444444444, "#26828e"], [0.5555555555555556, "#1f9e89"], [0.6666666666666666, "#35b779"], [0.7777777777777778, "#6ece58"], [0.8888888888888888, "#b5de2b"], [1.0, "#fde725"] ], "type": "histogram2d" }], "histogram": [{ "marker": { "line": { "color": "white", "width": 0.6 } }, "type": "histogram" }], "mesh3d": [{ "colorbar": { "outlinewidth": 1, "tickcolor": "rgb(36,36,36)", "ticks": "outside" }, "type": "mesh3d" }], "parcoords": [{ "line": { "colorbar": { "outlinewidth": 1, "tickcolor": "rgb(36,36,36)", "ticks": "outside" } }, "type": "parcoords" }], "pie": [{ "automargin": true, "type": "pie" }], "scatter3d": [{ "line": { "colorbar": { "outlinewidth": 1, "tickcolor": "rgb(36,36,36)", "ticks": "outside" } }, "marker": { "colorbar": { "outlinewidth": 1, "tickcolor": "rgb(36,36,36)", "ticks": "outside" } }, "type": "scatter3d" }], "scattercarpet": [{ "marker": { "colorbar": { "outlinewidth": 1, "tickcolor": "rgb(36,36,36)", "ticks": "outside" } }, "type": "scattercarpet" }], "scattergeo": [{ "marker": { "colorbar": { "outlinewidth": 1, "tickcolor": "rgb(36,36,36)", "ticks": "outside" } }, "type": "scattergeo" }], "scattergl": [{ "marker": { "colorbar": { "outlinewidth": 1, "tickcolor": "rgb(36,36,36)", "ticks": "outside" } }, "type": "scattergl" }], "scattermapbox": [{ "marker": { "colorbar": { "outlinewidth": 1, "tickcolor": "rgb(36,36,36)", "ticks": "outside" } }, "type": "scattermapbox" }], "scatterpolargl": [{ "marker": { "colorbar": { "outlinewidth": 1, "tickcolor": "rgb(36,36,36)", "ticks": "outside" } }, "type": "scatterpolargl" }], "scatterpolar": [{ "marker": { "colorbar": { "outlinewidth": 1, "tickcolor": "rgb(36,36,36)", "ticks": "outside" } }, "type": "scatterpolar" }], "scatter": [{ "fillpattern": { "fillmode": "overlay", "size": 10, "solidity": 0.2 }, "type": "scatter" }], "scatterternary": [{ "marker": { "colorbar": { "outlinewidth": 1, "tickcolor": "rgb(36,36,36)", "ticks": "outside" } }, "type": "scatterternary" }], "surface": [{ "colorbar": { "outlinewidth": 1, "tickcolor": "rgb(36,36,36)", "ticks": "outside" }, "colorscale": [ [0.0, "#440154"], [0.1111111111111111, "#482878"], [0.2222222222222222, "#3e4989"], [0.3333333333333333, "#31688e"], [0.4444444444444444, "#26828e"], [0.5555555555555556, "#1f9e89"], [0.6666666666666666, "#35b779"], [0.7777777777777778, "#6ece58"], [0.8888888888888888, "#b5de2b"], [1.0, "#fde725"] ], "type": "surface" }], "table": [{ "cells": { "fill": { "color": "rgb(237,237,237)" }, "line": { "color": "white" } }, "header": { "fill": { "color": "rgb(217,217,217)" }, "line": { "color": "white" } }, "type": "table" }] }, "layout": { "annotationdefaults": { "arrowhead": 0, "arrowwidth": 1 }, "autotypenumbers": "strict", "coloraxis": { "colorbar": { "outlinewidth": 1, "tickcolor": "rgb(36,36,36)", "ticks": "outside" } }, "colorscale": { "diverging": [ [0.0, "rgb(103,0,31)"], [0.1, "rgb(178,24,43)"], [0.2, "rgb(214,96,77)"], [0.3, "rgb(244,165,130)"], [0.4, "rgb(253,219,199)"], [0.5, "rgb(247,247,247)"], [0.6, "rgb(209,229,240)"], [0.7, "rgb(146,197,222)"], [0.8, "rgb(67,147,195)"], [0.9, "rgb(33,102,172)"], [1.0, "rgb(5,48,97)"] ], "sequential": [ [0.0, "#440154"], [0.1111111111111111, "#482878"], [0.2222222222222222, "#3e4989"], [0.3333333333333333, "#31688e"], [0.4444444444444444, "#26828e"], [0.5555555555555556, "#1f9e89"], [0.6666666666666666, "#35b779"], [0.7777777777777778, "#6ece58"], [0.8888888888888888, "#b5de2b"], [1.0, "#fde725"] ], "sequentialminus": [ [0.0, "#440154"], [0.1111111111111111, "#482878"], [0.2222222222222222, "#3e4989"], [0.3333333333333333, "#31688e"], [0.4444444444444444, "#26828e"], [0.5555555555555556, "#1f9e89"], [0.6666666666666666, "#35b779"], [0.7777777777777778, "#6ece58"], [0.8888888888888888, "#b5de2b"], [1.0, "#fde725"] ] }, "colorway": ["#1F77B4", "#FF7F0E", "#2CA02C", "#D62728", "#9467BD", "#8C564B", "#E377C2", "#7F7F7F", "#BCBD22", "#17BECF"], "font": { "color": "rgb(36,36,36)" }, "geo": { "bgcolor": "white", "lakecolor": "white", "landcolor": "white", "showlakes": true, "showland": true, "subunitcolor": "white" }, "hoverlabel": { "align": "left" }, "hovermode": "closest", "mapbox": { "style": "light" }, "paper_bgcolor": "white", "plot_bgcolor": "white", "polar": { "angularaxis": { "gridcolor": "rgb(232,232,232)", "linecolor": "rgb(36,36,36)", "showgrid": false, "showline": true, "ticks": "outside" }, "bgcolor": "white", "radialaxis": { "gridcolor": "rgb(232,232,232)", "linecolor": "rgb(36,36,36)", "showgrid": false, "showline": true, "ticks": "outside" } }, "scene": { "xaxis": { "backgroundcolor": "white", "gridcolor": "rgb(232,232,232)", "gridwidth": 2, "linecolor": "rgb(36,36,36)", "showbackground": true, "showgrid": false, "showline": true, "ticks": "outside", "zeroline": false, "zerolinecolor": "rgb(36,36,36)" }, "yaxis": { "backgroundcolor": "white", "gridcolor": "rgb(232,232,232)", "gridwidth": 2, "linecolor": "rgb(36,36,36)", "showbackground": true, "showgrid": false, "showline": true, "ticks": "outside", "zeroline": false, "zerolinecolor": "rgb(36,36,36)" }, "zaxis": { "backgroundcolor": "white", "gridcolor": "rgb(232,232,232)", "gridwidth": 2, "linecolor": "rgb(36,36,36)", "showbackground": true, "showgrid": false, "showline": true, "ticks": "outside", "zeroline": false, "zerolinecolor": "rgb(36,36,36)" } }, "shapedefaults": { "fillcolor": "black", "line": { "width": 0 }, "opacity": 0.3 }, "ternary": { "aaxis": { "gridcolor": "rgb(232,232,232)", "linecolor": "rgb(36,36,36)", "showgrid": false, "showline": true, "ticks": "outside" }, "baxis": { "gridcolor": "rgb(232,232,232)", "linecolor": "rgb(36,36,36)", "showgrid": false, "showline": true, "ticks": "outside" }, "bgcolor": "white", "caxis": { "gridcolor": "rgb(232,232,232)", "linecolor": "rgb(36,36,36)", "showgrid": false, "showline": true, "ticks": "outside" } }, "title": { "x": 0.05 }, "xaxis": { "automargin": true, "gridcolor": "rgb(232,232,232)", "linecolor": "rgb(36,36,36)", "showgrid": false, "showline": true, "ticks": "outside", "title": { "standoff": 15 }, "zeroline": false, "zerolinecolor": "rgb(36,36,36)" }, "yaxis": { "automargin": true, "gridcolor": "rgb(232,232,232)", "linecolor": "rgb(36,36,36)", "showgrid": false, "showline": true, "ticks": "outside", "title": { "standoff": 15 }, "zeroline": false, "zerolinecolor": "rgb(36,36,36)" } } }, "xaxis": { "title": { "text": "Prediction" }, "tickmode": "array", "tickvals": [0, 1, 5, 10, 11], "ticktext": ["B", 1, 5, 10, "E(\u003e11)"] }, "yaxis": { "title": { "text": "Count" }, "fixedrange": true }, "width": 1000, "height": 500, "barmode": "stack", "hovermode": "x" } }
+        }
+  </script>
+
+  <p> <a href="#name">Back to top</a> </p>
+
+  <h2>Motif plots</h2>
+
+  {% for row in rows %}
+  {% set sample, a1_pred, a1_conf, a2_pred, a2_conf, confidence, spanning_num, flanking_num, histogram_data = row %}
+    <h3 id="{{ sample }}">{{ sample }}</h3>
+    alleles: {{ a1_pred }}  ({{ a1_conf }}) {{ a2_pred }}  ({{ a2_conf }}) total  {{ confidence }}
+    <br />
+    <div class="hist pic100 {{ sample }}" id="hist-{{ sample }}"></div>
+
+    {% if histogram_data != None %}
+    {% set spanning, flanking, inread = histogram_data %}
+    <script>
+        {
+            let hist_data = {
+                "data":[
+                    {"y":{{ spanning }},"name":"Full reads",
+                        "marker":{"color":"#636EFA"},"textfont":{"color":"#636EFA","size":7},"type":"bar","hover":"true"},
+                    {"y":{{ flanking }},"name":"Partial reads",
+                        "marker":{"color":"#CCCCCC"},"textfont":{"color":"#CCCCCC","size":7},"type":"bar","hover":"true"},
+                    {"y":{{ inread }},"name":"Inread reads",
+                        "marker":{"color":"#FF6600"},"textfont":{"color":"#FF6600","size":7},"type":"bar","hover":"true"}
+                ],
+                "layout":{
+                    "title":{"text":"Histogram of repetitions"},
+                    "xaxis":{
+                        "title":{"text":"STR repetitions"},
+                        "tickmode":"array",
+                        "tickvals":[5,10,15,20,25,30,35,40],
+                        "ticktext":[5,10,15,20,25,30,35,40]
+                    },
+                    "yaxis": {"fixedrange":true,"title":{"text":"Read counts"}},
+                    "legend": {"x": 0.85, "y": 0.85 },
+                    "barmode":"stack",
+                    "hovermode":"x",
+                }
+            };
+
+            let updateGraph = () => {
+                hist_data['layout'] = {
+                    ...hist_data['layout'],
+                    width: (window.innerWidth-50) * 0.6,
+                    height: (window.innerWidth-50) * 0.35,
+                };
+                Plotly.react('hist-{{ sample }}', hist_data);
+            };
+
+            $(document).ready(function() {
+                updateGraph();
+                $('.{{ sample }}').bind("content-change", updateGraph);
+                window.addEventListener('resize', updateGraph, true);
+            });
+        }
+    </script>
+    {% endif %}
+
+    no alignments available
+
+    <p> <a href="#name">Back to top</a> </p>
+  {% endfor %}
+</body>
+</html>
