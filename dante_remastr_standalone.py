@@ -109,11 +109,15 @@ def main() -> None:
         write_report(all_motifs, all_annotations, all_genotypes, all_haplotypes, script_dir, args.output_dir)
 
         # copy javascript and css files
-        shutil.copy2(f'{script_dir}/msa.min.gz.js',         f'{args.output_dir}/msa.min.gz.js')
-        shutil.copy2(f'{script_dir}/plotly-2.14.0.min.js',  f'{args.output_dir}/plotly-2.14.0.min.js')
-        shutil.copy2(f'{script_dir}/jquery-3.6.1.min.js',   f'{args.output_dir}/jquery-3.6.1.min.js')
-        shutil.copy2(f'{script_dir}/datatables.min.js',     f'{args.output_dir}/datatables.min.js')
-        shutil.copy2(f'{script_dir}/styles.css',            f'{args.output_dir}/styles.css')
+        include_dir = os.path.dirname(__file__) + "/includes"
+        os.makedirs(f'{args.output_dir}/includes', exist_ok=True)
+        shutil.copy2(f'{include_dir}/msa.min.gz.js',            f'{args.output_dir}/includes/msa.min.gz.js')
+        shutil.copy2(f'{include_dir}/plotly-2.14.0.min.js',     f'{args.output_dir}/includes/plotly-2.14.0.min.js')
+        shutil.copy2(f'{include_dir}/jquery-3.6.1.min.js',      f'{args.output_dir}/includes/jquery-3.6.1.min.js')
+        shutil.copy2(f'{include_dir}/datatables.min.js',        f'{args.output_dir}/includes/datatables.min.js')
+        shutil.copy2(f'{include_dir}/styles.css',               f'{args.output_dir}/includes/styles.css')
+        shutil.copy2(f'{include_dir}/w3.css',                   f'{args.output_dir}/includes/w3.css')
+        shutil.copy2(f'{include_dir}/jquery.dataTables.css',    f'{args.output_dir}/includes/jquery.dataTables.css')
 
     end_time = datetime.now()
     print(f'DANTE_remaSTR Stopping : {end_time:%Y-%m-%d %H:%M:%S}')

@@ -1,0 +1,7 @@
+https://cdn.datatables.net/1.12.1/css/jquery.dataTables.css
+https://www.w3schools.com/w3css/4/w3.css
+
+https://ajax.googleapis.com/ajax/libs/jquery/3.6.1/jquery.min.js
+https://cdn.bio.sh/msa/1.0/msa.min.gz.js
+https://cdn.datatables.net/1.12.1/js/jquery.dataTables.js
+https://cdn.plot.ly/plotly-2.14.0.min.js
