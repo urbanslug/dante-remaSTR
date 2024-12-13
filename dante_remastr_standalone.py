@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import TextIO, Iterator, TypeAlias, Any
 from collections import Counter
 from jinja2 import Environment, FileSystemLoader
+# from pprint import pprint
 
 import csv
 import os
@@ -99,7 +100,7 @@ def main() -> None:
     write_phased_predictions(all_motifs, all_genotypes, all_haplotypes, args.output_dir + "/phased_predictions.tsv")
 
     if args.verbose:
-        script_dir = os.path.dirname(__file__) + "/dante_remastr_standalone_templates"
+        script_dir = os.path.dirname(sys.argv[0]) + "/dante_remastr_standalone_templates"
 
         print(f'Writing alignment htmls: {datetime.now():%Y-%m-%d %H:%M:%S}')
         for (motif, genotype, phasing) in zip(all_motifs, all_genotypes, all_haplotypes):
@@ -109,7 +110,7 @@ def main() -> None:
         write_report(all_motifs, all_annotations, all_genotypes, all_haplotypes, script_dir, args.output_dir)
 
         # copy javascript and css files
-        include_dir = os.path.dirname(__file__) + "/includes"
+        include_dir = os.path.dirname(sys.argv[0]) + "/includes"
         os.makedirs(f'{args.output_dir}/includes', exist_ok=True)
         shutil.copy2(f'{include_dir}/msa.min.gz.js',            f'{args.output_dir}/includes/msa.min.gz.js')
         shutil.copy2(f'{include_dir}/plotly-2.14.0.min.js',     f'{args.output_dir}/includes/plotly-2.14.0.min.js')
@@ -155,38 +156,38 @@ def write_alignment_html(
         if a1 is not None and a1 > 0:
             name = f'{motif_clean}_{str(a1)}'
             display_text = f'Allele 1 ({str(a1):2s}) alignment visualization'
-            fasta = write_alignment(anns_spanning, module_number, a1, cutoff_after=flank_size)
+            fasta = write_alignment(anns_spanning, motif, module_number, a1, cutoff_after=flank_size)
             seq_logo = 'true'
             data.append((name, display_text, fasta, seq_logo))
 
         if a2 is not None and a2 != a1 and a2 != 0:
             name = f'{motif_clean}_{str(a2)}'
             display_text = f'Allele 2 ({str(a2):2s}) alignment visualization'
-            fasta = write_alignment(anns_spanning, module_number, a2, cutoff_after=flank_size)
+            fasta = write_alignment(anns_spanning, motif, module_number, a2, cutoff_after=flank_size)
             seq_logo = 'true'
             data.append((name, display_text, fasta, seq_logo))
 
         name = motif_clean
         display_text = 'Spanning reads alignment visualization'
-        fasta = write_alignment(anns_spanning, module_number, index_rep2=None, cutoff_after=flank_size)
+        fasta = write_alignment(anns_spanning, motif, module_number, index_rep2=None, cutoff_after=flank_size)
         seq_logo = 'true'
         data.append((name, display_text, fasta, seq_logo))
 
         name = motif_clean + '_filtered'
         display_text = 'Partial reads alignment visualization'
-        fasta = write_alignment(anns_flanking, module_number, index_rep2=None, cutoff_after=flank_size)
+        fasta = write_alignment(anns_flanking, motif, module_number, index_rep2=None, cutoff_after=flank_size)
         seq_logo = 'false'
         data.append((name, display_text, fasta, seq_logo))
 
         name = motif_clean + '_filtered_left'
         display_text = 'Left flank reads alignment visualization'
-        fasta = write_alignment(anns_flanking_left, module_number, index_rep2=None, cutoff_after=flank_size)
+        fasta = write_alignment(anns_flanking_left, motif, module_number, index_rep2=None, cutoff_after=flank_size)
         seq_logo = 'true'
         data.append((name, display_text, fasta, seq_logo))
 
         name = motif_clean + '_filtered_right'
         display_text = 'Right flank reads alignment visualization'
-        fasta = write_alignment(anns_flanking_right, module_number, index_rep2=None, cutoff_after=flank_size, right_align=True)
+        fasta = write_alignment(anns_flanking_right, motif, module_number, index_rep2=None, cutoff_after=flank_size, right_align=True)
         seq_logo = 'true'
         data.append((name, display_text, fasta, seq_logo))
 
@@ -214,25 +215,25 @@ def write_alignment_html(
 
         name = motif_clean
         display_text = 'Spanning reads alignment visualization'
-        fasta = write_alignment(anns_2good, prev_module_num, index_rep2=module_number, cutoff_after=flank_size)
+        fasta = write_alignment(anns_2good, motif, prev_module_num, index_rep2=module_number, cutoff_after=flank_size)
         seq_logo = 'true'
         data.append((name, display_text, fasta, seq_logo))
 
         name = motif_clean + '_filtered'
         display_text = 'Partial reads alignment visualization'
-        fasta = write_alignment(anns_1good, prev_module_num, index_rep2=module_number, cutoff_after=flank_size)
+        fasta = write_alignment(anns_1good, motif, prev_module_num, index_rep2=module_number, cutoff_after=flank_size)
         seq_logo = 'true'
         data.append((name, display_text, fasta, seq_logo))
 
         name = motif_clean + '_filtered_left'
         display_text = 'Left flank reads alignment visualization'
-        fasta = write_alignment(anns_1good_left, prev_module_num, index_rep2=module_number, cutoff_after=flank_size)
+        fasta = write_alignment(anns_1good_left, motif, prev_module_num, index_rep2=module_number, cutoff_after=flank_size)
         seq_logo = 'true'
         data.append((name, display_text, fasta, seq_logo))
 
         name = motif_clean + '_filtered_right'
         display_text = 'Right flank reads alignment visualization'
-        fasta = write_alignment(anns_1good_right, prev_module_num, index_rep2=module_number, cutoff_after=flank_size, right_align=True)
+        fasta = write_alignment(anns_1good_right, motif, prev_module_num, index_rep2=module_number, cutoff_after=flank_size, right_align=True)
         seq_logo = 'true'
         data.append((name, display_text, fasta, seq_logo))
 
@@ -404,7 +405,7 @@ def write_report(
         repeating_modules = motif.get_repeating_modules()
         annotations = anns
         for module_number, _, _ in repeating_modules:
-            annotations, _ = post_filter.get_filtered(annotations, module_number, both_primers=True)
+            annotations, _ = post_filter.get_filtered(motif, annotations, module_number, both_primers=True)
         nomenclatures = generate_nomenclatures(annotations, None, None, motif, nomenclature_limit)
 
         graph_data: GraphData
@@ -590,7 +591,7 @@ def generate_nomenclatures(
     motif: Motif, nomenclature_limit: int | None = None
 ) -> list[tuple[int, str, list[str]]]:
 
-    count_dict = Counter(annot.get_nomenclature(module_num, next_module_num, False) for annot in annotations)
+    count_dict = Counter(annot.get_nomenclature(motif, module_num, next_module_num, False) for annot in annotations)
     count_dict2 = sorted(count_dict.items(), key=lambda k: (-k[1], k[0]))
 
     lines = []
@@ -852,7 +853,7 @@ class Annotation:
         self.expected_seq = expected_seq
         self.states = states
         self.probability = probability
-        self.motif = motif  # TODO: remove this, it looks like unnecessary dependency
+        # self.motif = motif  # TODO: remove this, it looks like unnecessary dependency
         self.n_modules = len(motif.modules)
 
         # Calculate insertion/deletion/mismatch string
@@ -865,7 +866,7 @@ class Annotation:
 
         # Number of STR motif repetitions and sequences of modules
         self.module_bases = self.__get_bases_per_module()
-        self.module_repetitions = self.__get_module_repetitions()
+        self.module_repetitions = self.__get_module_repetitions(motif)
         self.module_sequences = self.__get_module_sequences()
 
         # get left flank length
@@ -915,7 +916,7 @@ class Annotation:
                 return i
         return len(self.states)
 
-    def __get_module_repetitions(self) -> tuple[int, ...]:
+    def __get_module_repetitions(self, motif: Motif) -> tuple[int, ...]:
         """
         List of integers, each value corresponds to number of repetitions of module in annotation
         :return: Number of repetitions generated by each module
@@ -927,7 +928,7 @@ class Annotation:
         # TODO: this is not right for grey ones, where only closed ones should be counted, so round is not right.
         return tuple(
             1 if reps == 1 and cnt > 0 else round(cnt / len(seq))
-            for (seq, reps), cnt in zip(self.motif.modules, repetitions)
+            for (seq, reps), cnt in zip(motif.modules, repetitions)
         )
 
     def __get_module_sequences(self) -> tuple[str, ...]:
@@ -944,7 +945,7 @@ class Annotation:
                 sequences[i] = self.read_seq[first:last + 1]
         return tuple(sequences)
 
-    def get_module_errors(self, module_num: int, overhang: int | None = None) -> tuple[int, int, int]:
+    def get_module_errors(self, motif: Motif, module_num: int, overhang: int | None = None) -> tuple[int, int, int]:
         """
         Get the number of insertions and deletions or mismatches in a certain module.
         If overhang is specified, look at specified number of bases around the module as well.
@@ -954,7 +955,7 @@ class Annotation:
         """
         # get overhang as module length
         if overhang is None:
-            seq, _ = self.motif.modules[module_num]
+            seq, _ = motif.modules[module_num]
             overhang = len(seq)
 
         # define module character
@@ -1069,7 +1070,7 @@ class Annotation:
         return match.start() if match else -1
 
     def get_nomenclature(
-        self, index_rep: int | None = None, index_rep2: int | None = None, include_flanking: bool = True
+            self, motif: Motif, index_rep: int | None = None, index_rep2: int | None = None, include_flanking: bool = True
     ) -> str:
         """
         Get HGVS nomenclature.
@@ -1083,19 +1084,19 @@ class Annotation:
             if index_rep2 is not None:
                 data = zip(
                     [self.module_repetitions[index_rep], self.module_repetitions[index_rep2]],
-                    [self.motif[index_rep], self.motif[index_rep2]],
+                    [motif[index_rep], motif[index_rep2]],
                     [self.module_sequences[index_rep], self.module_sequences[index_rep2]]
                 )
             else:
                 data = zip(
                     [self.module_repetitions[index_rep]],
-                    [self.motif[index_rep]],
+                    [motif[index_rep]],
                     [self.module_sequences[index_rep]]
                 )
         elif include_flanking:
-            data = zip(self.module_repetitions, self.motif.modules, self.module_sequences)
+            data = zip(self.module_repetitions, motif.modules, self.module_sequences)
         else:
-            data = zip(self.module_repetitions[1:-1], self.motif.modules[1:-1], self.module_sequences[1:-1])
+            data = zip(self.module_repetitions[1:-1], motif.modules[1:-1], self.module_sequences[1:-1])
 
         # iterate and build the nomenclature string
         nomenclatures = []
@@ -1149,7 +1150,7 @@ class Annotation:
             search_pos = search_found + len(motif_sequence)
         return nomenclature
 
-    def get_shortened_annotation(self, shorten_length: int) -> Annotation:
+    def get_shortened_annotation(self, shorten_length: int, motif: Motif) -> Annotation:
         """
         Get shortened annotation with specified shorten length beyond annotated modules.
         :param shorten_length: int - how many bases to keep beyond modules
@@ -1176,7 +1177,7 @@ class Annotation:
 
         # return shortened Annotation
         return Annotation(self.read_id, self.mate_order, self.read_seq[start:end], self.expected_seq[start:end],
-                          self.states[start:end], self.probability, self.motif)
+                          self.states[start:end], self.probability, motif)
 
 
 def errors_per_read(
@@ -1253,10 +1254,10 @@ def generate_result_line(
         reads_a2 = 0 if a2 is None else len([a for a in qual_annot if a.module_repetitions[module_number] == a2])
 
         # get info about errors
-        errors = [a.get_module_errors(module_number) for a in qual_annot]
-        errors_a1 = [a.get_module_errors(module_number) for a in qual_annot
+        errors = [a.get_module_errors(motif, module_number) for a in qual_annot]
+        errors_a1 = [a.get_module_errors(motif, module_number) for a in qual_annot
                      if a.module_repetitions[module_number] == a1]
-        errors_a2 = [a.get_module_errors(module_number) for a in qual_annot
+        errors_a2 = [a.get_module_errors(motif, module_number) for a in qual_annot
                      if a.module_repetitions[module_number] == a2]
         assert len([l for i, m, l in errors if l == 0]) == 0
 
@@ -1296,6 +1297,9 @@ def create_annotations(df: pd.DataFrame, motif: Motif) -> list[Annotation]:
             row['read_id'], row['mate_order'], row['read'], row['reference'],
             row['modules'], row['log_likelihood'], motif
         )
+        # pprint(vars(ann))
+        # pprint(vars(motif))
+        # exit(0)
         annotations.append(ann)
     return annotations
 
@@ -1310,8 +1314,8 @@ def genotype_group(
     read_distribution = np.bincount([len(ann.read_seq) for ann in annotations], minlength=100)
     for curr_module_num, _, _ in motif.get_repeating_modules():
 
-        anns_spanning, rest = postfilter.get_filtered(annotations, curr_module_num, both_primers=True)
-        anns_flanking, anns_filtered = postfilter.get_filtered(rest, curr_module_num, both_primers=False)
+        anns_spanning, rest = postfilter.get_filtered(motif, annotations, curr_module_num, both_primers=True)
+        anns_flanking, anns_filtered = postfilter.get_filtered(motif, rest, curr_module_num, both_primers=False)
         del rest
 
         model = Inference(read_distribution, None)
@@ -1332,9 +1336,9 @@ def phase_group(motif: Motif, annotations: list[Annotation]) -> list[None | tupl
         prev_module_num = repeating_modules[i - 1][0]
         mod_nums = [prev_module_num, curr_module_num]
 
-        anns_2good, _filtered = postfilter.get_filtered_list(annotations, mod_nums, both_primers=[True, True])
-        _left_good, _left_bad = postfilter.get_filtered_list(_filtered, mod_nums, both_primers=[False, True])
-        _right_good, anns_0good = postfilter.get_filtered_list(_left_bad, mod_nums, both_primers=[True, False])
+        anns_2good, _filtered = postfilter.get_filtered_list(motif, annotations, mod_nums, both_primers=[True, True])
+        _left_good, _left_bad = postfilter.get_filtered_list(motif, _filtered, mod_nums, both_primers=[False, True])
+        _right_good, anns_0good = postfilter.get_filtered_list(motif, _left_bad, mod_nums, both_primers=[True, False])
         anns_1good = _left_good + _right_good
         del _filtered, _left_good, _left_bad, _right_good
 
@@ -1530,7 +1534,7 @@ class PostFilter:
         self.max_rel_error = MAX_REL_ERROR
         self.max_abs_error = MAX_ABS_ERROR
 
-    def quality_annotation(self, ann: Annotation, module_number: int, both_primers: bool = True) -> bool:
+    def quality_annotation(self, motif: Motif, ann: Annotation, module_number: int, both_primers: bool = True) -> bool:
         """
         Is this annotation good?
         :param ann: Annotation - annotation to be evaluated
@@ -1557,12 +1561,12 @@ class PostFilter:
             and ann.module_repetitions[module_number] >= self.min_rep_cnt
         )
 
-        _seq, reps = ann.motif.modules[module_number]
+        _seq, reps = motif.modules[module_number]
 
         return is_right and has_primers and has_less_errors and has_flanks and (has_repetitions or reps == 1)
 
     def get_filtered_list(
-        self, annotations: list[Annotation], module_number: list[int], both_primers: list[bool] | None = None
+        self, motif: Motif, annotations: list[Annotation], module_number: list[int], both_primers: list[bool] | None = None
     ) -> tuple[list[Annotation], list[Annotation]]:
         """
         Get filtered annotations (list of modules).
@@ -1580,7 +1584,7 @@ class PostFilter:
         quality_annotations = [
             an for an in annotations
             if all((
-                self.quality_annotation(an, mn, both_primers=bp) for mn, bp in zip(module_number, both_primers)
+                self.quality_annotation(motif, an, mn, both_primers=bp) for mn, bp in zip(module_number, both_primers)
             ))
         ]
         filtered_annotations = [an for an in annotations if an not in quality_annotations]
@@ -1589,7 +1593,7 @@ class PostFilter:
 
     # TODO: is this just a specialized version of the previous method? Do we need this?
     def get_filtered(
-        self, annotations: list[Annotation], module_number: int, both_primers: bool = True
+        self, motif: Motif, annotations: list[Annotation], module_number: int, both_primers: bool = True
     ) -> tuple[list[Annotation], list[Annotation]]:
         """
         Get filtered annotations.
@@ -1602,7 +1606,7 @@ class PostFilter:
         quality_annotations = []
         filtered_annotations = []
         for an in annotations:
-            if self.quality_annotation(an, module_number, both_primers):
+            if self.quality_annotation(motif, an, module_number, both_primers):
                 quality_annotations.append(an)
             else:
                 filtered_annotations.append(an)
@@ -1721,7 +1725,7 @@ def setup_alignments(annotations: list[Annotation]) -> tuple[list[str], list[str
 
 
 def write_alignment(
-    annotations: list[Annotation],
+    annotations: list[Annotation], motif: Motif,
     index_rep: int, allele: int | None = None, index_rep2: int | None = None, allele2: int | None = None,
     cutoff_after: int | None = None, right_align: bool = False
 ) -> str:
@@ -1740,7 +1744,7 @@ def write_alignment(
 
     # apply cutoff
     if cutoff_after is not None:
-        annotations = [a.get_shortened_annotation(cutoff_after) for a in annotations]
+        annotations = [a.get_shortened_annotation(cutoff_after, motif) for a in annotations]
 
     # setup alignments
     alignments, states = setup_alignments(annotations)
@@ -2449,7 +2453,7 @@ def save_pcolor_plotly_file(
     hovertext[-1][0] = 'B'
     hovertext[-1][1] = 'E'
 
-    z: list[list[float]] = lh_copy[model.min_rep - 1:, model.min_rep:].tolist()
+    z: list[list[float | None]] = lh_copy[model.min_rep - 1:, model.min_rep:].tolist()
     for i in range(len(z)):
         for j in range(len(z[0])):
             if z[i][j] == -np.inf:
@@ -2596,7 +2600,7 @@ GenotypeInfo: TypeAlias = tuple[
 ]
 Hist2DGraph: TypeAlias = tuple[list[list[int]], list[list[int]], list[list[str]], str, str]
 HistReadCounts: TypeAlias = tuple[list[int], list[int], list[int]]
-ProbHeatmap: TypeAlias = tuple[list[list[float]], list[list[str]], list[int], list[int | str], list[int], list[int | str], float]
+ProbHeatmap: TypeAlias = tuple[list[list[float | None]], list[list[str]], list[int], list[int | str], list[int], list[int | str], float]
 GraphData: TypeAlias = tuple[HistReadCounts | None, ProbHeatmap | None, Hist2DGraph | None]
 
 
