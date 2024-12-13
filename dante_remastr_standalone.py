@@ -87,7 +87,7 @@ def main() -> None:
 
     # core computation ends here
     # next lines are only outputing things
-    # os.makedirs(args.output_dir, exist_ok=True)
+    os.makedirs(args.output_dir, exist_ok=True)
 
     print(f'Writing tsv output: {datetime.now():%Y-%m-%d %H:%M:%S}')
     variants_df = construct_dataframe(all_motifs, all_genotypes, all_haplotypes)
