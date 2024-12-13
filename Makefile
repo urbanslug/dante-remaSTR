@@ -9,5 +9,7 @@ linux_build:
 	cd build
 	pyinstaller -F ../dante_remastr_standalone.py
 	cd dist
-	cp -r ../../dante_remastr_standalone_templates .
+	cp -r ../../templates .
 	cp -r ../../includes .
+
+# https://stackoverflow.com/questions/2950971/packaging-a-python-script-on-linux-into-a-windows-executable

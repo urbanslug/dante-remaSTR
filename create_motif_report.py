@@ -143,7 +143,7 @@ def main(args: argparse.Namespace) -> None:
     os.makedirs(f"{args.output_dir}/aggregate", exist_ok=True)
     for locus_id, data in loci_data.items():
         env = Environment(loader=FileSystemLoader([script_dir]), trim_blocks=True, lstrip_blocks=True)
-        template = env.get_template("./dante_remastr_standalone_templates/population_report.html")
+        template = env.get_template("./templates/population_report.html")
         output = template.render(main_data=data)
         with open(f"{args.output_dir}/aggregate/{locus_id}.html", "w") as f:
             f.write(output)

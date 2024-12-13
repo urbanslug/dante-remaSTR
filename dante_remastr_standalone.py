@@ -100,7 +100,7 @@ def main() -> None:
     write_phased_predictions(all_motifs, all_genotypes, all_haplotypes, args.output_dir + "/phased_predictions.tsv")
 
     if args.verbose:
-        script_dir = os.path.dirname(sys.argv[0]) + "/dante_remastr_standalone_templates"
+        script_dir = os.path.dirname(sys.argv[0]) + "/templates"
 
         print(f'Writing alignment htmls: {datetime.now():%Y-%m-%d %H:%M:%S}')
         for (motif, genotype, phasing) in zip(all_motifs, all_genotypes, all_haplotypes):
