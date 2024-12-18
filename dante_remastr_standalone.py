@@ -2296,7 +2296,7 @@ class Inference:
         ind_good = (lh_array < 0.0) & (lh_array > -1e10) & (lh_array != np.nan)
         if len(lh_array[ind_good]) == 0:
             return lh_array, (0, 0)
-        lh_array[~ind_good] = np.NINF
+        lh_array[~ind_good] = -np.inf
         best = sorted(np.unravel_index(np.argmax(lh_array), lh_array.shape))
         prediction = (int(best[0]), int(best[1]))
 
