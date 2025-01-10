@@ -400,7 +400,9 @@ def write_report(
     for (motif, anns, genotype, phasing) in zip(all_motifs, all_annotations, all_genotypes, all_haplotypes):
         motif_dir = f'{output_dir}/{motif.dir_name()}'
         seq = motif.modules_str(include_flanks=True)
-        motif_id = re.sub(r'[^\w_]', '', motif.name.replace('/', '_'))
+        # why are we changing motif_id? And why delete first not matching [a-zA-Z_] and only first?
+        # motif_id = re.sub(r'[^\w_]', '', motif.name.replace('/', '_'))
+        motif_id = motif.name
 
         repeating_modules = motif.get_repeating_modules()
         annotations = anns
@@ -492,12 +494,14 @@ def write_report(
     tabs = sorted(tabs, key=lambda x: x[0])
     data = (sample, version, postfilter_data, tabs)
 
-    data_tmp = (sample, version, postfilter_data, tabs[0:1] + tabs[11:12])
-    store_json(data_tmp, f"{output_dir}/instance.json")
+    # data_tmp = (sample, version, postfilter_data, tabs[0:1] + tabs[11:12])
+    # store_json(data_tmp, f"{output_dir}/instance.json")
 
     json_dump = json.dumps(data)
     with open(f"{output_dir}/data.json", "w") as f:
         f.write(json_dump)
+
+    store_json(data, f"{output_dir}/data_v2.json")
 
     env = Environment(loader=FileSystemLoader([script_dir]), trim_blocks=True, lstrip_blocks=True)
     template = env.get_template("report_template.html")

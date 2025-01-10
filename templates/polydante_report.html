@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>PolyDante report</title>
+
+    <!-- <script src="msa.min.gz.js"></script> -->
+    <!-- <script src="https://gen-clc.cusp.uniba.sk/dante/msa.min.gz.js"></script>-->
+    <!-- <script src="plotly-2.14.0.min.js"></script>-->
+    <!-- <script src="https://cdn.plot.ly/plotly-2.14.0.min.js"></script>-->
+    <!-- <script src="jquery-3.6.1.min.js"></script>-->
+    <!-- <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.1/jquery.min.js"></script>-->
+    <!-- <script src="datatables.min.js"></script>-->
+    <!-- <script src="https://cdn.datatables.net/1.12.1/js/jquery.dataTables.js"></script>-->
+    <!-- <script src="https://cdn.datatables.net/buttons/2.3.2/js/dataTables.buttons.min.js"></script>-->
+    <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.1.3/jszip.min.js"></script>-->
+    <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.53/pdfmake.min.js"></script>-->
+    <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.53/vfs_fonts.js"></script>-->
+    <!-- <script src="https://cdn.datatables.net/buttons/2.3.2/js/buttons.html5.min.js"></script>-->
+    <!-- <script src="https://cdn.datatables.net/buttons/2.3.2/js/buttons.print.min.js"></script>-->
+    <!-- <link rel="stylesheet" type="text/css" href="https://www.w3schools.com/w3css/4/w3.css" />-->
+    <!-- <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.12.1/css/jquery.dataTables.css" />-->
+
+    <script src="./includes/plotly-2.14.0.min.js"></script>
+    <script src="./includes/jquery-3.6.1.min.js"></script>
+    <script src="./includes/datatables.min.js"></script>
+    <link rel="stylesheet" type="text/css" href="./includes/jquery.dataTables.css">
+    <link rel="stylesheet" type="text/css" href="./includes/w3.css">
+    <link rel="stylesheet" type="text/css" href="./includes/styles.css">
+    <script>
+    function draw_heatmap(title, z, tickvals, ticktext, xlim, destination) {
+        let heatmap_data = {
+            "data": [{
+                "z": z,
+                "text": z,
+                "name": "Prediction heatmap",
+                "colorscale": [
+                    [0.0, "rgb(255, 255, 255)"], [0.01, "rgb(255, 210, 0)"], [0.1, "rgb(255, 140, 0)"],
+                    [0.4, "rgb(255, 70, 0)"], [0.7, "rgb(230, 0  , 0)"], [1.0, "rgb(100, 0  , 0)"]
+                ],
+                "hovertemplate":" %{yaxis.title.text}: %{y} <br> %{xaxis.title.text}: %{x} <br> Count: %{text}",
+                "texttemplate": "%{text}",
+                "type": "heatmap"
+            }],
+            "layout": {
+                "title": {
+                    "text": title,
+                },
+                "shapes": [{
+                    "x0": xlim, "x1": xlim, "xref": "x",
+                    "y0": 0  , "y1": 1  , "yref": "y domain",
+                    "line": { "color": "black", "width": 2 }, "opacity": 1, "type": "line",
+                }, {
+                    "x0": 0  , "x1": 1  , "xref": "x domain",
+                    "y0": 0.5, "y1": 0.5, "yref": "y",
+                    "line": { "color": "black", "width": 2 }, "opacity": 1, "type": "line",
+                }],
+                "yaxis": {
+                    "tickvals": tickvals,
+                    "ticktext": ticktext,
+                    "title": { "text": "Allele 1" }, "showgrid": false, "showline": true, "zeroline": false,
+                },
+                "xaxis": {
+                    "tickvals": tickvals,
+                    "ticktext": ticktext,
+                    "title": { "text": "Allele 2" }, "showgrid": false, "showline": true, "zeroline": false,
+                },
+                "width": 750,
+                "height": 750,
+            },
+        };
+        Plotly.newPlot(destination, heatmap_data);
+    };
+
+    function draw_histogram(y, tickvals, ticktext, destination) {
+        let hist_data = {
+            "data":[{
+                "y": y,
+                "name":"Prediction",
+                "marker":{"color":"#636EFA"},
+                "textfont":{"color":"#636EFA","size":7},
+                "type":"bar",
+                "hover":"true"
+            }],
+            "layout":{
+                "title":{"text":"Allele histogram"},
+                "xaxis":{
+                    "title":{"text":"Prediction"},
+                    "tickmode":"array",
+                    "tickvals": tickvals,
+                    "ticktext": ticktext
+                },
+                "yaxis": {"fixedrange":true,"title":{"text":"Count"}},
+                "legend": {"x": 0.85, "y": 0.85 },
+                "barmode":"stack",
+                "hovermode":"x",
+            }
+        };
+
+        Plotly.newPlot(destination, hist_data);
+    };
+    </script>
+</head>
+
+<body class="valo v-app">
+<h1>{{ data["snv_id"] }}</h1>
+
+{% for str in data["str_list"] %}
+<h2 id="name">{{ str["str_id"] }}</h2>
+Repetition sequence: {{ str["str_seq"] }}
+
+<h3 class="summary">Summary table</h3>
+<div>
+<table class="tg" id="tg-{{ str['str_id'] }}">
+    <thead>
+        <tr>
+            <th class="tg-s6z2" rowspan="3">Sample</th>
+            <th class="tg-s6z2" rowspan="3">Type</th>
+            <th class="tg-s6z2" colspan="5">Allele 1</th>
+            <th class="tg-s6z2" colspan="5">Allele 2</th>
+            <th class="tg-s6z2" rowspan="3">Overall<br>confidence</th>
+            <th class="tg-s6z2" colspan="2">Errors per read</th>
+            <th class="tg-s6z2" colspan="2">Reads</th>
+        </tr>
+        <tr>
+            <td class="tg-smaller" rowspan="2">prediction</td>
+            <td class="tg-smaller" rowspan="2">confidence</td>
+            <td class="tg-smaller" rowspan="2">reads</td>
+            <td class="tg-smaller" colspan="2">Errors per read</td>
+            <td class="tg-smaller" rowspan="2">prediction</td>
+            <td class="tg-smaller" rowspan="2">confidence</td>
+            <td class="tg-smaller" rowspan="2">reads</td>
+            <td class="tg-smaller" colspan="2">Errors per read</td>
+            <td class="tg-smaller" rowspan="2">indel</td>
+            <td class="tg-smaller" rowspan="2">mismatch</td>
+            <td class="tg-smaller" rowspan="2">full</td>
+            <td class="tg-smaller" rowspan="2">partial</td>
+        </tr>
+        <tr>
+            <td class="tg-smaller">indel</td>
+            <td class="tg-smaller">mismatch</td>
+            <td class="tg-smaller">indel</td>
+            <td class="tg-smaller">mismatch</td>
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in str["rows"]  %}
+        <tr>
+            <td class="tg-s6z2">{{ row["sample"] }}</td>
+            <td class="tg-s6z2">{{ row["group"] }}</td>
+
+            <td class="tg-s6z2">{{ row["a1_pred"] }}</td>
+            <td class="tg-s6z2">{{ row["a1_conf"] }}</td>
+            <td class="tg-s6z2">{{ row["a1_read"] }}</td>
+            <td class="tg-s6z2">{{ row["a1_indel"] }}</td>
+            <td class="tg-s6z2">{{ row["a1_mismatch"] }}</td>
+
+            <td class="tg-s6z2">{{ row["a2_pred"] }}</td>
+            <td class="tg-s6z2">{{ row["a2_conf"] }}</td>
+            <td class="tg-s6z2">{{ row["a2_read"] }}</td>
+            <td class="tg-s6z2">{{ row["a2_indel"] }}</td>
+            <td class="tg-s6z2">{{ row["a2_mismatch"] }}</td>
+
+            <td class="tg-s6z2">{{ row["conf"] }}</td>
+            <td class="tg-s6z2">{{ row["indel"] }}</td>
+            <td class="tg-s6z2">{{ row["mismatch"] }}</td>
+
+            <td class="tg-s6z2">{{ row["read_full"] }}</td>
+            <td class="tg-s6z2">{{ row["read_part"] }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<script>
+    $(document).ready( function () {
+    $('#tg-{{ str["str_id"] }}').DataTable({scrollX: true});
+} );
+</script>
+</div>
+
+<h3 id="map">Allele heatmaps</h3>
+<div>
+<table>
+    <tr>
+        <td><div id="heatmap_case_{{ str['str_id'] }}"></div></td>
+        <td><div id="heatmap_control_{{ str['str_id'] }}"></div></td>
+    </tr>
+</table>
+
+<script>
+    {
+    let data = {{ str["heatmap_data"]["case"]|replace("None", "null") }};
+    let z = data["z"];
+    let tickvals = data["tickvals"];
+    let ticktext = data["ticktext"];
+    let xlim = data["xlim"];
+    draw_heatmap("Case", z, tickvals, ticktext, xlim, "heatmap_case_{{ str['str_id'] }}");
+    }{
+    let data = {{ str["heatmap_data"]["control"]|replace("None", "null") }};
+    let z = data["z"];
+    let tickvals = data["tickvals"];
+    let ticktext = data["ticktext"];
+    let xlim = data["xlim"]; 
+    draw_heatmap("Control", z, tickvals, ticktext, xlim, "heatmap_control_{{ str['str_id'] }}");
+    }
+</script>
+</div>
+
+<h3>Allele histograms</h3>
+<div>
+<table>
+    <tr>
+        <td><div id="histogram_case_{{ str['str_id'] }}"></div></td>
+        <td><div id="histogram_control_{{ str['str_id'] }}"></div></td>
+    </tr>
+</table>
+
+<script>
+    {
+    let data = {{ str["histogram_data"]["case"] }};
+    let y = data["y"];
+    let tickvals = data["tickvals"];
+    let ticktext = data["ticktext"];
+    draw_histogram(y, tickvals, ticktext, "histogram_case_{{ str['str_id'] }}");
+    }{
+    let data = {{ str["histogram_data"]["control"] }};
+    let y = data["y"];
+    let tickvals = data["tickvals"];
+    let ticktext = data["ticktext"];
+    draw_histogram(y, tickvals, ticktext, "histogram_control_{{ str['str_id'] }}");
+    }
+</script>
+</div>
+
+<hr>
+{% endfor %}
+
+</body>
+</html>
