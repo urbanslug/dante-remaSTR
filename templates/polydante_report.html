@@ -43,9 +43,7 @@
                 "type": "heatmap"
             }],
             "layout": {
-                "title": {
-                    "text": title,
-                },
+                "title": {"text": title},
                 "shapes": [{
                     "x0": xlim, "x1": xlim, "xref": "x",
                     "y0": 0  , "y1": 1  , "yref": "y domain",
@@ -72,7 +70,7 @@
         Plotly.newPlot(destination, heatmap_data);
     };
 
-    function draw_histogram(y, tickvals, ticktext, destination) {
+    function draw_histogram(title, y, tickvals, ticktext, destination) {
         let hist_data = {
             "data":[{
                 "y": y,
@@ -83,7 +81,7 @@
                 "hover":"true"
             }],
             "layout":{
-                "title":{"text":"Allele histogram"},
+                "title":{"text": title},
                 "xaxis":{
                     "title":{"text":"Prediction"},
                     "tickmode":"array",
@@ -102,7 +100,7 @@
     </script>
 </head>
 
-<body class="valo v-app">
+<body>
 <h1>{{ data["snv_id"] }}</h1>
 
 {% for str in data["str_list"] %}
@@ -111,7 +109,7 @@ Repetition sequence: {{ str["str_seq"] }}
 
 <h3 class="summary">Summary table</h3>
 <div>
-<table class="tg" id="tg-{{ str['str_id'] }}">
+<table class="tg" id="tg-{{ str['str_id'] }}" style="width:100%">
     <thead>
         <tr>
             <th class="tg-s6z2" rowspan="3">Sample</th>
@@ -173,7 +171,7 @@ Repetition sequence: {{ str["str_seq"] }}
 </table>
 
 <script>
-    $(document).ready( function () {
+    $(document).ready( function() {
     $('#tg-{{ str["str_id"] }}').DataTable({scrollX: true});
 } );
 </script>
@@ -222,13 +220,13 @@ Repetition sequence: {{ str["str_seq"] }}
     let y = data["y"];
     let tickvals = data["tickvals"];
     let ticktext = data["ticktext"];
-    draw_histogram(y, tickvals, ticktext, "histogram_case_{{ str['str_id'] }}");
+    draw_histogram("Case", y, tickvals, ticktext, "histogram_case_{{ str['str_id'] }}");
     }{
     let data = {{ str["histogram_data"]["control"] }};
     let y = data["y"];
     let tickvals = data["tickvals"];
     let ticktext = data["ticktext"];
-    draw_histogram(y, tickvals, ticktext, "histogram_control_{{ str['str_id'] }}");
+    draw_histogram("Control", y, tickvals, ticktext, "histogram_control_{{ str['str_id'] }}");
     }
 </script>
 </div>

@@ -168,11 +168,37 @@ def generate_heatmap(df_str: pd.DataFrame) -> dict:
     return result
 
 
+def collect_histogram(df_str: pd.DataFrame, a_idx: int, max_allele: int) -> list[int]:
+    result = [0] * (max_allele + 3)
+    for _, row in df_str.iterrows():
+        allele: int | str = row["data"][a_idx][0]
+        if allele == 'E':
+            result[-1] += 1
+            continue
+        if allele == 'B':
+            result[0] += 1
+            continue
+        if allele == 'X':
+            raise NotImplementedError
+
+        allele = int(allele)
+        result[allele + 1] += 1
+    return result
+
+
 def generate_histogram(df_str: pd.DataFrame) -> dict:
-    y_case = [0, 1, 2, 3, 20, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
-    y_control = [0, 1, 2, 3, 4, 5, 60, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
-    tickvals = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
-    ticktext = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
+    max_allele = get_max_allele(df_str)
+
+    df_case = df_str[df_str["group"] == "case"]
+    zip_case = zip(collect_histogram(df_case, 0, max_allele), collect_histogram(df_case, 1, max_allele))
+    y_case = [a + b for a, b in zip_case]
+
+    df_control = df_str[df_str["group"] == "control"]
+    zip_control = zip(collect_histogram(df_control, 0, max_allele), collect_histogram(df_control, 1, max_allele))
+    y_control = [a + b for a, b in zip_control]
+
+    tickvals = list(range(max_allele + 3))
+    ticktext = ["B"] + list(range(max_allele + 1)) + ["E"]
 
     result = {
         "case": {
