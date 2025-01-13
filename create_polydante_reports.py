@@ -18,7 +18,7 @@ def load_arguments() -> argparse.Namespace:
     arg("-a", "--cases", nargs="+", help='Path to data.json files (possibly many) of samples with disease.')
     arg("-b", "--controls", nargs="+", help='Path to data.json files (possibly many) of healthy samples.')
     arg("-m", "--snv-map", help="Path to SNV map")
-    arg("-o", "--output_dir", default="./results",
+    arg("-o", "--output-dir", default="./results",
         help='Path to directory where the output will be stored. Default=<input_dir>/result_files')
 
     return parser.parse_args()
@@ -26,6 +26,7 @@ def load_arguments() -> argparse.Namespace:
 
 def append_data(filenames: list[str], group: str, motif2seq: dict[str, str], df: pd.DataFrame):
     for filename in filenames:
+        print(f"Loading {filename}")
         with open(filename, "r") as f:
             data = json.load(f)
             for motif in data["motifs"]:
@@ -253,6 +254,7 @@ def main(args: argparse.Namespace) -> None:
 
     for (snv_id,), df_snv in df.groupby(["snv"]):
         snv_id = snv_id2rs_id[snv_id]
+        print(f"Generating {args.output_dir}/{snv_id}.html")
         data = generate_data(snv_id, df_snv, motif2seq)
 
         # import pprint
@@ -265,8 +267,6 @@ def main(args: argparse.Namespace) -> None:
         output = template.render(data=data)
         with open(f"{args.output_dir}/{snv_id}.html", "w") as f:
             f.write(output)
-
-        break
 
     # copy javascript and css files
     include_dir = os.path.dirname(sys.argv[0]) + "/includes"
