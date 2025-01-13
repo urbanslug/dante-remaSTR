@@ -7,6 +7,10 @@ import sys
 import shutil
 from typing import cast
 
+# import pprint
+# pp = pprint.PrettyPrinter()
+# pp.pprint(data)
+
 
 def load_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -24,7 +28,8 @@ def load_arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def append_data(filenames: list[str], group: str, motif2seq: dict[str, str], df: pd.DataFrame):
+def append_data(filenames: list[str], group: str, motif2seq: dict[str, str]) -> list[tuple]:
+    result = []
     for filename in filenames:
         print(f"Loading {filename}")
         with open(filename, "r") as f:
@@ -43,7 +48,8 @@ def append_data(filenames: list[str], group: str, motif2seq: dict[str, str], df:
                         motif["modules"][0]["reads_spanning"],
                         motif["modules"][0]["reads_flanking"],
                     )
-                    df.loc[len(df)] = [snp, str_id, data["sample"], group, data_blob]
+                    result.append((snp, str_id, data["sample"], group, data_blob))
+    return result
 
 
 def load_snv_map(filename: str) -> dict[str, str]:
@@ -66,14 +72,14 @@ def generate_table(df_str: pd.DataFrame) -> list[dict]:
             "group": group,
             "a1_pred": data[0][0],
             "a1_conf": data[0][1],
-            "a1_read": data[0][2],
-            "a1_indel": data[0][3],
-            "a1_mismatch": data[0][4],
+            "a1_indel": data[0][2],
+            "a1_mismatch": data[0][3],
+            "a1_read": data[0][4],
             "a2_pred": data[1][0],
             "a2_conf": data[1][1],
-            "a2_read": data[1][2],
-            "a2_indel": data[1][3],
-            "a2_mismatch": data[1][4],
+            "a2_indel": data[1][2],
+            "a2_mismatch": data[1][3],
+            "a2_read": data[1][4],
             "conf": data[2][0],
             "indel": data[2][1],
             "mismatch": data[2][2],
@@ -242,24 +248,31 @@ def generate_data(snv_id: str, df_snv: pd.DataFrame, motif2seq: dict[str, str]) 
     return data
 
 
+def copy_includes(output_dir: str) -> None:
+    include_dir = os.path.dirname(sys.argv[0]) + "/includes"
+    os.makedirs(f'{output_dir}/includes', exist_ok=True)
+    shutil.copy2(f'{include_dir}/msa.min.gz.js',            f'{output_dir}/includes/msa.min.gz.js')
+    shutil.copy2(f'{include_dir}/plotly-2.14.0.min.js',     f'{output_dir}/includes/plotly-2.14.0.min.js')
+    shutil.copy2(f'{include_dir}/jquery-3.6.1.min.js',      f'{output_dir}/includes/jquery-3.6.1.min.js')
+    shutil.copy2(f'{include_dir}/datatables.min.js',        f'{output_dir}/includes/datatables.min.js')
+    shutil.copy2(f'{include_dir}/styles.css',               f'{output_dir}/includes/styles.css')
+    shutil.copy2(f'{include_dir}/w3.css',                   f'{output_dir}/includes/w3.css')
+    shutil.copy2(f'{include_dir}/jquery.dataTables.css',    f'{output_dir}/includes/jquery.dataTables.css')
+
+
 def main(args: argparse.Namespace) -> None:
-    # print(args)
     os.makedirs(args.output_dir, exist_ok=True)
 
     snv_id2rs_id: dict[str, str] = load_snv_map(args.snv_map)
     motif2seq: dict[str, str] = {}
-    df = pd.DataFrame(columns=["snv", "str", "sample", "group", "data"])
-    append_data(args.cases, "case", motif2seq, df)
-    append_data(args.controls, "control", motif2seq, df)
+    cases = append_data(args.cases, "case", motif2seq)
+    controls = append_data(args.controls, "control", motif2seq)
+    df = pd.DataFrame.from_records(cases + controls, columns=["snv", "str", "sample", "group", "data"])
 
     for (snv_id,), df_snv in df.groupby(["snv"]):
         snv_id = snv_id2rs_id[snv_id]
         print(f"Generating {args.output_dir}/{snv_id}.html")
         data = generate_data(snv_id, df_snv, motif2seq)
-
-        # import pprint
-        # pp = pprint.PrettyPrinter()
-        # pp.pprint(data)
 
         script_dir = os.path.dirname(sys.argv[0]) + "/templates"
         env = Environment(loader=FileSystemLoader([script_dir]), trim_blocks=True, lstrip_blocks=True)
@@ -268,16 +281,7 @@ def main(args: argparse.Namespace) -> None:
         with open(f"{args.output_dir}/{snv_id}.html", "w") as f:
             f.write(output)
 
-    # copy javascript and css files
-    include_dir = os.path.dirname(sys.argv[0]) + "/includes"
-    os.makedirs(f'{args.output_dir}/includes', exist_ok=True)
-    shutil.copy2(f'{include_dir}/msa.min.gz.js',            f'{args.output_dir}/includes/msa.min.gz.js')
-    shutil.copy2(f'{include_dir}/plotly-2.14.0.min.js',     f'{args.output_dir}/includes/plotly-2.14.0.min.js')
-    shutil.copy2(f'{include_dir}/jquery-3.6.1.min.js',      f'{args.output_dir}/includes/jquery-3.6.1.min.js')
-    shutil.copy2(f'{include_dir}/datatables.min.js',        f'{args.output_dir}/includes/datatables.min.js')
-    shutil.copy2(f'{include_dir}/styles.css',               f'{args.output_dir}/includes/styles.css')
-    shutil.copy2(f'{include_dir}/w3.css',                   f'{args.output_dir}/includes/w3.css')
-    shutil.copy2(f'{include_dir}/jquery.dataTables.css',    f'{args.output_dir}/includes/jquery.dataTables.css')
+    copy_includes(args.output_dir)
 
 
 if __name__ == '__main__':
