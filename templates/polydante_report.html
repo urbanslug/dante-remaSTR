@@ -12,6 +12,7 @@
     <link rel="stylesheet" type="text/css" href="./includes/styles.css">
 
     <script>
+
     function draw_heatmap(title, z, tickvals, ticktext, xlim, destination) {
         let heatmap_data = {
             "data": [{
@@ -127,7 +128,8 @@
 
 {% for str in data["str_list"] %}
 <h2 id="{{ str['str_id'] }}">{{ str["str_id"] }}</h2>
-Repetition sequence: {{ str["str_seq"] }}
+Repetition sequence: {{ str["str_seq"] }}<br>
+p-value: {{ str["stat_results"]["p_value"] }}<br>
 
 <h3 class="summary">Summary table</h3>
 <div>
