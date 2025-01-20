@@ -397,12 +397,21 @@ def write_report(
     postfilter_data = (post_bases, post_reps, post_errors)
 
     tabs = []
+    tabs2 = []
     for (motif, anns, genotype, phasing) in zip(all_motifs, all_annotations, all_genotypes, all_haplotypes):
         motif_dir = f'{output_dir}/{motif.dir_name()}'
         seq = motif.modules_str(include_flanks=True)
         # why are we changing motif_id? And why delete first not matching [a-zA-Z_] and only first?
         # motif_id = re.sub(r'[^\w_]', '', motif.name.replace('/', '_'))
         motif_id = motif.name
+        # motif_nom = motif.nomenclature
+        # print(motif.chrom, motif.start, motif.end, motif.modules)
+        motif_stat = {
+            "chrom": motif.chrom,
+            "start": motif.start,
+            "end": motif.end,
+            "modules": motif.modules
+        }
 
         repeating_modules = motif.get_repeating_modules()
         annotations = anns
@@ -488,6 +497,7 @@ def write_report(
             m_list2.append(locus_data2)
 
         tabs.append((motif_id, nomenclatures, m_list1, m_list2))
+        tabs2.append((motif_id, motif_stat, nomenclatures, m_list1, m_list2))
 
     sample = os.path.basename(os.path.normpath(output_dir))
     version = VERSION
@@ -501,7 +511,8 @@ def write_report(
     with open(f"{output_dir}/data.json", "w") as f:
         f.write(json_dump)
 
-    store_json(data, f"{output_dir}/data_v2.json")
+    data2 = (sample, version, postfilter_data, tabs2)
+    store_json(data2, f"{output_dir}/data_v2.json")
 
     env = Environment(loader=FileSystemLoader([script_dir]), trim_blocks=True, lstrip_blocks=True)
     template = env.get_template("report_template.html")
@@ -522,9 +533,10 @@ def store_json(old_data: tuple, output_file: str):
     for old_motif in old_data[3]:
         motif = {}
         motif["motif_id"] = old_motif[0]
+        motif["motif_stats"] = old_motif[1]
 
         nomenclatures = []
-        for old_nomenclature in old_motif[1]:
+        for old_nomenclature in old_motif[2]:
             nomenclature = {}
             nomenclature["count"] = old_nomenclature[0]
             nomenclature["location"] = old_nomenclature[1]
@@ -532,8 +544,9 @@ def store_json(old_data: tuple, output_file: str):
             nomenclatures.append(nomenclature)
         motif["nomenclatures"] = nomenclatures
 
+        # (motif_id, motif_stat, nomenclatures, m_list1, m_list2)
         modules = []
-        for old_module in old_motif[2]:
+        for old_module in old_motif[3]:
             module = {}
             module["module_id"] = old_module[0]
             module["sequence"] = old_module[1]
@@ -558,7 +571,7 @@ def store_json(old_data: tuple, output_file: str):
         motif["modules"] = modules
 
         modules = []
-        for old_phasing in old_motif[3]:
+        for old_phasing in old_motif[4]:
             module = {}
             module["phasing_id"] = old_phasing[0]
             module["sequence"] = old_phasing[1]
@@ -584,7 +597,6 @@ def store_json(old_data: tuple, output_file: str):
         motifs.append(motif)
     data["motifs"] = motifs
 
-    # new_data[""]
     json_example = json.dumps(data, indent=2)
     with open(output_file, "w") as f:
         f.write(json_example)

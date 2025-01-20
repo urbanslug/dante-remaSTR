@@ -6,6 +6,7 @@ import pandas as pd  # change to polars?
 import sys
 import shutil
 from typing import cast
+from scipy.stats import ks_2samp  # type: ignore
 
 # import pprint
 # pp = pprint.PrettyPrinter()
@@ -47,6 +48,7 @@ def append_data(filenames: list[str], group: str, motif2seq: dict[str, str]) -> 
                         motif["modules"][0]["stats"],
                         motif["modules"][0]["reads_spanning"],
                         motif["modules"][0]["reads_flanking"],
+                        motif["motif_stats"]
                     )
                     result.append((snp, str_id, data["sample"], group, data_blob))
     return result
@@ -222,6 +224,23 @@ def generate_histogram(df_str: pd.DataFrame) -> dict:
     return result
 
 
+def compare_statistically(histogram_data: dict) -> dict:
+    cases = []
+    for i, n in enumerate(histogram_data["case"]["y"][1:]):
+        cases += [i] * n
+
+    controls = []
+    for i, n in enumerate(histogram_data["control"]["y"][1:]):
+        controls += [i] * n
+
+    if len(cases) == 0 or len(controls) == 0:
+        statistic, p_value = float('nan'), float('nan')
+    else:
+        statistic, p_value = ks_2samp(cases, controls)
+
+    return {"statistic": statistic, "p_value": p_value}
+
+
 def generate_data(snv_id: str, df_snv: pd.DataFrame, motif2seq: dict[str, str]) -> dict:
     str_list = []
     for (str_id,), df_str in df_snv.groupby(["str"]):
@@ -230,10 +249,16 @@ def generate_data(snv_id: str, df_snv: pd.DataFrame, motif2seq: dict[str, str]) 
         rows = generate_table(df_str)
         heatmap_data = generate_heatmap(df_str)
         histogram_data = generate_histogram(df_str)
+        stat_results = compare_statistically(histogram_data)
+        if stat_results["p_value"] < 0.05:
+            print(f"{snv_id} {str_id}: The two distributions are significantly different.")
+        str_location = df_str["data"].iloc[0][5]
 
         str_data = {
             "str_id": str_id,
             "str_seq": seq,
+            "str_location": str_location,
+            "stat_results": stat_results,
             "rows": rows,
             "heatmap_data": heatmap_data,
             "histogram_data": histogram_data

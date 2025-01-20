@@ -32,8 +32,9 @@ body {
     text-align: center;
 }
 
-table {
+table.tg {
     margin: auto;
+    width: 100%;
 }
 
 table.dataTable {
@@ -99,4 +100,3 @@ table.dataTable {
     width: 50%;
     height: auto;
 }
-

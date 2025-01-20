@@ -19,7 +19,7 @@
 
 <h2 id="content">Content (Sample: {{ sample }} Version: Remastr v{{ dante_version }})</h2>
 <div class="tab">
-    <table class="tg" id="content-tg">
+    <table class="tg" id="content-tg" style="width: 100%">
         <thead>
             <tr>
                 <th class="tg-s6z2">Motif</th>
@@ -60,7 +60,7 @@
     </tbody>
 </table>
 <h2 class="summary">Summary table</h2>
-<table class="tg" id="tg-{{ motif_id }}">
+<table class="tg" id="tg-{{ motif_id }}" style="width: 100%">
     <thead>
         <tr>
             <th class="tg-s6z2" rowspan="3">Motif</th>
@@ -123,9 +123,9 @@
 </table>
 
 <script>
-    $(document).ready( function () {
+$(document).ready(function (){
     $('#tg-{{ motif_id }}').DataTable({scrollX: true});
-} );
+});
 </script>
 
     {% for row in m_individual + m_phased %}
