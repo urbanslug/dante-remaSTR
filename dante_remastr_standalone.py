@@ -109,20 +109,23 @@ def main() -> None:
         print(f'Writing html report: {datetime.now():%Y-%m-%d %H:%M:%S}')
         write_report(all_motifs, all_annotations, all_genotypes, all_haplotypes, script_dir, args.output_dir)
 
-        # copy javascript and css files
-        include_dir = os.path.dirname(sys.argv[0]) + "/includes"
-        os.makedirs(f'{args.output_dir}/includes', exist_ok=True)
-        shutil.copy2(f'{include_dir}/msa.min.gz.js',            f'{args.output_dir}/includes/msa.min.gz.js')
-        shutil.copy2(f'{include_dir}/plotly-2.14.0.min.js',     f'{args.output_dir}/includes/plotly-2.14.0.min.js')
-        shutil.copy2(f'{include_dir}/jquery-3.6.1.min.js',      f'{args.output_dir}/includes/jquery-3.6.1.min.js')
-        shutil.copy2(f'{include_dir}/datatables.min.js',        f'{args.output_dir}/includes/datatables.min.js')
-        shutil.copy2(f'{include_dir}/styles.css',               f'{args.output_dir}/includes/styles.css')
-        shutil.copy2(f'{include_dir}/w3.css',                   f'{args.output_dir}/includes/w3.css')
-        shutil.copy2(f'{include_dir}/jquery.dataTables.css',    f'{args.output_dir}/includes/jquery.dataTables.css')
+        copy_includes(args.output_dir)
 
     end_time = datetime.now()
     print(f'DANTE_remaSTR Stopping : {end_time:%Y-%m-%d %H:%M:%S}')
     print(f'Total time of run      : {end_time - start_time}')
+
+
+def copy_includes(output_dir: str) -> None:
+    include_dir = os.path.dirname(sys.argv[0]) + "/includes"
+    os.makedirs(f'{output_dir}/includes', exist_ok=True)
+    shutil.copy2(f'{include_dir}/msa.min.gz.js',            f'{output_dir}/includes/msa.min.gz.js')
+    shutil.copy2(f'{include_dir}/plotly-2.14.0.min.js',     f'{output_dir}/includes/plotly-2.14.0.min.js')
+    shutil.copy2(f'{include_dir}/jquery-3.6.1.min.js',      f'{output_dir}/includes/jquery-3.6.1.min.js')
+    shutil.copy2(f'{include_dir}/datatables.min.js',        f'{output_dir}/includes/datatables.min.js')
+    shutil.copy2(f'{include_dir}/styles.css',               f'{output_dir}/includes/styles.css')
+    shutil.copy2(f'{include_dir}/w3.css',                   f'{output_dir}/includes/w3.css')
+    shutil.copy2(f'{include_dir}/jquery.dataTables.css',    f'{output_dir}/includes/jquery.dataTables.css')
 
 
 def write_alignment_html(
@@ -383,6 +386,81 @@ def phase_full_locus(
     return (h1_full, h2_full, list(errors1), list(errors2))
 
 
+def generate_locus_data(gt: GenotypeInfo, motif, nomenclature_limit, motif_id, post_filter, seq):
+    graph_data: GraphData
+    (module_number, anns_spanning, anns_flanking, anns_filtered, predicted, confidence, lh_array, model) = gt
+
+    locus_nomenclatures = generate_nomenclatures(anns_spanning, module_number, None, motif, nomenclature_limit)
+
+    read_counts = None
+    if len(anns_spanning) != 0 or len(anns_flanking) != 0:
+        read_counts = write_histogram_image(anns_spanning, anns_flanking, module_number)
+    else:
+        print(f"Zero reads in {motif_id}")
+
+    heatmap_data = None
+    if lh_array is not None:
+        heatmap_data = draw_pcolor(model, lh_array, motif.nomenclature)
+    else:
+        print(f"Likelihood array is None for {motif_id}.")
+
+    row = generate_result_line(motif, predicted, confidence, len(anns_spanning), len(anns_flanking), len(anns_filtered), module_number, qual_annot=anns_spanning)
+    row_tuple = generate_row(seq, row, post_filter)
+
+    tmp = generate_motifb64(seq, row)
+    (locus_id, _, _, _, _, sequence) = tmp
+    del row
+
+    graph_data = (read_counts, heatmap_data, None)
+
+    _, _, a1_prediction, a1_confidence, a1_reads, a1_indels, a1_mismatches, a2_prediction, a2_confidence, a2_reads, a2_indels, a2_mismatches, confidence, indels, mismatches, spanning_reads, flanking_reads = row_tuple
+    locus_data = (
+        locus_id, sequence, locus_nomenclatures,
+        (a1_prediction, a1_confidence, a1_indels, a1_mismatches, a1_reads),
+        (a2_prediction, a2_confidence, a2_indels, a2_mismatches, a2_reads),
+        (confidence, indels, mismatches),
+        spanning_reads, flanking_reads,
+        graph_data,
+    )
+    return locus_data
+
+
+def generate_locus_data2(ph, motif, seq, post_filter, motif_dir, nomenclature_limit):
+    pass
+    if ph is None:
+        raise ValueError
+
+    (module_number, anns_2good, anns_1good, anns_0good, phasing1, supp_reads, prev_module_num) = ph
+    second_module_number = module_number
+    suffix = f'{prev_module_num}_{second_module_number}'
+
+    row = generate_result_line(motif, phasing1, supp_reads, len(anns_2good), len(anns_1good), len(anns_0good), prev_module_num, second_module_number=module_number)
+    row_tuple = generate_row(seq, row, post_filter)
+
+    tmp = generate_motifb64(seq, row)
+    (locus_id, _, _, _, _, sequence) = tmp
+
+    annotations = anns_2good + anns_1good
+    if len(annotations) == 0:
+        print(f"{motif_dir} {suffix} is empty")
+
+    locus_nomenclatures = generate_nomenclatures(anns_2good, prev_module_num, second_module_number, motif, nomenclature_limit)
+    hist2d_data = write_histogram_image2d(annotations, prev_module_num, second_module_number, motif.module_str(prev_module_num), motif.module_str(second_module_number))
+
+    graph_data = (None, None, hist2d_data)
+
+    _, _, a1_prediction, a1_confidence, a1_reads, a1_indels, a1_mismatches, a2_prediction, a2_confidence, a2_reads, a2_indels, a2_mismatches, confidence, indels, mismatches, spanning_reads, flanking_reads = row_tuple
+    locus_data2 = (
+        locus_id, sequence, locus_nomenclatures,
+        (a1_prediction, a1_confidence, a1_indels, a1_mismatches, a1_reads),
+        (a2_prediction, a2_confidence, a2_indels, a2_mismatches, a2_reads),
+        (confidence, indels, mismatches),
+        spanning_reads, flanking_reads,
+        graph_data,
+    )
+    return locus_data2
+
+
 def write_report(
     all_motifs: list[Motif], all_annotations: list[list[Annotation]],
     all_genotypes: list[list[GenotypeInfo]], all_haplotypes: list[list[None | tuple]],
@@ -419,81 +497,14 @@ def write_report(
             annotations, _ = post_filter.get_filtered(motif, annotations, module_number, both_primers=True)
         nomenclatures = generate_nomenclatures(annotations, None, None, motif, nomenclature_limit)
 
-        graph_data: GraphData
         m_list1 = []
         for gt in genotype:
-            (module_number, anns_spanning, anns_flanking, anns_filtered, predicted, confidence, lh_array, model) = gt
-            suffix = str(module_number)
-
-            locus_nomenclatures = generate_nomenclatures(anns_spanning, module_number, None, motif, nomenclature_limit)
-
-            read_counts = None
-            if len(anns_spanning) != 0 or len(anns_flanking) != 0:
-                read_counts = write_histogram_image(anns_spanning, anns_flanking, module_number)
-            else:
-                print(f"Zero reads in {motif_id}")
-
-            heatmap_data = None
-            if lh_array is not None:
-                heatmap_data = draw_pcolor(model, lh_array, motif.nomenclature)
-            else:
-                print(f"Likelihood array is None for {motif_id}.")
-
-            row = generate_result_line(motif, predicted, confidence, len(anns_spanning), len(anns_flanking), len(anns_filtered), module_number, qual_annot=anns_spanning)
-            row_tuple = generate_row(seq, row, post_filter)
-
-            tmp = generate_motifb64(seq, row)
-            (locus_id, _, _, _, _, sequence) = tmp
-            del row
-
-            graph_data = (read_counts, heatmap_data, None)
-
-            _, _, a1_prediction, a1_confidence, a1_reads, a1_indels, a1_mismatches, a2_prediction, a2_confidence, a2_reads, a2_indels, a2_mismatches, confidence, indels, mismatches, spanning_reads, flanking_reads = row_tuple
-            locus_data = (
-                locus_id, sequence, locus_nomenclatures,
-                (a1_prediction, a1_confidence, a1_indels, a1_mismatches, a1_reads),
-                (a2_prediction, a2_confidence, a2_indels, a2_mismatches, a2_reads),
-                (confidence, indels, mismatches),
-                spanning_reads, flanking_reads,
-                graph_data,
-            )
-
+            locus_data = generate_locus_data(gt, motif, nomenclature_limit, motif_id, post_filter, seq)
             m_list1.append(locus_data)
 
         m_list2 = []
         for ph in phasing[1:]:
-            if ph is None:
-                raise ValueError
-
-            (module_number, anns_2good, anns_1good, anns_0good, phasing1, supp_reads, prev_module_num) = ph
-            second_module_number = module_number
-            suffix = f'{prev_module_num}_{second_module_number}'
-
-            row = generate_result_line(motif, phasing1, supp_reads, len(anns_2good), len(anns_1good), len(anns_0good), prev_module_num, second_module_number=module_number)
-            row_tuple = generate_row(seq, row, post_filter)
-
-            tmp = generate_motifb64(seq, row)
-            (locus_id, _, _, _, _, sequence) = tmp
-
-            annotations = anns_2good + anns_1good
-            if len(annotations) == 0:
-                print(f"{motif_dir} {suffix} is empty")
-
-            locus_nomenclatures = generate_nomenclatures(anns_2good, prev_module_num, second_module_number, motif, nomenclature_limit)
-            hist2d_data = write_histogram_image2d(annotations, prev_module_num, second_module_number, motif.module_str(prev_module_num), motif.module_str(second_module_number))
-
-            graph_data = (None, None, hist2d_data)
-
-            _, _, a1_prediction, a1_confidence, a1_reads, a1_indels, a1_mismatches, a2_prediction, a2_confidence, a2_reads, a2_indels, a2_mismatches, confidence, indels, mismatches, spanning_reads, flanking_reads = row_tuple
-            locus_data2 = (
-                locus_id, sequence, locus_nomenclatures,
-                (a1_prediction, a1_confidence, a1_indels, a1_mismatches, a1_reads),
-                (a2_prediction, a2_confidence, a2_indels, a2_mismatches, a2_reads),
-                (confidence, indels, mismatches),
-                spanning_reads, flanking_reads,
-                graph_data,
-            )
-
+            locus_data2 = generate_locus_data2(ph, motif, seq, post_filter, motif_dir, nomenclature_limit)
             m_list2.append(locus_data2)
 
         tabs.append((motif_id, nomenclatures, m_list1, m_list2))
