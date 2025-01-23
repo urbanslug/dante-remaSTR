@@ -93,15 +93,18 @@
         <tr>
             <th rowspan="2">Repeat ID</th>
             <th colspan="4">Motif information</th>
-            <th colspan="2">Kolmogorov–Smirnov test</th>
+            <th colspan="5">Kolmogorov–Smirnov test</th>
         </tr>
         <tr>
             <th>chromosome</th>
             <th>start</th>
             <th>end</th>
             <th>sequence</th>
-            <th>statistic</th>
             <th>p-value</th>
+            <th>statistic</th>
+            <th>#cases</th>
+            <th>#controls</th>
+            <th>#all</th>
         </tr>
     </thead>
     <tbody>
@@ -112,8 +115,11 @@
             <td>{{ str["str_location"]["start"] }}</td>
             <td>{{ str["str_location"]["end"] }}</td>
             <td>{{ str["str_seq"] }}</td>
-            <td>{{ str["stat_results"]["statistic"] }}</td>
-            <td>{{ str["stat_results"]["p_value"] }}</td>
+            <td>{{ "{:0.2f}".format(str["stat_results"]["p_value"]) }}</td>
+            <td>{{ "{:0.2f}".format(str["stat_results"]["statistic"]) }}</td>
+            <td>{{ str["stat_results"]["n_cases"] }}</td>
+            <td>{{ str["stat_results"]["n_controls"] }}</td>
+            <td>{{ str["stat_results"]["n_all"] }}</td>
         </tr>
         {% endfor %}
     </tbody>
@@ -130,6 +136,8 @@
 <h2 id="{{ str['str_id'] }}">{{ str["str_id"] }}</h2>
 Repetition sequence: {{ str["str_seq"] }}<br>
 p-value: {{ str["stat_results"]["p_value"] }}<br>
+#case alleles: {{ str["stat_results"]["n_cases"] }}<br>
+#control alleles: {{ str["stat_results"]["n_controls"] }}<br>
 
 <h3 class="summary">Summary table</h3>
 <div>

@@ -238,7 +238,14 @@ def compare_statistically(histogram_data: dict) -> dict:
     else:
         statistic, p_value = ks_2samp(cases, controls)
 
-    return {"statistic": statistic, "p_value": p_value}
+    result = {
+        "statistic": statistic,
+        "p_value": p_value,
+        "n_cases": len(cases),
+        "n_controls": len(controls),
+        "n_all": len(cases) + len(controls)
+    }
+    return result
 
 
 def generate_data(snv_id: str, df_snv: pd.DataFrame, motif2seq: dict[str, str]) -> dict:
