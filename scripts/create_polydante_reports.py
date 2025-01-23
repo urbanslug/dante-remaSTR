@@ -274,7 +274,7 @@ def generate_data(snv_id: str, df_snv: pd.DataFrame, motif2seq: dict[str, str]) 
 
 
 def copy_includes(output_dir: str) -> None:
-    include_dir = os.path.dirname(sys.argv[0]) + "/includes"
+    include_dir = os.path.dirname(sys.argv[0]) + "/../includes"
     os.makedirs(f'{output_dir}/includes', exist_ok=True)
     shutil.copy2(f'{include_dir}/msa.min.gz.js',            f'{output_dir}/includes/msa.min.gz.js')
     shutil.copy2(f'{include_dir}/plotly-2.14.0.min.js',     f'{output_dir}/includes/plotly-2.14.0.min.js')
@@ -299,7 +299,7 @@ def main(args: argparse.Namespace) -> None:
         print(f"Generating {args.output_dir}/{snv_id}.html")
         data = generate_data(snv_id, df_snv, motif2seq)
 
-        script_dir = os.path.dirname(sys.argv[0]) + "/templates"
+        script_dir = os.path.dirname(sys.argv[0]) + "/../templates"
         env = Environment(loader=FileSystemLoader([script_dir]), trim_blocks=True, lstrip_blocks=True)
         template = env.get_template("polydante_report.html")
         output = template.render(data=data)
