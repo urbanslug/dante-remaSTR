@@ -5,7 +5,102 @@ import os
 import pandas as pd
 import textwrap
 
-from src.report.report import plot_histogram_image
+import plotly.graph_objects as go
+import numpy as np
+
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt  # noqa
+# from src.report.report import plot_histogram_image
+
+MAX_REPETITIONS = 40
+
+
+def plot_histogram_image(out_prefix: str, spanning_counts: list[tuple[int, int]], filtered_counts: list[tuple[int, int]],
+                         inread_counts: list[tuple[int, int]] = None) -> None:
+    """
+    Generates separate graph image for each module
+    :param out_prefix: Output file prefix
+    :param spanning_counts: list of spanning counts (repetition, number of reads)
+    :param filtered_counts: list of flanking counts (repetition, number of reads)
+    :param inread_counts: list of inread counts (repetition, number of reads)
+    """
+    # empty inread array
+    if inread_counts is None:
+        inread_counts = []
+
+    # adjust variables
+    width = 0.9
+    plt.figure(figsize=(20, 8))
+    xm = max([r for r, c in spanning_counts] + [r for r, c in filtered_counts] + [r for r, c in inread_counts] + [MAX_REPETITIONS])
+    dist = [0] * (xm + 1)
+
+    # set data
+    for r, c in spanning_counts:
+        dist[r] += c
+    dist_filt = dist.copy()
+    for r, c in filtered_counts:
+        dist_filt[r] += c
+    dist_inread = dist_filt.copy()
+    for r, c in inread_counts:
+        dist_inread[r] += c
+
+    # create barplots
+    rects_inread = [None] * len(dist)
+    if len(inread_counts) > 0:
+        rects_inread = plt.bar(np.arange(xm + 1), dist_inread, width, color='orange', alpha=0.4)
+    rects_filt = plt.bar(np.arange(xm + 1), dist_filt, width, color='lightgrey')
+    rects = plt.bar(np.arange(xm + 1), dist, width)
+    plt.xticks(np.arange(1, xm + 1))
+    plt.ylabel('Counts')
+    plt.xlabel('STR repetitions')
+    _, max_y = plt.ylim()
+    plt.xlim((0, xm + 1))
+
+    # label numbers
+    for rect, rect_filt, rect_inread in zip(rects, rects_filt, rects_inread):
+        if rect.get_height() > 0:
+            plt.text(rect.get_x() + rect.get_width() / 2., rect.get_height() + max_y / 100.0, '%d' % int(rect.get_height()), ha='center', va='bottom')
+        if rect_filt.get_height() != rect.get_height():
+            plt.text(rect_filt.get_x() + rect_filt.get_width() / 2., rect_filt.get_height() + max_y / 100.0,
+                     '%d' % int(rect_filt.get_height() - rect.get_height()), ha='center', va='bottom', color='grey')
+        if rect_inread is not None and rect_inread.get_height() != rect_filt.get_height():
+            plt.text(rect_inread.get_x() + rect_inread.get_width() / 2., rect_inread.get_height() + max_y / 100.0,
+                     '%d' % int(rect_inread.get_height() - rect_filt.get_height()), ha='center', va='bottom', color='orange')
+
+    # output it
+    plt.savefig(out_prefix + '.pdf')
+    plt.savefig(out_prefix + '.png')
+    plt.close()
+
+    # ----- PLOTLY HISTOGRAM -----
+    dist_text = ['' if d == 0 else str(d) for d in dist]
+    dist_filt_text = ['' if df - d == 0 else str(df - d) for df, d in zip(dist_filt, dist)]
+    dist_inread_text = ['' if di - df == 0 else str(di - df) for di, df in zip(dist_inread, dist_filt)]
+
+    fig = go.Figure()
+    if len(inread_counts) > 0:
+        fig.add_bar(y=dist_inread, text=dist_inread_text, name='Inread reads', marker_color='#FF6600', textfont_color='#FF6600')
+    fig.add_bar(y=dist_filt, text=dist_filt_text, name='Partial reads', marker_color='#CCCCCC', textfont_color='#CCCCCC')
+    fig.add_bar(y=dist, text=dist_text, name='Full reads', marker_color='#636EFA', textfont_color='#636EFA')
+
+    fig.update_traces(textposition='outside', texttemplate='%{text}', hovertemplate='%{text}', textfont_size=7)
+    fig.update_layout(width=800, height=450,
+                      title='Histogram of repetitions',
+                      hovermode='x',
+                      yaxis_fixedrange=True,
+                      template='simple_white',
+                      barmode='overlay')
+    fig.update_yaxes(title_text='Read counts')
+    fig.update_xaxes(title_text='STR repetitions', tickmode='array',
+                     tickvals=list(range(5, len(dist), 5)),
+                     ticktext=list(range(5, len(dist), 5)))
+
+    with open(out_prefix + '.json', 'w') as f:
+        f.write(fig.to_json())
+
+    # fig.write_image(out_prefix + '_plotly.pdf')
+
 
 html_template = """
 <!DOCTYPE html>
