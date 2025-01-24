@@ -7,7 +7,7 @@ with open(input) as f:
 
 output = []
 for line in lines:
-    disease_id, hgvs, desc = line.split("\t")
+    disease_id, hgvs = line.split("\t")
     hgvs_rec = HGVSRecord(hgvs)
 
     chrom = hgvs_rec.chrom

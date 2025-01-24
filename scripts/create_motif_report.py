@@ -139,13 +139,14 @@ def main(args: argparse.Namespace) -> None:
         loci_data[locus_id] = (locus_id, sequence, bg_num, heatmap_data, histogram_data, rows)
 
     print("Aggregates done. Creating HTMLs.")
-    script_dir = os.path.dirname(__file__)
-    os.makedirs(f"{args.output_dir}/aggregate", exist_ok=True)
+    template_dir = os.path.dirname(__file__) + "/../templates"
+    os.makedirs(f"{args.output_dir}", exist_ok=True)
     for locus_id, data in loci_data.items():
-        env = Environment(loader=FileSystemLoader([script_dir]), trim_blocks=True, lstrip_blocks=True)
-        template = env.get_template("./templates/population_report.html")
+        env = Environment(loader=FileSystemLoader([template_dir]), trim_blocks=True, lstrip_blocks=True)
+        template = env.get_template("population_report.html")
         output = template.render(main_data=data)
-        with open(f"{args.output_dir}/aggregate/{locus_id}.html", "w") as f:
+        print(f"Writting {args.output_dir}/{locus_id}.html")
+        with open(f"{args.output_dir}/{locus_id}.html", "w") as f:
             f.write(output)
 
 

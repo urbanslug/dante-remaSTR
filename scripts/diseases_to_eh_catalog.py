@@ -43,7 +43,7 @@ def get_json_obj(data: tuple[str, list[tuple[str, int]], tuple[str, int, int]]) 
 
 
 def parse_line(line: str) -> tuple[str, list[tuple[str, int]], tuple[str, int, int]]:  # noqa: E501
-    locus_id, hgvs, _ = line.split("\t")
+    locus_id, hgvs = line.split("\t")
     hgvs_rec = HGVSRecord(hgvs)
     locus_position = (hgvs_rec.chrom, hgvs_rec.start, hgvs_rec.end)
     return locus_id, hgvs_rec.units, locus_position
