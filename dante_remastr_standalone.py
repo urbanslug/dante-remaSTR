@@ -255,39 +255,55 @@ def write_alignment_html(
     return
 
 
+def get_phased_sequence(motif: Motif, genotype: list[GenotypeInfo], phasing: list[None | tuple]) -> dict:
+    h1 = []
+    h2 = []
+    nomenclatures = []
+    for gt in genotype:
+        # (mod_num, spanning, flanking, filtered, predicted, conf, lh_array, model)
+        (mod_num, spanning, _, _, predicted, _, _, _) = gt
+        h1.append(str(predicted[0]))
+        h2.append(str(predicted[1]))
+
+        nomenclature = list(map(nom_count_to_triple, generate_nomenclatures(spanning, mod_num, None, motif)))
+        nomenclatures.append(nomenclature)
+
+    hp1 = []
+    hp2 = []
+    for ph in phasing:
+        if ph is None:
+            continue
+
+        # (mod_num, 2good, 1good, 0good, phase, supp_reads, prev_mod_num)
+        (_, _, _, _, phase, _, _) = ph
+        hp1.append(phase[0])
+        hp2.append(phase[1])
+
+    h1_full, h2_full, err1, err2 = phase_full_locus(h1, h2, hp1, hp2)
+    aug_nom1, nomenclatures, errs1 = augment_nomenclature(motif, h1_full, nomenclatures, 0.8)
+    aug_nom2, nomenclatures, errs2 = augment_nomenclature(motif, h2_full, nomenclatures, 0.8)
+    result = {
+        "motif_name": motif.name,
+        "nomenclature1": aug_nom1,
+        "errors1": err1 + errs1,
+        "nomenclature2": aug_nom2,
+        "errors2": err2 + errs2
+    }
+    return result
+
+
 def write_phased_predictions(
     all_motifs: list[Motif], all_genotypes: list[list[GenotypeInfo]], all_haplotypes: list[list[None | tuple]], output: str
 ) -> None:
-    result = []
+    tmp2 = []
     for (motif, genotype, phasing) in zip(all_motifs, all_genotypes, all_haplotypes):
-        h1 = []
-        h2 = []
-        nomenclatures = []
-        for gt in genotype:
-            # (mod_num, spanning, flanking, filtered, predicted, conf, lh_array, model)
-            (mod_num, spanning, _, _, predicted, _, _, _) = gt
-            h1.append(str(predicted[0]))
-            h2.append(str(predicted[1]))
+        tmp = get_phased_sequence(motif, genotype, phasing)
+        tmp2.append(tmp)
 
-            nomenclature = list(map(nom_count_to_triple, generate_nomenclatures(spanning, mod_num, None, motif)))
-            nomenclatures.append(nomenclature)
-
-        hp1 = []
-        hp2 = []
-        for ph in phasing:
-            if ph is None:
-                continue
-
-            # (mod_num, 2good, 1good, 0good, phase, supp_reads, prev_mod_num)
-            (_, _, _, _, phase, _, _) = ph
-            hp1.append(phase[0])
-            hp2.append(phase[1])
-
-        h1_full, h2_full, err1, err2 = phase_full_locus(h1, h2, hp1, hp2)
-        aug_nom1, nomenclatures, errs1 = augment_nomenclature(motif, h1_full, nomenclatures, 0.8)
-        aug_nom2, nomenclatures, errs2 = augment_nomenclature(motif, h2_full, nomenclatures, 0.8)
-        result.append(f"{motif.name}\t{aug_nom1}\t{err1 + errs1}\n")
-        result.append(f"{motif.name}\t{aug_nom2}\t{err2 + errs2}\n")
+    result = []
+    for values in tmp2:
+        result.append(f"{values['motif_name']}\t{values['nomenclature1']}\t{values['errors1']}\n")
+        result.append(f"{values['motif_name']}\t{values['nomenclature2']}\t{values['errors2']}\n")
 
     with open(output, "w") as f:
         f.writelines(result)
@@ -507,8 +523,10 @@ def write_report(
             locus_data2 = generate_locus_data2(ph, motif, seq, post_filter, motif_dir, nomenclature_limit)
             m_list2.append(locus_data2)
 
+        phased_seqs = get_phased_sequence(motif, genotype, phasing)
+
         tabs.append((motif_id, nomenclatures, m_list1, m_list2))
-        tabs2.append((motif_id, motif_stat, nomenclatures, m_list1, m_list2))
+        tabs2.append((motif_id, motif_stat, phased_seqs, nomenclatures, m_list1, m_list2))
 
     sample = os.path.basename(os.path.normpath(output_dir))
     version = VERSION
@@ -545,9 +563,10 @@ def store_json(old_data: tuple, output_file: str):
         motif = {}
         motif["motif_id"] = old_motif[0]
         motif["motif_stats"] = old_motif[1]
+        motif["phased_seqs"] = old_motif[2]
 
         nomenclatures = []
-        for old_nomenclature in old_motif[2]:
+        for old_nomenclature in old_motif[3]:
             nomenclature = {}
             nomenclature["count"] = old_nomenclature[0]
             nomenclature["location"] = old_nomenclature[1]
@@ -557,7 +576,7 @@ def store_json(old_data: tuple, output_file: str):
 
         # (motif_id, motif_stat, nomenclatures, m_list1, m_list2)
         modules = []
-        for old_module in old_motif[3]:
+        for old_module in old_motif[4]:
             module = {}
             module["module_id"] = old_module[0]
             module["sequence"] = old_module[1]
@@ -582,7 +601,7 @@ def store_json(old_data: tuple, output_file: str):
         motif["modules"] = modules
 
         modules = []
-        for old_phasing in old_motif[4]:
+        for old_phasing in old_motif[5]:
             module = {}
             module["phasing_id"] = old_phasing[0]
             module["sequence"] = old_phasing[1]
