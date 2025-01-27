@@ -12,6 +12,87 @@
 </head>
 
 <body>
+<h1>ALS</h1>
+<div>
+Sequence:
+{{ data["sequence"][0] }}
+{% for module in data["sequence"][1:-1] %} <a href="TODO">{{ module }}</a> {% endfor %}
+{{ data["sequence"][-1] }}
+
+<table class="tg" id="main_table" width="100%">
+    <thead>
+        <tr>
+            <th>Sample</th>
+            <th>Nomenclature_1</th>
+            <th>Warnings_1</th>
+            <th>Nomenclature_2</th>
+            <th>Warnings_2</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in data["main_table"] %}
+        <tr>
+            <td>{{ row["sample"] }}</td>
+            <td>{{ row["nomenclature1"] }}</td>
+            <td>{{ row["warnings1"] }}</td>
+            <td>{{ row["nomenclature2"] }}</td>
+            <td>{{ row["warnings2"] }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<script>
+$(document).ready( function() {
+    $('#main_table').DataTable({scrollX: true});
+} );
+</script>
+
+
+<div id="histogram"></div>
+<script>
+{
+    let title = "Histogram";
+    let destination = "histogram"
+
+    // let tickvals = [0, 1, 2];
+    // let x = [2, 4, 5];
+    // let ticktext = ["tmp", "tmp2", "tmp3"];
+
+    let tickvals = {{ data["main_histogram"]["tickvals"] }};
+    let x = {{ data["main_histogram"]["x"] }};
+    let ticktext = {{ data["main_histogram"]["ticktext"] }};
+
+    let hist_data = {
+        "data":[{
+            "x": x,
+            "name":"Motif",
+            "marker":{"color":"#636EFA"},
+            "textfont":{"color":"#636EFA","size":7},
+            "type":"bar",
+            "orientation": "h",
+            "hover":"true"
+        }],
+        "layout":{
+            "title":{"text": title},
+            "yaxis":{
+                "title":{"text":"Prediction"},
+                "tickmode":"array",
+                "tickvals": tickvals,
+                "ticktext": ticktext,
+                "automargin": true
+            },
+            "xaxis": {"fixedrange":true,"title":{"text":"Count"}},
+            "legend": {"x": 0.85, "y": 0.85 },
+            "barmode":"stack",
+            "hovermode":"y",
+        }
+    };
+
+    Plotly.newPlot(destination, hist_data);
+}
+</script>
+</div>
 
 </body>
 </html>
