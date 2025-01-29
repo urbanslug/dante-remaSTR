@@ -22,21 +22,25 @@ Sequence:
 <table class="tg" id="main_table" width="100%">
     <thead>
         <tr>
-            <th>Sample</th>
-            <th>Nomenclature_1</th>
-            <th>Warnings_1</th>
-            <th>Nomenclature_2</th>
-            <th>Warnings_2</th>
+            <th rowspan="2">Sample</th>
+            <th colspan="{{ data['sequence'][1:-1]|length }}">Nomenclature_1</th>
+            <th rowspan="2">Warnings_1</th>
+            <th colspan="{{ data['sequence'][1:-1]|length }}">Nomenclature_2</th>
+            <th rowspan="2">Warnings_2</th>
+        </tr>
+        <tr>
+            {% for _ in data["sequence"][1:-1] %} <th>part{{ loop.index }}</th> {% endfor %}
+            {% for _ in data["sequence"][1:-1] %} <th>part{{ loop.index }}</th> {% endfor %}
         </tr>
     </thead>
     <tbody>
         {% for row in data["main_table"] %}
         <tr>
             <td>{{ row["sample"] }}</td>
-            <td>{{ row["nomenclature1"] }}</td>
-            <td>{{ row["warnings1"] }}</td>
-            <td>{{ row["nomenclature2"] }}</td>
-            <td>{{ row["warnings2"] }}</td>
+            {% for x in row["nomenclature1"] %} <td>{{ x }}</td> {% endfor %}
+            <td>{% for x in row["warnings1"] %} {{ x }}<br> {% endfor %}</td>
+            {% for x in row["nomenclature2"] %} <td>{{ x }}</td> {% endfor %}
+            <td>{% for x in row["warnings2"] %} {{ x }}<br> {% endfor %}</td>
         </tr>
         {% endfor %}
     </tbody>
@@ -86,6 +90,7 @@ $(document).ready( function() {
             "legend": {"x": 0.85, "y": 0.85 },
             "barmode":"stack",
             "hovermode":"y",
+            "height": 180 + 30 * x.length
         }
     };
 

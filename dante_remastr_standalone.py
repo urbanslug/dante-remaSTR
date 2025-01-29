@@ -280,13 +280,15 @@ def get_phased_sequence(motif: Motif, genotype: list[GenotypeInfo], phasing: lis
         hp2.append(phase[1])
 
     h1_full, h2_full, err1, err2 = phase_full_locus(h1, h2, hp1, hp2)
-    aug_nom1, nomenclatures, errs1 = augment_nomenclature(motif, h1_full, nomenclatures, 0.8)
-    aug_nom2, nomenclatures, errs2 = augment_nomenclature(motif, h2_full, nomenclatures, 0.8)
+    aug_nom1, nom1_len, nomenclatures, errs1 = augment_nomenclature(motif, h1_full, nomenclatures, 0.8)
+    aug_nom2, nom2_len, nomenclatures, errs2 = augment_nomenclature(motif, h2_full, nomenclatures, 0.8)
     result = {
         "motif_name": motif.name,
         "nomenclature1": aug_nom1,
+        "nomenclature1_len": nom1_len,
         "errors1": err1 + errs1,
         "nomenclature2": aug_nom2,
+        "nomenclature2_len": nom2_len,
         "errors2": err2 + errs2
     }
     return result
@@ -302,8 +304,8 @@ def write_phased_predictions(
 
     result = []
     for values in tmp2:
-        result.append(f"{values['motif_name']}\t{values['nomenclature1']}\t{values['errors1']}\n")
-        result.append(f"{values['motif_name']}\t{values['nomenclature2']}\t{values['errors2']}\n")
+        result.append(f"{values['motif_name']}\t{''.join(values['nomenclature1'])}\t{values['errors1']}\n")
+        result.append(f"{values['motif_name']}\t{''.join(values['nomenclature2'])}\t{values['errors2']}\n")
 
     with open(output, "w") as f:
         f.writelines(result)
@@ -311,7 +313,7 @@ def write_phased_predictions(
 
 def augment_nomenclature(
     motif: Motif, hapl: list[str], nomenclatures: list[list[tuple[int, int, str]]], assignment_factor: float
-) -> tuple[str, list[list[tuple[int, int, str]]], list[str]]:
+) -> tuple[list[str], int, list[list[tuple[int, int, str]]], list[str]]:
 
     errors = set()
     result = []
@@ -339,7 +341,22 @@ def augment_nomenclature(
             result.append(f"err[{count}]")
 
     aug_nom = motif.augmented_nomenclature(result)
-    return aug_nom, nomenclatures, list(errors)
+    nom_len = sum((hgvs_to_len(aug_nom[i]) for i in range(len(aug_nom))))
+    return aug_nom, nom_len, nomenclatures, list(errors)
+
+
+def hgvs_to_len(hgvs: str) -> int:
+    "Used for sorting based on nomenclature length."
+    length = 0
+    for seq, num in re.findall(r'([A-Z]+)\[([0-9BE]+)\]', hgvs):
+        if num == "B":
+            length += -1000
+        elif num == "E":
+            length += 1000
+        else:
+            length += len(seq) * int(num)
+
+    return length
 
 
 def nom_count_to_triple(nomenclature: tuple[int, str, list[str]]) -> tuple[int, int, str]:
@@ -810,7 +827,7 @@ class Motif:
         """
         return self.name == obj.name
 
-    def augmented_nomenclature(self, rep_counts: list[str]) -> str:
+    def augmented_nomenclature(self, rep_counts: list[str]) -> list[str]:
         modules = []
         i = 0
         for seq, num in self.modules[1:-1]:
@@ -824,7 +841,7 @@ class Motif:
                     modules.append(rep_counts[i])
                 i += 1
         assert i == len(rep_counts), "Invalid augmentation."
-        return f'{self.chrom}:g.{self.start}_{self.end}' + "".join(modules)
+        return modules
 
     def modules_str(self, include_flanks: bool = False) -> str:
         """

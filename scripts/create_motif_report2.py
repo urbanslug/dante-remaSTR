@@ -67,14 +67,22 @@ def convert_modules(modules: list) -> list[str]:
 
 
 def create_main_histrogram(df: pd.DataFrame) -> dict:
-    counter = Counter(list(df["nomenclature1"]) + list(df["nomenclature2"]))
+    df["nomenclature1_join"] = df["nomenclature1"].apply(lambda x: "".join(x))
+    nom1 = list(df.loc[:, ["nomenclature1_len", "nomenclature1_join"]]
+                  .itertuples(index=False, name=None))
 
-    data = [(v, k, i) for i, (k, v) in enumerate(counter.items())]
+    df["nomenclature2_join"] = df["nomenclature2"].apply(lambda x: "".join(x))
+    nom2 = list(df.loc[:, ["nomenclature2_len", "nomenclature2_join"]]
+                  .itertuples(index=False, name=None))
+
+    counter = Counter(nom1 + nom2)
+
+    data = [(length, modules, count) for (length, modules), count in counter.items()]
+
     data.sort()
-
     result = {
-        "tickvals": [x[2] for x in data],
-        "x": [x[0] for x in data],
+        "tickvals": list(range(len(data))),
+        "x": [x[2] for x in data],
         "ticktext": [x[1] for x in data]
     }
     return result
@@ -99,13 +107,15 @@ def main() -> None:
         for sample, tmp_data in v:
             data_tmp1.append((
                 sample,
-                tmp_data["phased_seqs"]["nomenclature1"],
+                tuple(tmp_data["phased_seqs"]["nomenclature1"]),
+                tmp_data["phased_seqs"]["nomenclature1_len"],
                 tmp_data["phased_seqs"]["errors1"],
-                tmp_data["phased_seqs"]["nomenclature2"],
+                tuple(tmp_data["phased_seqs"]["nomenclature2"]),
+                tmp_data["phased_seqs"]["nomenclature2_len"],
                 tmp_data["phased_seqs"]["errors2"]
             ))
 
-        columns = ["sample", "nomenclature1", "warnings1", "nomenclature2", "warnings2"]
+        columns = ["sample", "nomenclature1", "nomenclature1_len", "warnings1", "nomenclature2", "nomenclature2_len", "warnings2"]
         df = pd.DataFrame.from_records(data_tmp1, columns=columns)
         data["main_table"] = json.loads(df.to_json(orient="records"))
         # print(df.to_json(orient="records", indent=4))
