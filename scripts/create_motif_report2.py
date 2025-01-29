@@ -66,26 +66,73 @@ def convert_modules(modules: list) -> list[str]:
     return [f"{seq}[{n}]" for seq, n in modules]
 
 
-def create_main_histrogram(df: pd.DataFrame) -> dict:
-    df["nomenclature1_join"] = df["nomenclature1"].apply(lambda x: "".join(x))
-    nom1 = list(df.loc[:, ["nomenclature1_len", "nomenclature1_join"]]
-                  .itertuples(index=False, name=None))
+def create_ticks(df: pd.DataFrame) -> list[str]:
+    nom1 = set(df.loc[:, ["nomenclature1_len", "nomenclature1_join"]]
+                 .itertuples(index=False, name=None))
 
-    df["nomenclature2_join"] = df["nomenclature2"].apply(lambda x: "".join(x))
-    nom2 = list(df.loc[:, ["nomenclature2_len", "nomenclature2_join"]]
-                  .itertuples(index=False, name=None))
+    nom2 = set(df.loc[:, ["nomenclature2_len", "nomenclature2_join"]]
+                 .itertuples(index=False, name=None))
 
-    counter = Counter(nom1 + nom2)
-
-    data = [(length, modules, count) for (length, modules), count in counter.items()]
-
+    data = list(nom1.union(nom2))
     data.sort()
+    ticktext = [x[1] for x in data]
+    return ticktext
+
+
+def create_main_histrogram(df: pd.DataFrame, ticks: list[str]) -> dict:
+    data = [0] * len(ticks)
+    for _, row in df.iterrows():
+        idx = ticks.index(row["nomenclature1_join"])
+        data[idx] += 1
+        idx = ticks.index(row["nomenclature2_join"])
+        data[idx] += 1
+
     result = {
-        "tickvals": list(range(len(data))),
-        "x": [x[2] for x in data],
-        "ticktext": [x[1] for x in data]
+        "tickvals": list(range(len(ticks))),
+        "ticktext": ticks,
+        "x": data
     }
     return result
+
+
+def create_main_heatmap(df: pd.DataFrame, ticks: list[str]) -> dict:
+    data: list[list[int | None]] = [[0 for _ in range(len(ticks))] for _ in range(len(ticks))]
+    for _, row in df.iterrows():
+        idx1 = ticks.index(row["nomenclature1_join"])
+        idx2 = ticks.index(row["nomenclature2_join"])
+        idx1, idx2 = min(idx1, idx2), max(idx1, idx2)
+        data[idx1][idx2] += 1  # type: ignore
+
+    for i in range(len(ticks)):
+        for j in range(i + 1, len(ticks)):
+            data[j][i] = None
+
+    result = {
+        "tickvals": list(range(len(ticks))),
+        "ticktext": ticks,
+        "z": data
+    }
+    return result
+
+
+def generate_df(v):
+    data_tmp1 = []
+    for sample, tmp_data in v:
+        data_tmp1.append((
+            sample,
+            tuple(tmp_data["phased_seqs"]["nomenclature1"]),
+            tmp_data["phased_seqs"]["nomenclature1_len"],
+            tmp_data["phased_seqs"]["errors1"],
+            tuple(tmp_data["phased_seqs"]["nomenclature2"]),
+            tmp_data["phased_seqs"]["nomenclature2_len"],
+            tmp_data["phased_seqs"]["errors2"]
+        ))
+
+    columns = ["sample", "nomenclature1", "nomenclature1_len", "warnings1", "nomenclature2", "nomenclature2_len", "warnings2"]
+    df = pd.DataFrame.from_records(data_tmp1, columns=columns)
+    df["nomenclature1_join"] = df["nomenclature1"].apply(lambda x: "".join(x))
+    df["nomenclature2_join"] = df["nomenclature2"].apply(lambda x: "".join(x))
+    return df
 
 
 def main() -> None:
@@ -98,29 +145,16 @@ def main() -> None:
             continue
 
         print(f"Creating report fo motif {motif}")
-        # print(json.dumps(v, indent=4))
+
+        sequence = convert_modules(v[0][1]["motif_stats"]["modules"])
+        df = generate_df(v)
+        ticks = create_ticks(df)
+
         data: dict[str, Any] = {}
-
-        data["sequence"] = convert_modules(v[0][1]["motif_stats"]["modules"])
-        # create main table
-        data_tmp1 = []
-        for sample, tmp_data in v:
-            data_tmp1.append((
-                sample,
-                tuple(tmp_data["phased_seqs"]["nomenclature1"]),
-                tmp_data["phased_seqs"]["nomenclature1_len"],
-                tmp_data["phased_seqs"]["errors1"],
-                tuple(tmp_data["phased_seqs"]["nomenclature2"]),
-                tmp_data["phased_seqs"]["nomenclature2_len"],
-                tmp_data["phased_seqs"]["errors2"]
-            ))
-
-        columns = ["sample", "nomenclature1", "nomenclature1_len", "warnings1", "nomenclature2", "nomenclature2_len", "warnings2"]
-        df = pd.DataFrame.from_records(data_tmp1, columns=columns)
+        data["sequence"] = sequence
         data["main_table"] = json.loads(df.to_json(orient="records"))
-        # print(df.to_json(orient="records", indent=4))
-
-        data["main_histogram"] = create_main_histrogram(df)
+        data["main_histogram"] = create_main_histrogram(df, ticks)
+        data["main_heatmap"] = create_main_heatmap(df, ticks)
         # print(json.dumps(tmp_dict, indent=4))
 
         template_dir = os.path.dirname(__file__) + "/../templates"

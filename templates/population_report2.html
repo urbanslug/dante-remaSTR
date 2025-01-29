@@ -52,8 +52,7 @@ $(document).ready( function() {
 } );
 </script>
 
-
-<div id="histogram"></div>
+<div id="histogram" style="width: 950px; margin: auto;"></div>
 <script>
 {
     let title = "Histogram";
@@ -97,6 +96,62 @@ $(document).ready( function() {
     Plotly.newPlot(destination, hist_data);
 }
 </script>
+
+<div id="heatmap" style="width: 950px; margin: auto;"></div>
+<script>
+{
+    // let z = [
+    //   [null, 0   , 35  , 119 , 3   ],
+    //   [null, null, 0   , 237 , 3   ],
+    //   [null, null, null, 0   , 2   ],
+    //   [null, null, null, null, 0   ],
+    //   [null, null, null, null, null]
+    // ];
+    // let tickvals = [0, 1, 2, 3, 4, 5];
+    // let ticktext = ['CGG[7]', 'CGG[3]CTG[1]CGG[4]', 'CGG[5]TGG[1]CGG[2]', 'CGG[8]', 'CTG[1]CGG[7]'];
+
+    let z = {{ data["main_heatmap"]["z"]|replace("None", "null") }}
+    let ticktext = {{ data["main_heatmap"]["ticktext"] }};
+    let tickvals = {{ data["main_heatmap"]["tickvals"] }};
+
+    let heatmap_data = {
+        "data": [{
+            "z": z,
+            "text": z,
+            "name": "Prediction heatmap",
+            "colorscale": [
+                [0.0, "rgb(255, 255, 255)"], [0.01, "rgb(255, 210, 0)"], [0.1, "rgb(255, 140, 0)"],
+                [0.4, "rgb(255, 70, 0)"], [0.7, "rgb(230, 0  , 0)"], [1.0, "rgb(100, 0  , 0)"]
+            ],
+            "hovertemplate":"Allele 2: %{x}<br>Allele 1: %{y}<br>Count: %{z}",
+            "texttemplate": "%{text}",
+            "type": "heatmap"
+        }],
+        "layout": {
+            "title":{"text": "Heatmap"},
+            "xaxis": {
+                "tickvals": tickvals,
+                "ticktext": ticktext,
+                "title": { "text": "Allele 2" }, "showgrid": false, "showline": false, "zeroline": false,
+                "automargin": true,
+                "tickangle": -90,
+            },
+            "yaxis": {
+                "tickvals": tickvals,
+                "ticktext": ticktext,
+                "title": { "text": "Allele 1" }, "showgrid": false, "showline": false, "zeroline": false,
+                "scaleanchor": "x",
+                "automargin": true,
+            },
+            "width": 950,
+            "height": 950,
+        },
+    };
+    Plotly.newPlot('heatmap', heatmap_data);
+}
+
+</script>
+
 </div>
 
 </body>
