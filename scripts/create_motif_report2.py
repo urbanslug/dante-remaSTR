@@ -135,33 +135,139 @@ def generate_df(v):
     return df
 
 
+def function2(allele_pairs: list[tuple[int | str, int | str]], max_allele: int) -> dict:
+    # z = [
+    #     [7   , 0   , 0   , 0   , 0   , 1   , 0   , 0],
+    #     [None, 0   , 0   , 0   , 0   , 1   , 0   , 0],
+    #     [None, None, 0   , 0   , 0   , 0   , 0   , 0],
+    #     [None, None, None, 0   , 35  , 119 , 3   , 3],
+    #     [None, None, None, None, 0   , 237 , 3   , 9],
+    #     [None, None, None, None, None, 0   , 2   , 0],
+    #     [None, None, None, None, None, None, 0   , 1],
+    #     [None, None, None, None, None, None, None, 0]
+    # ]
+    # tickvals = [0, 1, 2, 3, 4, 5, 6, 7]
+    # ticktext = ["B", 0, 1, 2, 3, 4, 5, "E"]
+    # xlim = 6.5
+    z, tickvals, ticktext, xlim = collect_heatmap_data(max_allele, allele_pairs)
+    result = {
+        "z": z,
+        "tickvals": tickvals,
+        "ticktext": ticktext,
+        "xlim": xlim
+    }
+    return result
+
+
+def collect_heatmap_data(max_allele: int, pairs: list[tuple[int | str, int | str]]) -> HeatmapData:
+    z: list[list[int]] = [[0] * (max_allele + 1 + 2) for _ in range(max_allele + 1 + 2)]
+
+    for pair in pairs:
+        a1 = allele_num(pair[0])
+        a2 = allele_num(pair[1])
+
+        if a1 >= 0 and a2 >= 0:
+            z[a1 + 1][a2 + 1] += 1
+        else:
+            if a1 == -1 and a2 == -1:
+                z[0][0] += 1
+                continue
+            if a1 == -1:
+                z[0][a2 + 1] += 1
+                continue
+            if a1 == -3 and a2 == -3:
+                z[max_allele + 2][max_allele + 2] += 1
+                continue
+            if a2 == -3:
+                z[a1 + 1][max_allele + 2] += 1
+                continue
+            raise ValueError(f"{pair} has unexpected value.")
+
+    z_new: list[list[int | None]] = z  # type: ignore
+    for i in range(len(z)):
+        for j in range(i):
+            assert z_new[i][j] == 0, f"z[{i}][{j}] is non-zero"
+            z_new[i][j] = None
+    tickvals = list(range(max_allele + 3))
+    ticktext = ["B"] + list(range(max_allele + 1)) + ["E"]
+    xlim = max_allele + 1.5
+
+    heatmap_data = (z_new, tickvals, ticktext, xlim)
+    return heatmap_data
+
+
+def function3(allele_pairs: list[tuple[int | str, int | str]], max_allele: int) -> dict:
+    ticktext = ["B"] + list(range(max_allele + 1)) + ["E"]
+    tickvals = list(range(len(ticktext)))
+    z = [0] * len(ticktext)
+    z = collect_alleles(z, allele_pairs, 0)
+    z = collect_alleles(z, allele_pairs, 1)
+
+    result = {
+        "z": z,
+        "tickvals": tickvals,
+        "ticktext": ticktext,
+    }
+    return result
+
+
+def collect_alleles(hist_data: list[int], allele_pairs: list[tuple[int | str, int | str]], a_idx: int) -> list[int]:
+    for pair in allele_pairs:
+        allele: int | str = pair[a_idx]
+        if allele == 'E':
+            hist_data[-1] += 1
+            continue
+        if allele == 'B':
+            hist_data[0] += 1
+            continue
+        if allele == 'X':
+            raise NotImplementedError
+
+        allele = int(allele)
+        hist_data[allele + 1] += 1
+    return hist_data
+
+
 def function1(v, i) -> dict:
+    max_allele = MIN_GS
+    allele_pairs = []
     rows = []
     for sample, data in v:
-        # print(sample)
-        # print(data["modules"][i].keys())
-        # print(len(data["modules"][i]["graph_data"][0]))
-        # print(data["modules"][i]["allele_1"])
-        # print(data["modules"][i]["graph_data"][0])
+        a1 = data["modules"][i]["allele_1"][0]
+        a2 = data["modules"][i]["allele_2"][0]
         rows.append({
             "sample": sample,
-            "a1_pred": data["modules"][i]["allele_1"][0],
-            "a1_conf": data["modules"][i]["allele_1"][1],
-            "a2_pred": data["modules"][i]["allele_2"][0],
-            "a2_conf": data["modules"][i]["allele_2"][1],
+            "a1_pred": a1, "a1_conf": data["modules"][i]["allele_1"][1],
+            "a2_pred": a2, "a2_conf": data["modules"][i]["allele_2"][1],
             "conf": data["modules"][i]["stats"][0],
             "spanning_num": data["modules"][i]["reads_spanning"],
             "flanking_num": data["modules"][i]["reads_flanking"],
             "histogram_data": data["modules"][i]["graph_data"][0]
         })
+        max_allele = max(max_allele, allele_num(a1))
+        max_allele = max(max_allele, allele_num(a2))
+        allele_pairs.append((a1, a2))
+
+    heatmap_data = function2(allele_pairs, max_allele)
+    histogram_data = function3(allele_pairs, max_allele)
 
     module = {
         "table": rows,
-        "histogram": "",
-        "heatmap": ""
+        "heatmap": heatmap_data,
+        "histogram": histogram_data
     }
 
     return module
+
+
+def allele_num(x: int | str) -> int:
+    if x == "E":
+        return -3
+    if x == "X":
+        return -2
+    if x == "B":
+        return -1
+    return x  # type: ignore
 
 
 def main() -> None:
@@ -170,10 +276,11 @@ def main() -> None:
 
     print("Aggregates done. Creating HTMLs.")
     for motif, v in motif_dict.items():
-        if motif != "ALS" and motif != "DM2":
-            continue
+        # if motif != "ALS" and motif != "DM2":
+        #     continue
 
-        print(f"Creating report fo motif {motif}")
+        n_modules = len(v[0][1]["modules"])
+        print(f"Creating report fo motif {motif} ({n_modules=}). Writting {args.output_dir}/{motif}.html.")
 
         sequence = convert_modules(v[0][1]["motif_stats"]["modules"])
         df = generate_df(v)
@@ -185,8 +292,6 @@ def main() -> None:
         data["main_histogram"] = create_main_histrogram(df, ticks)
         data["main_heatmap"] = create_main_heatmap(df, ticks)
 
-        n_modules = len(v[0][1]["modules"])
-        print(f"{n_modules=}")
         data["modules"] = [function1(v, i) for i in range(n_modules)]
         # print(json.dumps(tmp_dict, indent=4))
 
@@ -195,10 +300,8 @@ def main() -> None:
         env = Environment(loader=FileSystemLoader([template_dir]), trim_blocks=True, lstrip_blocks=True)
         template = env.get_template("population_report2.html")
         output = template.render(data=data)
-        print(f"Writting {args.output_dir}/{motif}.html")
         with open(f"{args.output_dir}/{motif}.html", "w") as f:
             f.write(output)
-        # exit()
 
     copy_includes(args.output_dir)
 

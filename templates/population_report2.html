@@ -201,8 +201,103 @@ $(document).ready( function() {
 } );
 </script>
 
-histogram
-heatmap
+<h3>Heatmap</h3>
+<div id="heatmap_mod_{{ mod_idx }}"></div>
+<script>
+{
+    let z = {{ module["heatmap"]["z"]|replace("None", "null") }}
+    let tickvals = {{ module["heatmap"]["tickvals"] }};
+    let ticktext = {{ module["heatmap"]["ticktext"] }};
+    let xlim = {{ module["heatmap"]["xlim"] }};
+
+    let heatmap_data = {
+        "data": [{
+            "z": z,
+            "text": z,
+            "name": "Prediction heatmap",
+            "colorscale": [
+                [0.0, "rgb(255, 255, 255)"], [0.01, "rgb(255, 210, 0)"], [0.1, "rgb(255, 140, 0)"],
+                [0.4, "rgb(255, 70, 0)"], [0.7, "rgb(230, 0  , 0)"], [1.0, "rgb(100, 0  , 0)"]
+            ],
+            "hovertemplate":" %{yaxis.title.text}: %{y} <br> %{xaxis.title.text}: %{x} <br> Count: %{text}",
+            "texttemplate": "%{text}",
+            "type": "heatmap"
+        }],
+        "layout": {
+            "shapes": [{
+                "x0": xlim, "x1": xlim, "xref": "x",
+                "y0": 0  , "y1": 1  , "yref": "y domain",
+                "line": { "color": "black", "width": 2 }, "opacity": 1, "type": "line",
+            }, {
+                "x0": 0  , "x1": 1  , "xref": "x domain",
+                "y0": 0.5, "y1": 0.5, "yref": "y",
+                "line": { "color": "black", "width": 2 }, "opacity": 1, "type": "line",
+            }],
+            "yaxis": {
+                "tickvals": tickvals,
+                "ticktext": ticktext,
+                "title": { "text": "Allele 1" }, "showgrid": false, "showline": true, "zeroline": false,
+            },
+            "xaxis": {
+                "tickvals": tickvals,
+                "ticktext": ticktext,
+                "title": { "text": "Allele 2" }, "showgrid": false, "showline": true, "zeroline": false,
+            },
+            "width": 750,
+            "height": 750,
+        },
+    };
+    Plotly.newPlot('heatmap_mod_{{ mod_idx }}', heatmap_data);
+}
+</script>
+
+<h3>Histogram</h3>
+<div id="histogram_mod_{{ mod_idx }}"></div>
+<script>
+{
+    let y = {{ module["histogram"]["z"] }};
+    let tickvals = {{ module["histogram"]["tickvals"] }};
+    let ticktext = {{ module["histogram"]["ticktext"] }};
+    let hist_data = {
+        "data":[{
+            "y": y,
+            "name":"Prediction",
+            "marker":{"color":"#636EFA"},
+            "textfont":{"color":"#636EFA","size":7},
+            "type":"bar",
+            "hover":"true"
+        }],
+        "layout":{
+            "title":{"text":"Allele histogram"},
+            "xaxis":{
+                "title":{"text":"Prediction"},
+                "tickmode":"array",
+                "tickvals": tickvals,
+                "ticktext": ticktext
+            },
+            "yaxis": {"fixedrange":true,"title":{"text":"Count"}},
+            "legend": {"x": 0.85, "y": 0.85 },
+            "barmode":"stack",
+            "hovermode":"x",
+        }
+    };
+
+    let updateGraph = () => {
+        hist_data['layout'] = {
+            ...hist_data['layout'],
+            width: (window.innerWidth-50) * 0.6,
+            height: (window.innerWidth-50) * 0.35,
+        };
+        Plotly.react('histogram_mod_{{ mod_idx }}', hist_data);
+    };
+
+    $(document).ready(function() {
+        updateGraph();
+        // $('.motif-hist').bind("content-change", updateGraph);
+        // window.addEventListener('resize', updateGraph, true);
+    });
+}
+</script>
 
 <h3>Per sample histograms</h3>
 <a onclick="document.getElementById('histograms_{{ mod_idx }}').style.display = 'block'" style="text-decoration: underline">open</a>
