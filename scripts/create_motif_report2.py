@@ -135,6 +135,35 @@ def generate_df(v):
     return df
 
 
+def function1(v, i) -> dict:
+    rows = []
+    for sample, data in v:
+        # print(sample)
+        # print(data["modules"][i].keys())
+        # print(len(data["modules"][i]["graph_data"][0]))
+        # print(data["modules"][i]["allele_1"])
+        # print(data["modules"][i]["graph_data"][0])
+        rows.append({
+            "sample": sample,
+            "a1_pred": data["modules"][i]["allele_1"][0],
+            "a1_conf": data["modules"][i]["allele_1"][1],
+            "a2_pred": data["modules"][i]["allele_2"][0],
+            "a2_conf": data["modules"][i]["allele_2"][1],
+            "conf": data["modules"][i]["stats"][0],
+            "spanning_num": data["modules"][i]["reads_spanning"],
+            "flanking_num": data["modules"][i]["reads_flanking"],
+            "histogram_data": data["modules"][i]["graph_data"][0]
+        })
+
+    module = {
+        "table": rows,
+        "histogram": "",
+        "heatmap": ""
+    }
+
+    return module
+
+
 def main() -> None:
     args = load_arguments()
     motif_dict = collect_jsons(args.inputs)
@@ -155,6 +184,10 @@ def main() -> None:
         data["main_table"] = json.loads(df.to_json(orient="records"))
         data["main_histogram"] = create_main_histrogram(df, ticks)
         data["main_heatmap"] = create_main_heatmap(df, ticks)
+
+        n_modules = len(v[0][1]["modules"])
+        print(f"{n_modules=}")
+        data["modules"] = [function1(v, i) for i in range(n_modules)]
         # print(json.dumps(tmp_dict, indent=4))
 
         template_dir = os.path.dirname(__file__) + "/../templates"
@@ -165,6 +198,7 @@ def main() -> None:
         print(f"Writting {args.output_dir}/{motif}.html")
         with open(f"{args.output_dir}/{motif}.html", "w") as f:
             f.write(output)
+        # exit()
 
     copy_includes(args.output_dir)
 

@@ -12,11 +12,11 @@
 </head>
 
 <body>
-<h1>ALS</h1>
+<h1 id="name">ALS</h1>
 <div>
 Sequence:
 {{ data["sequence"][0] }}
-{% for module in data["sequence"][1:-1] %} <a href="TODO">{{ module }}</a> {% endfor %}
+{% for module in data["sequence"][1:-1] %} <a href="#module_{{ loop.index }}">{{ module }}</a> {% endfor %}
 {{ data["sequence"][-1] }}
 
 <table class="tg" id="main_table" width="100%">
@@ -29,8 +29,8 @@ Sequence:
             <th rowspan="2">Warnings_2</th>
         </tr>
         <tr>
-            {% for _ in data["sequence"][1:-1] %} <th>part{{ loop.index }}</th> {% endfor %}
-            {% for _ in data["sequence"][1:-1] %} <th>part{{ loop.index }}</th> {% endfor %}
+            {% for _ in data["sequence"][1:-1] %} <th>module {{ loop.index }}</th> {% endfor %}
+            {% for _ in data["sequence"][1:-1] %} <th>module {{ loop.index }}</th> {% endfor %}
         </tr>
     </thead>
     <tbody>
@@ -151,8 +151,123 @@ $(document).ready( function() {
 }
 
 </script>
-
 </div>
+
+<hr>
+<hr>
+
+{% for module in data["modules"] %}
+<!-- module part -->
+{% set mod_idx = loop.index %}
+<h2 id="module_{{ mod_idx }}">Module {{ mod_idx }}</h2>
+<div>
+<table class="tg" id="table_module_{{ mod_idx }}" width="100%">
+  <thead>
+    <tr>
+      <th rowspan="2">Sample</th>
+      <th colspan="2">Allele 1</th>
+      <th colspan="2">Allele 2</th>
+      <th rowspan="2">Overall<br>confidence</th>
+      <th colspan="2">Reads</th>
+    </tr>
+    <tr>
+      <td>prediction</td>
+      <td>confidence</td>
+      <td>prediction</td>
+      <td>confidence</td>
+      <td>full</td>
+      <td>partial</td>
+    </tr>
+  </thead>
+  <tbody>
+      {% for row in module["table"] %}
+      <tr>
+          <td><a href="#{{ row['sample'] }}_{{ mod_idx }}">{{ row["sample"] }}</a></td>
+          <td>{{ row["a1_pred"] }}</td>
+          <td>{{ row["a1_conf"] }}</td>
+          <td>{{ row["a2_pred"] }}</td>
+          <td>{{ row["a2_conf"] }}</td>
+          <td>{{ row["conf"] }}</td>
+          <td>{{ row["spanning_num"] }}</td>
+          <td>{{ row["flanking_num"] }}</td>
+      </tr>
+      {% endfor %}
+  </tbody>
+</table>
+
+<script>
+$(document).ready( function() {
+    $('#table_module_{{ mod_idx }}').DataTable({scrollX: true});
+} );
+</script>
+
+histogram
+heatmap
+
+<h3>Per sample histograms</h3>
+<a onclick="document.getElementById('histograms_{{ mod_idx }}').style.display = 'block'" style="text-decoration: underline">open</a>
+<a onclick="document.getElementById('histograms_{{ mod_idx }}').style.display = 'none'" style="text-decoration: underline">close</a>
+<div id="histograms_{{ mod_idx }}" style="display: none">
+{% for row in module["table"] %}
+<h3 id="{{ row['sample'] }}_{{ mod_idx }}">{{ row['sample'] }}</h3>
+  alleles: {{ row["a1_pred"] }}  ({{ row["a1_conf"] }}) {{ row["a2_pred"] }}  ({{ row["a2_conf"] }}) total  {{ row["conf"] }}
+  <br>
+  <div id="hist-{{ row['sample'] }}_{{ mod_idx }}"></div>
+
+  {% if row["histogram_data"] != None %}
+  {% set spanning, flanking, inread = row["histogram_data"] %}
+  <script>
+      {
+          let hist_data = {
+              "data":[
+                  {"y":{{ spanning }},"name":"Full reads",
+                      "marker":{"color":"#636EFA"},"textfont":{"color":"#636EFA","size":7},"type":"bar","hover":"true"},
+                  {"y":{{ flanking }},"name":"Partial reads",
+                      "marker":{"color":"#CCCCCC"},"textfont":{"color":"#CCCCCC","size":7},"type":"bar","hover":"true"},
+                  {"y":{{ inread }},"name":"Inread reads",
+                      "marker":{"color":"#FF6600"},"textfont":{"color":"#FF6600","size":7},"type":"bar","hover":"true"}
+              ],
+              "layout":{
+                  "title":{"text":"Histogram of repetitions"},
+                  "xaxis":{
+                      "title":{"text":"STR repetitions"},
+                      "tickmode":"array",
+                      "tickvals":[5,10,15,20,25,30,35,40],
+                      "ticktext":[5,10,15,20,25,30,35,40]
+                  },
+                  "yaxis": {"fixedrange":true,"title":{"text":"Read counts"}},
+                  "legend": {"x": 0.85, "y": 0.85 },
+                  "barmode":"stack",
+                  "hovermode":"x",
+              }
+          };
+
+          let updateGraph = () => {
+              hist_data['layout'] = {
+                  ...hist_data['layout'],
+                  width: (window.innerWidth-50) * 0.6,
+                  height: (window.innerWidth-50) * 0.35,
+              };
+              Plotly.react("hist-{{ row['sample'] }}_{{ mod_idx }}", hist_data);
+          };
+
+          $(document).ready(function() {
+              updateGraph();
+              $(".hist-{{ row['sample'] }}_{{ mod_idx }}").bind("content-change", updateGraph);
+              window.addEventListener('resize', updateGraph, true);
+          });
+      }
+  </script>
+  {% endif %}
+
+  <!-- no alignments available -->
+
+  <p> <a href="#name">Back to top</a> </p>
+{% endfor %}
+</div>
+<hr>
+</div>
+{% endfor %}
 
 </body>
 </html>
