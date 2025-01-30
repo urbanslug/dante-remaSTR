@@ -1,4 +1,4 @@
-from collections import defaultdict, Counter
+from collections import defaultdict
 from typing import TypeAlias
 from jinja2 import Environment, FileSystemLoader
 from typing import Any
@@ -30,6 +30,7 @@ def load_arguments() -> argparse.Namespace:
     arg("-i", "--inputs", nargs="+", help='Path to data.json files (possibly many).')
     arg("-o", "--output_dir", default="./results",
         help='Path to directory where the output will be stored. Default=<input_dir>/result_files')
+    arg("-a", "--at-least", type=int, default=0, help="Filter motif sequences with fewer occurences")
     arg("--report_every", default=5, type=int,
         help='Specify how often a progress message should be printed (default=5)')
     arg('-q', '--quiet', action='store_true', help='Don\'t print any progress messages')
@@ -82,9 +83,17 @@ def create_ticks(df: pd.DataFrame) -> list[str]:
 def create_main_histrogram(df: pd.DataFrame, ticks: list[str]) -> dict:
     data = [0] * len(ticks)
     for _, row in df.iterrows():
-        idx = ticks.index(row["nomenclature1_join"])
+        try:
+            idx = ticks.index(row["nomenclature1_join"])
+        except ValueError:
+            continue
         data[idx] += 1
-        idx = ticks.index(row["nomenclature2_join"])
+
+    for _, row in df.iterrows():
+        try:
+            idx = ticks.index(row["nomenclature2_join"])
+        except ValueError:
+            continue
         data[idx] += 1
 
     result = {
@@ -98,8 +107,11 @@ def create_main_histrogram(df: pd.DataFrame, ticks: list[str]) -> dict:
 def create_main_heatmap(df: pd.DataFrame, ticks: list[str]) -> dict:
     data: list[list[int | None]] = [[0 for _ in range(len(ticks))] for _ in range(len(ticks))]
     for _, row in df.iterrows():
-        idx1 = ticks.index(row["nomenclature1_join"])
-        idx2 = ticks.index(row["nomenclature2_join"])
+        try:
+            idx1 = ticks.index(row["nomenclature1_join"])
+            idx2 = ticks.index(row["nomenclature2_join"])
+        except ValueError:
+            continue
         idx1, idx2 = min(idx1, idx2), max(idx1, idx2)
         data[idx1][idx2] += 1  # type: ignore
 
@@ -270,6 +282,18 @@ def allele_num(x: int | str) -> int:
     return x  # type: ignore
 
 
+def filter_ticks(ticks: list[str], df: pd.DataFrame, at_least: int) -> list[str]:
+    tmp = create_main_histrogram(df, ticks)
+    data = tmp["x"]
+
+    new_ticks = []
+    for i, x in enumerate(data):
+        if x >= at_least:
+            new_ticks.append(ticks[i])
+
+    return new_ticks
+
+
 def main() -> None:
     args = load_arguments()
     motif_dict = collect_jsons(args.inputs)
@@ -285,6 +309,7 @@ def main() -> None:
         sequence = convert_modules(v[0][1]["motif_stats"]["modules"])
         df = generate_df(v)
         ticks = create_ticks(df)
+        ticks = filter_ticks(ticks, df, args.at_least)
 
         data: dict[str, Any] = {}
         data["sequence"] = sequence

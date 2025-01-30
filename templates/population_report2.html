@@ -58,10 +58,6 @@ $(document).ready( function() {
     let title = "Histogram";
     let destination = "histogram"
 
-    // let tickvals = [0, 1, 2];
-    // let x = [2, 4, 5];
-    // let ticktext = ["tmp", "tmp2", "tmp3"];
-
     let tickvals = {{ data["main_histogram"]["tickvals"] }};
     let x = {{ data["main_histogram"]["x"] }};
     let ticktext = {{ data["main_histogram"]["ticktext"] }};
