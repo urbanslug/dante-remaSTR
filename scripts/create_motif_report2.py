@@ -303,8 +303,8 @@ def main() -> None:
 
     print("Aggregates done. Creating HTMLs.")
     for motif, v in motif_dict.items():
-        if motif != "ALS" and motif != "DM2":
-            continue
+        # if motif != "ALS" and motif != "DM2":
+        #     continue
 
         n_modules = len(v[0][2]["modules"])
         print(f"Creating report fo motif {motif} ({n_modules=}). Writting {args.output_dir}/{motif}.html.")
