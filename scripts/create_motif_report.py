@@ -1,10 +1,14 @@
 from collections import defaultdict
-from jinja2 import Environment, FileSystemLoader
 from typing import TypeAlias
+from jinja2 import Environment, FileSystemLoader
+from typing import Any
 import argparse
 import json
-import os
 import textwrap
+import os
+import sys
+import shutil
+import pandas as pd
 
 
 HistReadCounts: TypeAlias = tuple[list[int], list[int], list[int]]
@@ -26,6 +30,7 @@ def load_arguments() -> argparse.Namespace:
     arg("-i", "--inputs", nargs="+", help='Path to data.json files (possibly many).')
     arg("-o", "--output_dir", default="./results",
         help='Path to directory where the output will be stored. Default=<input_dir>/result_files')
+    arg("-a", "--at-least", type=int, default=0, help="Filter motif sequences with fewer occurences")
     arg("--report_every", default=5, type=int,
         help='Specify how often a progress message should be printed (default=5)')
     arg('-q', '--quiet', action='store_true', help='Don\'t print any progress messages')
@@ -33,21 +38,139 @@ def load_arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def collect_alleles(hist_data: list[int], allele_pairs: list[tuple[int | str, int | str]], a_idx: int) -> list[int]:
-    for pair in allele_pairs:
-        allele: int | str = pair[a_idx]
-        if allele == 'E':
-            hist_data[-1] += 1
-            continue
-        if allele == 'B':
-            hist_data[0] += 1
-            continue
-        if allele == 'X':
-            raise NotImplementedError
+def collect_jsons(inputs: list[str], output_dir: str) -> dict[str, list[tuple[str, str, dict]]]:
+    motif_dict: dict[str, list] = defaultdict(list)
+    for filename in inputs:
+        print(f"Reading {filename}")
+        with open(filename, "r") as f:
+            data = json.load(f)
 
-        allele = int(allele)
-        hist_data[allele + 1] += 1
-    return hist_data
+        for motif in data["motifs"]:
+            alignment_dir = os.path.dirname(filename) + "/alignments"
+            alignment_dir = os.path.relpath(alignment_dir, output_dir)
+            motif_dict[motif["motif_id"]].append((data["sample"], alignment_dir, motif))
+
+    return motif_dict
+
+
+def copy_includes(output_dir: str) -> None:
+    include_dir = os.path.dirname(sys.argv[0]) + "/../includes"
+    os.makedirs(f'{output_dir}/includes', exist_ok=True)
+    shutil.copy2(f'{include_dir}/msa.min.gz.js',            f'{output_dir}/includes/msa.min.gz.js')
+    shutil.copy2(f'{include_dir}/plotly-2.14.0.min.js',     f'{output_dir}/includes/plotly-2.14.0.min.js')
+    shutil.copy2(f'{include_dir}/jquery-3.6.1.min.js',      f'{output_dir}/includes/jquery-3.6.1.min.js')
+    shutil.copy2(f'{include_dir}/datatables.min.js',        f'{output_dir}/includes/datatables.min.js')
+    shutil.copy2(f'{include_dir}/styles.css',               f'{output_dir}/includes/styles.css')
+    shutil.copy2(f'{include_dir}/w3.css',                   f'{output_dir}/includes/w3.css')
+    shutil.copy2(f'{include_dir}/jquery.dataTables.css',    f'{output_dir}/includes/jquery.dataTables.css')
+
+
+def convert_modules(modules: list) -> list[str]:
+    return [f"{seq}[{n}]" for seq, n in modules]
+
+
+def create_ticks(df: pd.DataFrame) -> list[str]:
+    nom1 = set(df.loc[:, ["nomenclature1_len", "nomenclature1_join"]]
+                 .itertuples(index=False, name=None))
+
+    nom2 = set(df.loc[:, ["nomenclature2_len", "nomenclature2_join"]]
+                 .itertuples(index=False, name=None))
+
+    data = list(nom1.union(nom2))
+    data.sort()
+    ticktext = [x[1] for x in data]
+    return ticktext
+
+
+def create_main_histrogram(df: pd.DataFrame, ticks: list[str]) -> dict:
+    data = [0] * len(ticks)
+    for _, row in df.iterrows():
+        try:
+            idx = ticks.index(row["nomenclature1_join"])
+        except ValueError:
+            continue
+        data[idx] += 1
+
+    for _, row in df.iterrows():
+        try:
+            idx = ticks.index(row["nomenclature2_join"])
+        except ValueError:
+            continue
+        data[idx] += 1
+
+    result = {
+        "tickvals": list(range(len(ticks))),
+        "ticktext": ticks,
+        "x": data
+    }
+    return result
+
+
+def create_main_heatmap(df: pd.DataFrame, ticks: list[str]) -> dict:
+    data: list[list[int | None]] = [[0 for _ in range(len(ticks))] for _ in range(len(ticks))]
+    for _, row in df.iterrows():
+        try:
+            idx1 = ticks.index(row["nomenclature1_join"])
+            idx2 = ticks.index(row["nomenclature2_join"])
+        except ValueError:
+            continue
+        idx1, idx2 = min(idx1, idx2), max(idx1, idx2)
+        data[idx1][idx2] += 1  # type: ignore
+
+    for i in range(len(ticks)):
+        for j in range(i + 1, len(ticks)):
+            data[j][i] = None
+
+    result = {
+        "tickvals": list(range(len(ticks))),
+        "ticktext": ticks,
+        "z": data
+    }
+    return result
+
+
+def generate_df(v):
+    data_tmp1 = []
+    for sample, path, tmp_data in v:
+        data_tmp1.append((
+            sample,
+            tuple(tmp_data["phased_seqs"]["nomenclature1"]),
+            tmp_data["phased_seqs"]["nomenclature1_len"],
+            tmp_data["phased_seqs"]["errors1"],
+            tuple(tmp_data["phased_seqs"]["nomenclature2"]),
+            tmp_data["phased_seqs"]["nomenclature2_len"],
+            tmp_data["phased_seqs"]["errors2"]
+        ))
+
+    columns = ["sample", "nomenclature1", "nomenclature1_len", "warnings1", "nomenclature2", "nomenclature2_len", "warnings2"]
+    df = pd.DataFrame.from_records(data_tmp1, columns=columns)
+    df["nomenclature1_join"] = df["nomenclature1"].apply(lambda x: "".join(x))
+    df["nomenclature2_join"] = df["nomenclature2"].apply(lambda x: "".join(x))
+    return df
+
+
+def function2(allele_pairs: list[tuple[int | str, int | str]], max_allele: int) -> dict:
+    # z = [
+    #     [7   , 0   , 0   , 0   , 0   , 1   , 0   , 0],
+    #     [None, 0   , 0   , 0   , 0   , 1   , 0   , 0],
+    #     [None, None, 0   , 0   , 0   , 0   , 0   , 0],
+    #     [None, None, None, 0   , 35  , 119 , 3   , 3],
+    #     [None, None, None, None, 0   , 237 , 3   , 9],
+    #     [None, None, None, None, None, 0   , 2   , 0],
+    #     [None, None, None, None, None, None, 0   , 1],
+    #     [None, None, None, None, None, None, None, 0]
+    # ]
+    # tickvals = [0, 1, 2, 3, 4, 5, 6, 7]
+    # ticktext = ["B", 0, 1, 2, 3, 4, 5, "E"]
+    # xlim = 6.5
+    z, tickvals, ticktext, xlim = collect_heatmap_data(max_allele, allele_pairs)
+    result = {
+        "z": z,
+        "tickvals": tickvals,
+        "ticktext": ticktext,
+        "xlim": xlim
+    }
+    return result
 
 
 def collect_heatmap_data(max_allele: int, pairs: list[tuple[int | str, int | str]]) -> HeatmapData:
@@ -87,67 +210,69 @@ def collect_heatmap_data(max_allele: int, pairs: list[tuple[int | str, int | str
     return heatmap_data
 
 
-def main(args: argparse.Namespace) -> None:
-    loci_dict: dict[str, list[Row]] = defaultdict(list[Row])
-    loci_to_seq: dict = {}
-    for filename in args.inputs:
-        print(f"Reading {filename}")
-        with open(filename, "r") as f:
-            data = json.load(f)
+def function3(allele_pairs: list[tuple[int | str, int | str]], max_allele: int) -> dict:
+    ticktext = ["B"] + list(range(max_allele + 1)) + ["E"]
+    tickvals = list(range(len(ticktext)))
+    z = [0] * len(ticktext)
+    z = collect_alleles(z, allele_pairs, 0)
+    z = collect_alleles(z, allele_pairs, 1)
 
-        (sample, _, _, motifs) = data
-        for motif in motifs:
-            (_, _, loci, _) = motif
-            for locus in loci:
-                (locus_id, sequence, _, allele1, allele2, stats, spanning, flanking, graph_data) = locus
-                (a1_pred, a1_conf, _, _, _) = allele1
-                (a2_pred, a2_conf, _, _, _) = allele2
-                (confidence, _, _) = stats
-                (histogram_data, _, _) = graph_data
+    result = {
+        "z": z,
+        "tickvals": tickvals,
+        "ticktext": ticktext,
+    }
+    return result
 
-                row = (sample, a1_pred, a1_conf, a2_pred, a2_conf, confidence, spanning, flanking, histogram_data)
-                loci_dict[locus_id].append(row)
 
-                if locus_id not in loci_to_seq:
-                    loci_to_seq[locus_id] = sequence
-                else:
-                    assert loci_to_seq[locus_id] == sequence, f"{loci_to_seq[locus_id]} != {sequence}: Mixed motif DB?"
+def collect_alleles(hist_data: list[int], allele_pairs: list[tuple[int | str, int | str]], a_idx: int) -> list[int]:
+    for pair in allele_pairs:
+        allele: int | str = pair[a_idx]
+        if allele == 'E':
+            hist_data[-1] += 1
+            continue
+        if allele == 'B':
+            hist_data[0] += 1
+            continue
+        if allele == 'X':
+            raise NotImplementedError
 
-    print("Collecting done. Starting to compute aggregates.")
-    loci_data: dict[str, PopulationData] = {}
-    for locus_id, rows in loci_dict.items():
-        sequence = loci_to_seq[locus_id]
-        allele_pairs = [(a1, a2) for _, a1, _, a2, _, _, _, _, _ in rows]
+        allele = int(allele)
+        hist_data[allele + 1] += 1
+    return hist_data
 
-        # ----------------------------------------------------------------------
-        a1_max = max(allele_num(pair[0]) for pair in allele_pairs)
-        a2_max = max(allele_num(pair[1]) for pair in allele_pairs)
-        max_allele = max(a1_max, a2_max, MIN_GS)
-        # print(locus_id, max_allele)
 
-        # collect bg_num and hist_data
-        hist_data = [0] * (max_allele + 1 + 2)  # +1 for zero indexing, +2 for B/E
-        hist_label = ["B"] + list(range(max_allele + 1)) + ["E"]
-        hist_data = collect_alleles(hist_data, allele_pairs, 0)
-        hist_data = collect_alleles(hist_data, allele_pairs, 1)
+def generate_module_data(motif, v, i) -> dict:
+    max_allele = MIN_GS
+    allele_pairs = []
+    rows = []
+    for sample, align, data in v:
+        a1 = data["modules"][i]["allele_1"][0]
+        a2 = data["modules"][i]["allele_2"][0]
+        rows.append({
+            "sample": sample,
+            "a1_pred": a1, "a1_conf": data["modules"][i]["allele_1"][1],
+            "a2_pred": a2, "a2_conf": data["modules"][i]["allele_2"][1],
+            "conf": data["modules"][i]["stats"][0],
+            "spanning_num": data["modules"][i]["reads_spanning"],
+            "flanking_num": data["modules"][i]["reads_flanking"],
+            "histogram_data": data["modules"][i]["graph_data"][0],
+            "alignment_file": align + f"/{motif}.html"
+        })
+        max_allele = max(max_allele, allele_num(a1))
+        max_allele = max(max_allele, allele_num(a2))
+        allele_pairs.append((a1, a2))
 
-        bg_num = hist_data[0]
-        heatmap_data = collect_heatmap_data(max_allele, allele_pairs)
-        histogram_data = (hist_data, list(range(max_allele + 3)), hist_label)
-        # ----------------------------------------------------------------------
+    heatmap_data = function2(allele_pairs, max_allele)
+    histogram_data = function3(allele_pairs, max_allele)
 
-        loci_data[locus_id] = (locus_id, sequence, bg_num, heatmap_data, histogram_data, rows)
+    module = {
+        "table": rows,
+        "heatmap": heatmap_data,
+        "histogram": histogram_data
+    }
 
-    print("Aggregates done. Creating HTMLs.")
-    template_dir = os.path.dirname(__file__) + "/../templates"
-    os.makedirs(f"{args.output_dir}", exist_ok=True)
-    for locus_id, data in loci_data.items():
-        env = Environment(loader=FileSystemLoader([template_dir]), trim_blocks=True, lstrip_blocks=True)
-        template = env.get_template("population_report.html")
-        output = template.render(main_data=data)
-        print(f"Writting {args.output_dir}/{locus_id}.html")
-        with open(f"{args.output_dir}/{locus_id}.html", "w") as f:
-            f.write(output)
+    return module
 
 
 def allele_num(x: int | str) -> int:
@@ -160,6 +285,55 @@ def allele_num(x: int | str) -> int:
     return x  # type: ignore
 
 
-if __name__ == '__main__':
+def filter_ticks(ticks: list[str], df: pd.DataFrame, at_least: int) -> list[str]:
+    tmp = create_main_histrogram(df, ticks)
+    data = tmp["x"]
+
+    new_ticks = []
+    for i, x in enumerate(data):
+        if x >= at_least:
+            new_ticks.append(ticks[i])
+
+    return new_ticks
+
+
+def main() -> None:
     args = load_arguments()
-    main(args)
+    motif_dict = collect_jsons(args.inputs, args.output_dir)
+
+    print("Aggregates done. Creating HTMLs.")
+    for motif, v in motif_dict.items():
+        # if motif != "ALS" and motif != "DM2":
+        #     continue
+
+        n_modules = len(v[0][2]["modules"])
+        print(f"Creating report fo motif {motif} ({n_modules=}). Writting {args.output_dir}/{motif}.html.")
+
+        sequence = convert_modules(v[0][2]["motif_stats"]["modules"])
+        df = generate_df(v)
+        ticks = create_ticks(df)
+        ticks = filter_ticks(ticks, df, args.at_least)
+
+        data: dict[str, Any] = {}
+        data["motif_name"] = motif
+        data["sequence"] = sequence
+        data["main_table"] = json.loads(df.to_json(orient="records"))
+        data["main_histogram"] = create_main_histrogram(df, ticks)
+        data["main_heatmap"] = create_main_heatmap(df, ticks)
+
+        data["modules"] = [generate_module_data(motif, v, i) for i in range(n_modules)]
+        # print(json.dumps(tmp_dict, indent=4))
+
+        template_dir = os.path.dirname(__file__) + "/../templates"
+        os.makedirs(f"{args.output_dir}", exist_ok=True)
+        env = Environment(loader=FileSystemLoader([template_dir]), trim_blocks=True, lstrip_blocks=True)
+        template = env.get_template("population_report.html")
+        output = template.render(data=data)
+        with open(f"{args.output_dir}/{motif}.html", "w") as f:
+            f.write(output)
+
+    copy_includes(args.output_dir)
+
+
+if __name__ == '__main__':
+    main()
