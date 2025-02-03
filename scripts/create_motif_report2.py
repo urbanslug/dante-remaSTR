@@ -38,7 +38,7 @@ def load_arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def collect_jsons(inputs: list[str]) -> dict[str, list[tuple[str, dict]]]:
+def collect_jsons(inputs: list[str], output_dir: str) -> dict[str, list[tuple[str, str, dict]]]:
     motif_dict: dict[str, list] = defaultdict(list)
     for filename in inputs:
         print(f"Reading {filename}")
@@ -46,7 +46,9 @@ def collect_jsons(inputs: list[str]) -> dict[str, list[tuple[str, dict]]]:
             data = json.load(f)
 
         for motif in data["motifs"]:
-            motif_dict[motif["motif_id"]].append((data["sample"], motif))
+            alignment_dir = os.path.dirname(filename) + "/alignments"
+            alignment_dir = os.path.relpath(alignment_dir, output_dir)
+            motif_dict[motif["motif_id"]].append((data["sample"], alignment_dir, motif))
 
     return motif_dict
 
@@ -129,7 +131,7 @@ def create_main_heatmap(df: pd.DataFrame, ticks: list[str]) -> dict:
 
 def generate_df(v):
     data_tmp1 = []
-    for sample, tmp_data in v:
+    for sample, path, tmp_data in v:
         data_tmp1.append((
             sample,
             tuple(tmp_data["phased_seqs"]["nomenclature1"]),
@@ -240,11 +242,11 @@ def collect_alleles(hist_data: list[int], allele_pairs: list[tuple[int | str, in
     return hist_data
 
 
-def function1(v, i) -> dict:
+def generate_module_data(motif, v, i) -> dict:
     max_allele = MIN_GS
     allele_pairs = []
     rows = []
-    for sample, data in v:
+    for sample, align, data in v:
         a1 = data["modules"][i]["allele_1"][0]
         a2 = data["modules"][i]["allele_2"][0]
         rows.append({
@@ -254,7 +256,8 @@ def function1(v, i) -> dict:
             "conf": data["modules"][i]["stats"][0],
             "spanning_num": data["modules"][i]["reads_spanning"],
             "flanking_num": data["modules"][i]["reads_flanking"],
-            "histogram_data": data["modules"][i]["graph_data"][0]
+            "histogram_data": data["modules"][i]["graph_data"][0],
+            "alignment_file": align + f"/{motif}.html"
         })
         max_allele = max(max_allele, allele_num(a1))
         max_allele = max(max_allele, allele_num(a2))
@@ -296,28 +299,29 @@ def filter_ticks(ticks: list[str], df: pd.DataFrame, at_least: int) -> list[str]
 
 def main() -> None:
     args = load_arguments()
-    motif_dict = collect_jsons(args.inputs)
+    motif_dict = collect_jsons(args.inputs, args.output_dir)
 
     print("Aggregates done. Creating HTMLs.")
     for motif, v in motif_dict.items():
-        # if motif != "ALS" and motif != "DM2":
-        #     continue
+        if motif != "ALS" and motif != "DM2":
+            continue
 
-        n_modules = len(v[0][1]["modules"])
+        n_modules = len(v[0][2]["modules"])
         print(f"Creating report fo motif {motif} ({n_modules=}). Writting {args.output_dir}/{motif}.html.")
 
-        sequence = convert_modules(v[0][1]["motif_stats"]["modules"])
+        sequence = convert_modules(v[0][2]["motif_stats"]["modules"])
         df = generate_df(v)
         ticks = create_ticks(df)
         ticks = filter_ticks(ticks, df, args.at_least)
 
         data: dict[str, Any] = {}
+        data["motif_name"] = motif
         data["sequence"] = sequence
         data["main_table"] = json.loads(df.to_json(orient="records"))
         data["main_histogram"] = create_main_histrogram(df, ticks)
         data["main_heatmap"] = create_main_heatmap(df, ticks)
 
-        data["modules"] = [function1(v, i) for i in range(n_modules)]
+        data["modules"] = [generate_module_data(motif, v, i) for i in range(n_modules)]
         # print(json.dumps(tmp_dict, indent=4))
 
         template_dir = os.path.dirname(__file__) + "/../templates"

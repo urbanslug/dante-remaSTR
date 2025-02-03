@@ -12,7 +12,7 @@
 </head>
 
 <body>
-<h1 id="name">ALS</h1>
+<h1 id="name">{{ data["motif_name"] }}</h1>
 <div>
 Sequence:
 {{ data["sequence"][0] }}
@@ -48,7 +48,10 @@ Sequence:
 
 <script>
 $(document).ready( function() {
-    $('#main_table').DataTable({scrollX: true});
+    $('#main_table').DataTable({
+        scrollX: true,
+        lengthMenu: [[8, 16, 32, -1], [8, 16, 32, "All"]]
+    });
 } );
 </script>
 
@@ -150,7 +153,6 @@ $(document).ready( function() {
 </div>
 
 <hr>
-<hr>
 
 {% for module in data["modules"] %}
 <!-- module part -->
@@ -178,7 +180,7 @@ $(document).ready( function() {
   <tbody>
       {% for row in module["table"] %}
       <tr>
-          <td><a href="#{{ row['sample'] }}_{{ mod_idx }}">{{ row["sample"] }}</a></td>
+          <td><a href="#{{ row['sample'] }}_{{ mod_idx }}" onclick="document.getElementById('histograms_{{ mod_idx }}').style.display = 'block'">{{ row["sample"] }}</a></td>
           <td>{{ row["a1_pred"] }}</td>
           <td>{{ row["a1_conf"] }}</td>
           <td>{{ row["a2_pred"] }}</td>
@@ -193,7 +195,10 @@ $(document).ready( function() {
 
 <script>
 $(document).ready( function() {
-    $('#table_module_{{ mod_idx }}').DataTable({scrollX: true});
+    $('#table_module_{{ mod_idx }}').DataTable({
+        scrollX: true,
+        lengthMenu: [[8, 16, 32, -1], [8, 16, 32, "All"]]
+    });
 } );
 </script>
 
@@ -352,8 +357,8 @@ $(document).ready( function() {
   {% endif %}
 
   <!-- no alignments available -->
-
-  <p> <a href="#name">Back to top</a> </p>
+  <p> <a href="{{ row['alignment_file'] }}">Alignments</a> </p>
+  <p> <a href="#module_{{ mod_idx }}">Back to top</a> </p>
 {% endfor %}
 </div>
 <hr>
