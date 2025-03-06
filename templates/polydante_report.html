@@ -93,7 +93,10 @@
         <tr>
             <th rowspan="2">Repeat ID</th>
             <th colspan="4">Motif information</th>
-            <th colspan="5">Kolmogorov–Smirnov test</th>
+            <th colspan="1">Kolmogorov–Smirnov test</th>
+            <th colspan="1">Mann-Whitney U test</th>
+            <!-- <th colspan="1">Pearson’s chi-squared test</th> -->
+            <th colspan="3">Counts</th>
         </tr>
         <tr>
             <th>chromosome</th>
@@ -101,7 +104,8 @@
             <th>end</th>
             <th>sequence</th>
             <th>p-value</th>
-            <th>statistic</th>
+            <th>p-value</th>
+            <!-- <th>p-value</th> -->
             <th>#cases</th>
             <th>#controls</th>
             <th>#all</th>
@@ -115,8 +119,9 @@
             <td>{{ str["str_location"]["start"] }}</td>
             <td>{{ str["str_location"]["end"] }}</td>
             <td>{{ str["str_seq"] }}</td>
-            <td>{{ "{:0.4f}".format(str["stat_results"]["p_value"]) }}</td>
-            <td>{{ "{:0.4f}".format(str["stat_results"]["statistic"]) }}</td>
+            <td>{{ "{:0.4f}".format(str["stat_results"]["ks_p_value"]) }}</td>
+            <td>{{ "{:0.4f}".format(str["stat_results"]["mw_p_value"]) }}</td>
+            <!-- <td>{{ "{:0.4f}".format(str["stat_results"]["chi_p_value"]) }}</td> -->
             <td>{{ str["stat_results"]["n_cases"] }}</td>
             <td>{{ str["stat_results"]["n_controls"] }}</td>
             <td>{{ str["stat_results"]["n_all"] }}</td>
@@ -135,7 +140,9 @@
 {% for str in data["str_list"] %}
 <h2 id="{{ str['str_id'] }}">{{ str["str_id"] }}</h2>
 Repetition sequence: {{ str["str_seq"] }}<br>
-p-value: {{ str["stat_results"]["p_value"] }}<br>
+Kolmogorov–Smirnov test p-value: {{ str["stat_results"]["ks_p_value"] }}<br>
+Mann-Whitney U test p-value: {{ str["stat_results"]["mw_p_value"] }}<br>
+<!-- Pearson’s chi-squared test p-value: {{ str["stat_results"]["chi_p_value"] }} -->
 #case alleles: {{ str["stat_results"]["n_cases"] }}<br>
 #control alleles: {{ str["stat_results"]["n_controls"] }}<br>
 

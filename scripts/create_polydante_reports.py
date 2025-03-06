@@ -6,7 +6,7 @@ import pandas as pd  # change to polars?
 import sys
 import shutil
 from typing import cast
-from scipy.stats import ks_2samp  # type: ignore
+from scipy.stats import ks_2samp, mannwhitneyu, chisquare  # type: ignore
 
 # import pprint
 # pp = pprint.PrettyPrinter()
@@ -234,13 +234,25 @@ def compare_statistically(histogram_data: dict) -> dict:
         controls += [i] * n
 
     if len(cases) == 0 or len(controls) == 0:
-        statistic, p_value = float('nan'), float('nan')
+        statistic1, p_value1 = float('nan'), float('nan')
+        statistic2, p_value2 = float('nan'), float('nan')
+        # statistic3, p_value3 = float('nan'), float('nan')
     else:
-        statistic, p_value = ks_2samp(cases, controls)
+        statistic1, p_value1 = ks_2samp(cases, controls)
+        statistic2, p_value2 = mannwhitneyu(cases, controls)
+
+        # cases_sum = sum(cases)
+        # controls_sum = sum(controls)
+        # chi_cases = [x / cases_sum for x in cases]
+        # chi_controls = [x / controls_sum for x in controls]
+        # print(chi_cases)
+        # print(chi_controls)
+        # statistic3, p_value3 = chisquare(chi_cases, f_exp=chi_controls)
 
     result = {
-        "statistic": statistic,
-        "p_value": p_value,
+        "ks_p_value": p_value1,
+        "mw_p_value": p_value2,
+        "chi_p_value": float('nan'),
         "n_cases": len(cases),
         "n_controls": len(controls),
         "n_all": len(cases) + len(controls)
@@ -257,7 +269,11 @@ def generate_data(snv_id: str, df_snv: pd.DataFrame, motif2seq: dict[str, str]) 
         heatmap_data = generate_heatmap(df_str)
         histogram_data = generate_histogram(df_str)
         stat_results = compare_statistically(histogram_data)
-        if stat_results["p_value"] < 0.05:
+        if (
+            stat_results["ks_p_value"] < 0.05
+            or stat_results["mw_p_value"] < 0.05
+            or stat_results["chi_p_value"] < 0.05
+        ):
             print(f"{snv_id} {str_id}: The two distributions are significantly different.")
         str_location = df_str["data"].iloc[0][5]
 
