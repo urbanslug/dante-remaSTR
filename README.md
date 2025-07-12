@@ -76,7 +76,7 @@ The `remastr` Rust part needs to be compiled. Navigate to the submodule and run 
 
 ```bash
 cd remastr/dante_cli
-conda activate dante_remastr
+conda activate env_dante
 cargo build --release  # rust needs to be installed (https://www.rust-lang.org/tools/install)
 ```
 
