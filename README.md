@@ -53,7 +53,7 @@ These instructions will get you a copy of the project up and running on your loc
 This repository can be cloned with:
 
 ```bash
-git clone git@github.com:marcelTBI/dante-remaSTR.git
+git clone https://github.com/marcelTBI/dante-remaSTR.git
 ```
 
 ### Conda environment
@@ -67,7 +67,7 @@ mamba env create -n env_dante -f conda_env.yaml
 
 ### Download remastr subtool
 ```bash
-git clone git@gitlab.com:andrejbalaz/remastr.git
+git clone https://gitlab.com/andrejbalaz/remastr.git
 ```
 
 #### Compilation and running
