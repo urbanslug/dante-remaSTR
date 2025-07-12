@@ -11,7 +11,7 @@ evaluation.
 
 The whole algorithm is divided into two parts: 
 1. annotation of mapped reads - `remastr` tool in Rust language due to parallelism and speed
-    - managed in a separate repository and imported as a git submodule  
+    - managed in a separate repository
     - input: BAM file with mapped reads, txt file with HGVS nomenclature, fasta file with reference
     - output: tsv file with annotated reads, columns are: 
         - motif: motif nomenclature
@@ -53,10 +53,8 @@ These instructions will get you a copy of the project up and running on your loc
 This repository can be cloned with:
 
 ```bash
-git clone --recurse-submodules git@github.com:marcelTBI/dante-remaSTR.git
+git clone git@github.com:marcelTBI/dante-remaSTR.git
 ```
-
-The `--recurse-submodules` argument is needed because of the `remastr` submodule managed in a separate repositorry.
 
 ### Conda environment
 
@@ -64,29 +62,25 @@ Dante is developed with libraries determined in the `conda_env.yaml`. Create the
 environment as following (although `conda` works, it is slow, and we recommend to use `mamba`):
 
 ```bash
-mamba env create -n dante_remastr -f conda_env.yaml
+mamba env create -n env_dante -f conda_env.yaml
 ```
 
-If you want to use `create_motif_report.py` script to aggregate reports by motif, you will need to install 
-additional `beautifulsoup4` and `natsort` dependencies:
-
+### Download remastr subtool
 ```bash
-mamba install beautifulsoup4==4.12.2 natsort==7.1.1
+git clone git@gitlab.com:andrejbalaz/remastr.git
 ```
-
-The conda environment file defines environment for both parts of the project. 
 
 #### Compilation and running
 
 The `remastr` Rust part needs to be compiled. Navigate to the submodule and run compilation:
 
 ```bash
-cd remastr
+cd remastr/dante_cli
 conda activate dante_remastr
-cargo build --release
+cargo build --release  # rust needs to be installed (https://www.rust-lang.org/tools/install)
 ```
 
-The compiled release version of the `remastr` tool should appear in the `remastr/target/release` directory after
+The compiled release version of the `dante_cli` tool should appear in the `remastr/target/release` directory after
 successful compilation. 
 
 The `dante_remastr` Python part does not need to be compiled.  
@@ -94,58 +88,8 @@ The `dante_remastr` Python part does not need to be compiled.
 Run both parts as follows:
 
 ```bash
-remastr/target/release/remastr -f <reference_fasta> -m <nomenclature_txt> -b <reads_bam> -o <remastr_output_tsv>
-conda activate dante_remastr
-python dante_remastr.py [optional_arguments] < <remastr_output_tsv> > <dante_output_tsv>
-```
-
-To list the optional arguments for the Python part, run:
-
-```bash
-python dante_remastr.py --help
-```
-
-Or simply use the provided pipeline script (try `python remastr_pipeline.py --help` for argument listing):
-
-```bash
-python remastr_pipeline.py <bams_files> <nomenclature_file> <output_dir>
-```
- 
-### Example of the whole pipeline
-
-We provide two examples (small and big) to try the program. 
-To run the smaller one do:
-
-```bash
-# go to the example directory
-cd example
-# extract the chromosome X reference
-gzip -d chromosomeX.fna.gz  
-# run the annotation
-../remastr/target/release/remastr -f chromosomeX.fna -n small_HGVS.txt -b small.bam -o small_generated.tsv
-# activate the environment
-conda activate dante_remastr
-# run the genotyping
-python ../dante_remastr.py --output-dir small_results < small_generated.tsv > small_res_generated.tsv
-```
-
-Note: the annotation will produce error messages in form `Read ... does not have pair information.`. This is expected. 
-
-The results should be the same as those provided in the example directory, i.e. these commands should return no changes:
-```bash
-diff small_generated.tsv small.tsv
-diff small_res_generated.tsv small_res.tsv
-```
-
-For the bigger example, we provide only data for the genotyping part (providing the BAM file and reference file would be too bulky for the repository). 
-The bigger example is gzipped, which should be specified in the input arguments as the following: 
-
-```bash
-# go to the example directory
-cd example
-conda activate dante_remastr
-# run the genotyping
-python dante_remastr.py --output-dir big_results --input-gzipped < big.tsv.gz > big_res.tsv
+./remastr/target/release/dante_cli -b <reads_bam> -m <STRSet_file.tsv> -o remastr_output.tsv
+python ./dante-remaSTR/dante_remastr_standalone.py -i remastr_output.tsv -o remastr_output -v
 ```
 
 ### Visualisation
@@ -160,24 +104,5 @@ cd example
 # activate the environment
 conda activate dante_remastr
 # run the genotyping and visualization
-python dante_remastr.py --output-dir small_results --verbose < small.tsv > small_res.tsv
+python dante_remastr_standalone.py -i remastr_output.tsv -o remastr_output -v
 ```
-
-## Creating motif reports
-
-To collect results from multiple reports and group them by motif, we provide a script `create_motif_report.py`. 
-It has one required and one optional argument: `input dir` and `output dir`. Input dir is a path to folder with 
-reports from samples. There can be other files as well, the script filters out all files that don't match `*.html`.
-Output dir is a path to directory, where the motif reports will be generated. If the path isn't specified, 
-the script generates reports to `example/motif_report`.
-
-After running Dante on example dataset, you may run this script as:
-
-```bash
-python create_motif_report.py example/report [example/motif_report]
-```
-
-Script generates separate report for each unique motif in Dante reports. Script uses the file name of the 
-report to differentiate the source of result in table, so it is recommended to rename the reports before 
-starting this script, so no two reports have the same name.
-
